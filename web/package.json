@@ -1,7 +1,7 @@
 {
-  "name": "crowner-web",
+  "name": "apixt-web",
   "version": "0.1.0",
-  "description": "web resources generator for crowner",
+  "description": "web resources generator for apixt",
   "type": "module",
   "main": "index.js",
   "scripts": {
