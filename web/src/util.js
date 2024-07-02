@@ -28,7 +28,7 @@ const getStringifiedJSON = (myJson, indentation) => {
         //Incase the input is a JSON string
         if (typeof myJson === 'string') {
             try {
-                myJson = JSON5.parse(myJson)
+                myJson = JSON.parse(myJson)
             } catch(err) {
                 console.error(err)
                 return false
@@ -38,7 +38,7 @@ const getStringifiedJSON = (myJson, indentation) => {
             return false
         }
     }
-    let stringifiedJSON = JSON5.stringify(myJson, null, indentation)
+    let stringifiedJSON = JSON.stringify(myJson, null, indentation)
     let lines = stringifiedJSON.split('\n')
     lines = lines.map(line => {
         const end = line.endsWith(',') ? ',' : ''
@@ -89,6 +89,7 @@ const getTypeOfStringValue = (str) => {
  
 export {
     getStringifiedJSON,
+    getTypeOfStringValue,
     COLOR_CLS_BOOL,
     COLOR_CLS_NUM,
     COLOR_CLS_NULL,
