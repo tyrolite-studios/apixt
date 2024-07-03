@@ -1,13 +1,29 @@
 import { getStringifiedJSON, getTypeOfStringValue } from "../src/util"
 
-test('returns false and logs error when myJson is null', () => {
-    expect(getStringifiedJSON(null, 2)).toBe(false);
+//getStringifiedJSON
+test('should throw error if myJson is undefined', () => {
+    expect(() => getStringifiedJSON(undefined, 2)).toThrow('Caution! myJson is undefined');
 });
+test('should handle strings', () => {
+    const expected = `<span class="STR">"test"</span>`.trim();
 
-test('returns false and logs error when myJson is neither object nor valid JSON string', () => {
-    expect(getStringifiedJSON(123, 2)).toBe(false);
+    expect(getStringifiedJSON("test", 2)).toBe(expected);
 });
+test('should handle numbers', () => {
+    const expected = `<span class="NUM">3</span>`.trim();
 
+    expect(getStringifiedJSON(3, 2)).toBe(expected);
+});
+test('should handle booleans', () => {
+    const expected = `<span class="BOOL">true</span>`.trim();
+
+    expect(getStringifiedJSON(true, 2)).toBe(expected);
+});
+test('should handle null', () => {
+    const expected = `<span class="NULL">null</span>`.trim();
+
+    expect(getStringifiedJSON(null, 2)).toBe(expected);
+});
 test('correctly formats JSON with all data types', () => {
     const jsonObject = {
         string: "value",
@@ -17,22 +33,15 @@ test('correctly formats JSON with all data types', () => {
         object: { nested: "object" },
         array: ["item1", "item2"]
     };
-
     const result = getStringifiedJSON(jsonObject, 2);
 
-    // Überprüfen von Strings
-    expect(result).toContain('<span class="COLOR_CLS_KEY">"string"</span> : <span class="COLOR_CLS_STR">"value"</span>');
-    // Überprüfen von Zahlen
-    expect(result).toContain('<span class="COLOR_CLS_KEY">"number"</span> : <span class="COLOR_CLS_NUM">123</span>');
-    // Überprüfen von Booleans
-    expect(result).toContain('<span class="COLOR_CLS_KEY">"boolean"</span> : <span class="COLOR_CLS_BOOL">true</span>');
-    // Überprüfen von Null-Werten
-    expect(result).toContain('<span class="COLOR_CLS_KEY">"nullValue"</span> : <span class="COLOR_CLS_NULL">null</span>');
-    // Überprüfen von Objekten
-    expect(result).toContain('<span class="COLOR_CLS_KEY">"object"</span> : {');
-    expect(result).toContain('<span class="COLOR_CLS_KEY">"nested"</span> : <span class="COLOR_CLS_STR">"object"</span>');
-    // Überprüfen von Arrays
-    expect(result).toContain('<span class="COLOR_CLS_KEY">"array"</span> : [');
-    expect(result).toContain('<span class="COLOR_CLS_STR">"item1"</span>');
-    expect(result).toContain('<span class="COLOR_CLS_STR">"item2"</span>');
+    expect(result).toContain('<span class=\"COLOR_CLS_KEY\">  \"string\"</span> : <span class=\"STR\"> \"value\"</span>');
+    expect(result).toContain('<span class=\"COLOR_CLS_KEY\">  \"number\"</span> : <span class=\"NUM\"> 123</span>');
+    expect(result).toContain('<span class=\"COLOR_CLS_KEY\">  \"boolean\"</span> : <span class=\"BOOL\"> true</span>');
+    expect(result).toContain('<span class=\"COLOR_CLS_KEY\">  \"nullValue\"</span> : <span class=\"NULL\"> null</span>');
+    expect(result).toContain('<span class=\"COLOR_CLS_KEY\">  \"object\"</span> :  {');
+    expect(result).toContain('<span class=\"COLOR_CLS_KEY\">    \"nested\"</span> : <span class=\"STR\"> \"object\"</span>');
+    expect(result).toContain('<span class=\"COLOR_CLS_KEY\">  \"array\"</span> :  [');
+    expect(result).toContain('<span class=\"STR\">    \"item1\"</span>');
+    expect(result).toContain('<span class=\"STR\">    \"item2\"</span>');
 });

@@ -5,7 +5,9 @@ const COLOR_CLS_NULL = 'NULL';
 const COLOR_CLS_STR = 'STR';
 const COLOR_CLS_DEFAULT = 'DEFAULT';
 
-const JSON_SYNTAX_TYPE_CLASS_MAPPING = {
+const COLOR_CLS = { NUM: 'red', NULL: 'blue', BOOL: 'purple', STR: 'maroon',  KEY: 'teal'}
+
+const typeToClass = {
     'boolean': COLOR_CLS_BOOL,
     'number': COLOR_CLS_NUM,
     'undefined': COLOR_CLS_NULL,
@@ -19,43 +21,25 @@ const JSON_SYNTAX_TYPE_CLASS_MAPPING = {
  * @returns {string} The stringified Object.
  */
 const getStringifiedJSON = (myJson, indentation) => {
-    if (myJson === null) {
-        console.error('myJson is not allowed to be null')
-        return false
+    if (myJson === undefined) {
+        throw Error("Caution! myJson is undefined");
     }
-    //Incase the input is not an object
-    if (typeof myJson !== 'object') {
-        //Incase the input is a JSON string
-        if (typeof myJson === 'string') {
-            try {
-                myJson = JSON.parse(myJson)
-            } catch(err) {
-                console.error(err)
-                return false
-            }
-        } else {
-            console.error('invalid myJson type! Given type was: ' + typeof myJson)
-            return false
-        }
-    }
-    let stringifiedJSON = JSON.stringify(myJson, null, indentation)
+    const stringifiedJSON = JSON.stringify(myJson, null, indentation)
     let lines = stringifiedJSON.split('\n')
     lines = lines.map(line => {
         const end = line.endsWith(',') ? ',' : ''
-        line = line.trim()
         line = end === ',' ? line.substring(0, line.length-1) : line
-        if (['{', '[', ']', '}'].includes(line)) return line + end //To avoid the opening/closing brackets in further code
+        if (['{', '[', ']', '}'].includes(line.trim())) return line + end //To avoid the opening/closing brackets in further code
         const keyVal = line.split(':')
         if (keyVal.length === 1) {
             const type = getTypeOfStringValue(line)
-            return '<span class="COLOR_CLS_' + JSON_SYNTAX_TYPE_CLASS_MAPPING[type] +'">' + line + '</span>' + end
+            return '<span class="' + typeToClass[type] +'">' + line + '</span>' + end
         }
         if (keyVal.length === 2) {
             keyVal[0] = '<span class="COLOR_CLS_KEY">' + keyVal[0] + '</span>'
-            keyVal[1] = keyVal[1].trim()
-            if (!['{', '['].includes(keyVal[1])) {
+            if (!['{', '['].includes(keyVal[1].trim())) {
                 const type = getTypeOfStringValue(keyVal[1])
-                keyVal[1] = '<span class="COLOR_CLS_' + JSON_SYNTAX_TYPE_CLASS_MAPPING[type] +'">' + keyVal[1] + '</span>' + end
+                keyVal[1] = '<span class="' + typeToClass[type] +'">' + keyVal[1] + '</span>' + end
             }
             return keyVal.join(' : ')
         }
@@ -90,9 +74,5 @@ const getTypeOfStringValue = (str) => {
 export {
     getStringifiedJSON,
     getTypeOfStringValue,
-    COLOR_CLS_BOOL,
-    COLOR_CLS_NUM,
-    COLOR_CLS_NULL,
-    COLOR_CLS_STR,
-    COLOR_CLS_DEFAULT
+    COLOR_CLS
 }
