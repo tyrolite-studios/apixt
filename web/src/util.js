@@ -1,18 +1,10 @@
-// Definiere die Konstanten für die Klassen
-const COLOR_CLS_BOOL = 'BOOL';
-const COLOR_CLS_NUM = 'NUM';
-const COLOR_CLS_NULL = 'NULL';
-const COLOR_CLS_STR = 'STR';
-const COLOR_CLS_DEFAULT = 'DEFAULT';
-
-const COLOR_CLS = { NUM: 'red', NULL: 'blue', BOOL: 'purple', STR: 'maroon',  KEY: 'teal'}
+const COLOR_CLS = { num: 'red', null: 'blue', bool: 'purple', str: 'maroon',  key: 'teal', default: 'black'}
 
 const typeToClass = {
-    'boolean': COLOR_CLS_BOOL,
-    'number': COLOR_CLS_NUM,
-    'undefined': COLOR_CLS_NULL,
-    'string': COLOR_CLS_STR,
-    'object': COLOR_CLS_DEFAULT,
+    'boolean': COLOR_CLS.bool,
+    'number': COLOR_CLS.num,
+    'string': COLOR_CLS.str,
+    'object': COLOR_CLS.default,
 };
 
 /**
@@ -33,15 +25,21 @@ const getStringifiedJSON = (myJson, indentation) => {
         const keyVal = line.split(':')
         if (keyVal.length === 1) {
             const type = getTypeOfStringValue(line)
-            return '<span class="' + typeToClass[type] +'">' + line + '</span>' + end
+            const cls = (type === 'object' && line.trim() === 'null') ? COLOR_CLS.null : typeToClass[type]
+            return '<span class="' + cls +'">' + line + '</span>' + end
         }
-        if (keyVal.length === 2) {
-            keyVal[0] = '<span class="COLOR_CLS_KEY">' + keyVal[0] + '</span>'
+        if (keyVal.length >= 2) {
+            let key = ''
+            let value = ''
+            const keyIndex = keyVal.findIndex(val => val.endsWith('"'))
+            key = '<span class="' + COLOR_CLS.key + '">' + keyVal.slice(0, keyIndex+1).join(':') + '</span>'
+            value = keyVal.slice(keyIndex+1).join(':')
             if (!['{', '['].includes(keyVal[1].trim())) {
-                const type = getTypeOfStringValue(keyVal[1])
-                keyVal[1] = '<span class="' + typeToClass[type] +'">' + keyVal[1] + '</span>' + end
+                const type = getTypeOfStringValue(value)
+                const cls = (type === 'object' && value.trim() === 'null') ? COLOR_CLS.null : typeToClass[type]
+                value = '<span class="' + cls +'">' + value  + '</span>' + end
             }
-            return keyVal.join(' : ')
+            return key + ' : ' + value
         }
     })
     return lines.join('\n')
@@ -58,12 +56,12 @@ const getTypeOfStringValue = (str) => {
         return typeof 1
     } else if (/true|false/.test(str)) {
         return typeof true
-    } else if (/null|undefined/.test(str)) {
-        return typeof undefined
+    } else if (/null/.test(str)) {
+        return typeof null
     }
     try { 
         const parsed = JSON.parse(str) 
-        if (typeof parsed === 'object' && parsed !== null) {
+        if (typeof parsed === 'object') {
             return typeof {};
         } 
     } catch(e) {}
