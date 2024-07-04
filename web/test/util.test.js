@@ -45,3 +45,8 @@ test('correctly formats JSON with all data types', () => {
     expect(result).toContain(`<span class="${COLOR_CLS.str}">    "item1"</span>`);
     expect(result).toContain(`<span class="${COLOR_CLS.str}">    "item2"</span>`);
 });
+test('correctly handle multiple quotiation marks in key', () => {
+    const jsonObject = {"\":6\":\":\"test\":\":6\"::::::\"\"\"\"\"6": "failure"}
+    const result = getStringifiedJSON(jsonObject, 2);
+    expect(result).toContain(`<span class="${COLOR_CLS.key}">  \"\\\":6\\\":\\\":\\\"test\\\":\\\":6\\\"::::::\\\"\\\"\\\"\\\"\\\"6\":</span> <span class="${COLOR_CLS.str}"> \"failure\"</span>`)
+})
