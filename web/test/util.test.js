@@ -35,13 +35,13 @@ test('correctly formats JSON with all data types', () => {
     };
     const result = getStringifiedJSON(jsonObject, 2);
 
-    expect(result).toContain('<span class=\"' + COLOR_CLS.key + '\">  \"string\"</span> : <span class=\"' + COLOR_CLS.str + '\"> \"value\"</span>');
-    expect(result).toContain('<span class=\"' + COLOR_CLS.key + '\">  \"number\"</span> : <span class=\"' + COLOR_CLS.num + '\"> 123</span>');
-    expect(result).toContain('<span class=\"' + COLOR_CLS.key + '\">  \"boolean\"</span> : <span class=\"' + COLOR_CLS.bool + '\"> true</span>');
-    expect(result).toContain('<span class=\"' + COLOR_CLS.key + '\">  \"nullValue\"</span> : <span class=\"' + COLOR_CLS.null + '\"> null</span>');
-    expect(result).toContain('<span class=\"' + COLOR_CLS.key + '\">  \"object\"</span> :  {');
-    expect(result).toContain('<span class=\"' + COLOR_CLS.key + '\">    \"nested\"</span> : <span class=\"' + COLOR_CLS.str + '\"> \"object\"</span>');
-    expect(result).toContain('<span class=\"' + COLOR_CLS.key + '\">  \"array\"</span> :  [');
-    expect(result).toContain('<span class=\"' + COLOR_CLS.str + '\">    \"item1\"</span>');
-    expect(result).toContain('<span class=\"' + COLOR_CLS.str + '\">    \"item2\"</span>');
+    expect(result).toContain(`<span class="${COLOR_CLS.key}">  "string":</span> <span class="${COLOR_CLS.str}"> "value"</span>`);
+    expect(result).toContain(`<span class="${COLOR_CLS.key}">  "number":</span> <span class="${COLOR_CLS.num}"> 123</span>`);
+    expect(result).toContain(`<span class="${COLOR_CLS.key}">  "boolean":</span> <span class="${COLOR_CLS.bool}"> true</span>`);
+    expect(result).toContain(`<span class="${COLOR_CLS.key}">  "nullValue":</span> <span class="${COLOR_CLS.null}"> null</span>`);
+    expect(result).toContain(`<span class="${COLOR_CLS.key}">  "object":</span> {`);
+    expect(result).toContain(`<span class="${COLOR_CLS.key}">    "nested":</span> <span class="${COLOR_CLS.str}"> "object"</span>`);
+    expect(result).toContain(`<span class="${COLOR_CLS.key}">  "array":</span> [`);
+    expect(result).toContain(`<span class="${COLOR_CLS.str}">    "item1"</span>`);
+    expect(result).toContain(`<span class="${COLOR_CLS.str}">    "item2"</span>`);
 });

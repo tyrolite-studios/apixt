@@ -20,7 +20,7 @@ const getStringifiedJSON = (myJson, indentation) => {
     let lines = stringifiedJSON.split('\n')
     lines = lines.map(line => {
         //These are the indexes where a Quotiation Escape happens
-        const escapeIndexes = [...line.trim().matchAll(/\"/gm)].map(a => a.index)
+        const escapeIndexes = [...line.trim().matchAll(/\\"/gm)].map(a => a.index)
 
         const end = line.endsWith(',') ? ',' : ''
         line = end === ',' ? line.substring(0, line.length-1) : line
@@ -55,14 +55,14 @@ const getStringifiedJSON = (myJson, indentation) => {
             } else {
                 keyIndex = keyVal.indexOf(possibleEndOfKeys[0])
             }
-            key = '<span class="' + COLOR_CLS.key + '">' + keyVal.slice(0, keyIndex+1).join(':') + '</span>'
+            key = '<span class="' + COLOR_CLS.key + '">' + keyVal.slice(0, keyIndex+1).join(':') + ':</span>'
             value = keyVal.slice(keyIndex+1).join(':')
             if (!['{', '['].includes(keyVal[1].trim())) {
                 const type = getTypeOfStringValue(value)
                 const cls = (type === 'object' && value.trim() === 'null') ? COLOR_CLS.null : typeToClass[type]
-                value = '<span class="' + cls +'">' + value  + '</span>' + end
+                value = ' <span class="' + cls +'">' + value  + '</span>' + end
             }
-            return key + ' : ' + value
+            return key + value
         }
     })
     return lines.join('\n')
