@@ -1,8 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html {
+    width: 100%;
+    height: 100%;
+}
+
 body {
+    width: 100%;
+    height: 100%;
+    padding: 0px;
+    margin: 0px;
     background-color: #9db4cc;
     font-family: "Lucida Console", Monaco, monospace;
 }
 
+#app {
+    width: 100%;
+    height: 100%
+}
+
+/*
 .dumpbox {
     margin-top: 15px;
     margin-bottom: 5px;
@@ -109,8 +128,6 @@ body {
     color: #808080;
     font-size: 11px
 }
-
-.footerkey {}
 
 .footervalue {
     color: #000000;
@@ -299,8 +316,6 @@ body {
     flex: 1
 }
 
-.button-box {}
-
 .maintitle {
     font-size: 20px;
     color: #bcc7d8;
@@ -323,8 +338,6 @@ button {
     text-align: center;
     width: auto;
 }
-
-.sql {}
 
 .errorline {
     background-color: #efc8cc;
@@ -442,8 +455,6 @@ tr.historyrow:nth-child(odd) {
     margin: 4px;
 }
 
-.historyheader {}
-
 .historytable {
     background-color: #FFFFFF;
     border-collapse: collapse;
@@ -539,8 +550,6 @@ tr.historyrow:nth-child(odd) {
     flex-shrink: 0
 }
 
-.title {}
-
 .group-item {
     padding: 0.75rem;
     background-color: #cad7e4;
@@ -568,8 +577,6 @@ tr.historyrow:nth-child(odd) {
     background-color: #0000ff0a;
     cursor: pointer;
 }
-
-.count-item {}
 
 .modal-content {
     padding: 20px;
@@ -712,16 +719,8 @@ tr.historyrow:nth-child(odd) {
     opacity: 0;
     width: 90%;
     left: 5%;
-    xborder: 1px solid #000000;
-    xpadding-left: 20px;
-    xpadding-right: 20px;
-    xpadding-top: 4px;
-    xpadding-bottom: 4px;
     margin: 0px;
     padding: 0px;
-    xcolor: #7d6356;
-    xbackground: #f5ddd7;
-    xborder-radius: 4px;
     box-shadow: 0px 5px 15px #444;
     position: fixed;
     z-index: 10;
@@ -925,8 +924,6 @@ tr.rows:nth-child(odd):hover {
     margin: 0px !important;
 }
 
-.assoc-row {}
-
 .assoc-row>td {
     padding: 3px;
     padding-right: 10px;
@@ -1003,8 +1000,6 @@ tr.rows:nth-child(odd):hover {
     overflow-y: auto
 }
 
-.page-content-overflow {}
-
 html {
     height: 100%;
 }
@@ -1072,8 +1067,6 @@ body {
     border: 1px solid #CCCCCC;
     font-size: 13px;
 }
-
-.csv-header {}
 
 .csv-header td {
     border: 1px solid #CCCCCC;
@@ -1500,3 +1493,4 @@ table.error th {
     background-color: #9db4cc;
     color: #ffffff;
 }
+*/

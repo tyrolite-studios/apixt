@@ -101,10 +101,10 @@ const devServer = isDist
           port: 8082
       }
 
-const entryFiles = [path.resolve(baseDir, "src/index.js")]
-if (!isDist) {
-    entryFiles.push(path.resolve(baseDir, "src/dev/init.js"))
-}
+const indexEntry = path.resolve(baseDir, "src/index.js")
+const entryFiles = isDist
+    ? { apixt: indexEntry }
+    : [indexEntry, path.resolve(baseDir, "src/dev/init.js")]
 
 const optimization = !isDist
     ? {
@@ -130,9 +130,7 @@ const webpackConfig = {
     context: path.resolve(baseDir),
     dependencies: [],
     devtool,
-    entry: {
-        apixt: entryFiles
-    },
+    entry: entryFiles,
     output: {
         path: path.resolve(baseDir, "dist"),
         clean: true,
@@ -159,7 +157,12 @@ const webpackConfig = {
                                     exclude: ["proposal-dynamic-import"]
                                 }
                             ],
-                            "@babel/preset-react"
+                            [
+                                "@babel/preset-react",
+                                {
+                                    runtime: "automatic"
+                                }
+                            ]
                         ]
                     }
                 }
@@ -168,7 +171,11 @@ const webpackConfig = {
                 test: /\.(css)$/,
                 use: [
                     isDist ? MiniCssExtractPlugin.loader : "style-loader",
-                    { loader: "css-loader", options: { sourceMap: !isDist } }
+                    {
+                        loader: "css-loader",
+                        options: { sourceMap: !isDist, importLoaders: 1 }
+                    },
+                    "postcss-loader"
                 ]
             },
             {
@@ -182,11 +189,9 @@ const webpackConfig = {
     plugins,
     resolve: {
         alias: {},
-        extensions: ["*", ".js", ".jsx"]
+        extensions: [".js", ".cjs", ".jsx"]
     },
     devServer
 }
-
-console.log(webpackConfig)
 
 module.exports = webpackConfig
