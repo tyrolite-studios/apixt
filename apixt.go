@@ -186,11 +186,11 @@ type PageData struct {
 
 func getResolvedTemplate() (string, error) {
 
-	css, err := os.ReadFile(filepath.Join("..", "apixt", "templates", "xt.css"))
+	css, err := os.ReadFile(filepath.Join("..", "apixt", "web", "dist", "apixt.css"))
 	if err != nil {
 		return "", err
 	}
-	js, err := os.ReadFile(filepath.Join("..", "apixt", "templates", "xt.js"))
+	js, err := os.ReadFile(filepath.Join("..", "apixt", "web", "dist", "apixt.js"))
 	if err != nil {
 		return "", err
 	}
