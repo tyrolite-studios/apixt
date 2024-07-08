@@ -6,7 +6,7 @@
   "main": "index.js",
   "scripts": {
     "build": "webpack",
-    "dev": "nodemon -q -w *.cjs -e cjs --exec webpack-dev-server",
+    "dev": "nodemon -q -w web/src -e cjs,js,html,css --exec webpack-dev-server",
     "test": "node --experimental-vm-modules ./node_modules/.bin/jest --config jest.config.js --coverage"
   },
   "author": "TyroLite Studios",
