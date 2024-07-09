@@ -34,7 +34,7 @@
     </body> 
 
     <script>
-
+        
         var headerInputTimeout
         var bodyInputTimeout
         var requestParams = {
@@ -65,6 +65,7 @@
         const removeCurrentOptions = () => {
             const bodyTextareaEl = document.getElementById("body-div")
             bodyTextareaEl.style.display = "none"
+            //...
         }
 
         const isValidJson = (str) => {
@@ -85,16 +86,23 @@
         }
 
         const setPath = () => {
+            const invalidChars = ['\\', ':', '*', '?', '"', '<', '>', '|'] // Liste der unerlaubten Zeichen
             addEventListener("keydown", function pathHandler(e) {
                 const parent = document.getElementById("path-div")
+
+                if (invalidChars.includes(e.key)) {
+                    e.preventDefault()
+                    return
+                }
+
                 if (e.key === ' ' || e.key === '/') {
-                    /*
-                        TODO 
-                        Alle Zeichen abfangen die nicht sein dürfen, zb "/"
-                    */
                     const pathInput = document.getElementById("path-input")
                     const inputValue = pathInput.value
-                    if (!inputValue.trim()) return false
+                    if (e.key === "/" && !inputValue.trim()) {
+                        e.preventDefault()
+                        return
+                    }
+                    if (!inputValue.trim()) return
 
                     const span = document.createElement("span")
                     span.innerHTML = inputValue + " / "
@@ -107,6 +115,7 @@
                     parent.appendChild(input)
 
                     input.focus()
+                    e.preventDefault()
 
                 } else if (e.key === "Backspace") {
                     const pathInput = document.getElementById("path-input")
@@ -118,10 +127,11 @@
                         const input = document.createElement("input")
                         input.setAttribute('type', 'text')
                         input.setAttribute('id', 'path-input')
-                        input.value = spanValue.replace("/", "")
+                        input.value = spanValue.replace("/", "").trim()
                         parent.appendChild(input)
     
                         input.focus()
+                        e.preventDefault()
                     }
                 } else if (e.key === "Enter" || e.key === "Escape") {
                     const pathInput = document.getElementById("path-input")
