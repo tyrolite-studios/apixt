@@ -1,20 +1,18 @@
-const example = x => x
+const example = (x) => x
 
 const getStringifiedJSON = (myJson, indentation) => {
     return JSON.stringify(myJson, null, indentation)
 }
 const isValidJson = (str) => {
     let parsed
-    try { 
+    try {
         parsed = JSON.parse(str)
-    } catch(e) {
+    } catch (e) {
         console.error("json error")
-        console.log({str})
-        return false 
+        console.log({ str })
+        return false
     }
-    return parsed 
+    return parsed
 }
 
-export {
-    example, getStringifiedJSON, isValidJson
-}
+export { example, getStringifiedJSON, isValidJson }

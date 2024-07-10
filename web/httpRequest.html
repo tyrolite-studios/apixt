@@ -1,15 +1,20 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
     <head>
-        <meta charset="UTF-8">
-        <title>HTTP Request</title>     
+        <meta charset="UTF-8" />
+        <title>HTTP Request</title>
     </head>
 
     <body>
         <div class="inputs">
             <div class="select-method inputblock">
                 <label for="method">HTTP Method</label>
-                <select name="method" value="" onchange="setMethod(this.value)" onfocus="this.selectedIndex = -1">
+                <select
+                    name="method"
+                    value=""
+                    onchange="setMethod(this.value)"
+                    onfocus="this.selectedIndex = -1"
+                >
                     <option value="post">POST</option>
                     <option value="get">GET</option>
                     <option value="delete">DELETE</option>
@@ -18,40 +23,61 @@
                 </select>
             </div>
             <div id="path-div" class="input-path inputblock">
-                Path: <input id="path-input" placeholder="path" onfocus="setPath()">
+                Path:
+                <input id="path-input" placeholder="path" onfocus="setPath()" />
             </div>
             <div class="textarea-header inputblock">
-                Header: <textarea id="header-textarea" placeholder="header" oninput="setHeader(this.value)" cols=30 rows=10></textarea>
+                Header:
+                <textarea
+                    id="header-textarea"
+                    placeholder="header"
+                    oninput="setHeader(this.value)"
+                    cols="30"
+                    rows="10"
+                ></textarea>
             </div>
-            <div id="body-div" style="display: none;" class="textarea-body inputblock">
-                Body: <textarea id="body-textarea" placeholder="body" oninput="setBody(this.value)" cols=30 rows=10></textarea>
+            <div
+                id="body-div"
+                style="display: none"
+                class="textarea-body inputblock"
+            >
+                Body:
+                <textarea
+                    id="body-textarea"
+                    placeholder="body"
+                    oninput="setBody(this.value)"
+                    cols="30"
+                    rows="10"
+                ></textarea>
             </div>
             <div class="button-submit inputblock">
-                <input type="submit" placeholder="Send request" onclick="submitRequest()">
+                <input
+                    type="submit"
+                    placeholder="Send request"
+                    onclick="submitRequest()"
+                />
             </div>
-            
         </div>
-    </body> 
+    </body>
 
     <script>
-        
         var headerInputTimeout
         var bodyInputTimeout
         var requestParams = {
-            "method": "",
-            "path": "",
-            "header": {},
-            "body": {},
+            method: "",
+            path: "",
+            header: {},
+            body: {}
         }
 
         const submitRequest = () => {
-            const {method, path, header, body} = requestParams
+            const { method, path, header, body } = requestParams
             if (!method || !path || Object.keys(header).length === 0) {
                 console.error("missing required fields")
             } else {
                 //const request = new HttpRequest(method, path, header, body = {})
             }
-        } 
+        }
 
         const enableOptions = (method) => {
             removeCurrentOptions()
@@ -70,14 +96,14 @@
 
         const isValidJson = (str) => {
             let parsed
-            try { 
+            try {
                 parsed = JSON.parse(str)
-            } catch(e) {
+            } catch (e) {
                 console.error("json error")
-                console.log({str})
-                return false 
+                console.log({ str })
+                return false
             }
-            return parsed 
+            return parsed
         }
 
         const setMethod = (method) => {
@@ -86,7 +112,7 @@
         }
 
         const setPath = () => {
-            const invalidChars = ['\\', ':', '*', '?', '"', '<', '>', '|'] // Liste der unerlaubten Zeichen
+            const invalidChars = ["\\", ":", "*", "?", '"', "<", ">", "|"] // Liste der unerlaubten Zeichen
             addEventListener("keydown", function pathHandler(e) {
                 const parent = document.getElementById("path-div")
 
@@ -95,7 +121,7 @@
                     return
                 }
 
-                if (e.key === ' ' || e.key === '/') {
+                if (e.key === " " || e.key === "/") {
                     const pathInput = document.getElementById("path-input")
                     const inputValue = pathInput.value
                     if (e.key === "/" && !inputValue.trim()) {
@@ -110,13 +136,12 @@
                     pathInput.remove()
 
                     const input = document.createElement("input")
-                    input.setAttribute('type', 'text')
-                    input.setAttribute('id', 'path-input')
+                    input.setAttribute("type", "text")
+                    input.setAttribute("id", "path-input")
                     parent.appendChild(input)
 
                     input.focus()
                     e.preventDefault()
-
                 } else if (e.key === "Backspace") {
                     const pathInput = document.getElementById("path-input")
                     if (!pathInput.value.trim() && parent.children.length > 1) {
@@ -125,11 +150,11 @@
                         const spanValue = lastSpanElement.innerText
                         lastSpanElement.remove()
                         const input = document.createElement("input")
-                        input.setAttribute('type', 'text')
-                        input.setAttribute('id', 'path-input')
+                        input.setAttribute("type", "text")
+                        input.setAttribute("id", "path-input")
                         input.value = spanValue.replace("/", "").trim()
                         parent.appendChild(input)
-    
+
                         input.focus()
                         e.preventDefault()
                     }
@@ -140,24 +165,30 @@
                         pathInput.remove()
                         if (!pathInputValue.trim()) {
                             const lastSpan = parent.lastChild
-                            lastSpan.innerHTML = lastSpan.innerHTML.replace("/", "") 
+                            lastSpan.innerHTML = lastSpan.innerHTML.replace(
+                                "/",
+                                ""
+                            )
                         } else {
                             const span = document.createElement("span")
                             span.innerHTML = pathInputValue
                             parent.appendChild(span)
                         }
                     }
-                    requestParams.path = [...parent.children].reduce((val, span) => val + span.textContent, "").replace(/\s/g, '')
+                    requestParams.path = [...parent.children]
+                        .reduce((val, span) => val + span.textContent, "")
+                        .replace(/\s/g, "")
                     removeEventListener("keydown", pathHandler)
-                }           
+                }
             })
         }
         const setHeader = (header) => {
             clearTimeout(headerInputTimeout)
             headerInputTimeout = setTimeout(() => {
-                if (header = isValidJson(header)) {
+                if ((header = isValidJson(header))) {
                     requestParams.header = header
-                    document.getElementById('header-textarea').value = getStringifiedJSON(header, 4);
+                    document.getElementById("header-textarea").value =
+                        getStringifiedJSON(header, 4)
                 } else {
                     //evtl Error bars triggern etc
                 }
@@ -166,9 +197,10 @@
         const setBody = (body) => {
             clearTimeout(bodyInputTimeout)
             bodyInputTimeout = setTimeout(() => {
-                if (body = isValidJson(body)) {
+                if ((body = isValidJson(body))) {
                     requestParams.body = body
-                    document.getElementById('body-textarea').value = getStringifiedJSON(body, 4)
+                    document.getElementById("body-textarea").value =
+                        getStringifiedJSON(body, 4)
                 } else {
                     //evtl Error bars triggern etc
                 }
@@ -180,6 +212,5 @@
         }
     </script>
 
-    <style>
-    </style>
+    <style></style>
 </html>

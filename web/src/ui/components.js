@@ -1,4 +1,4 @@
-import { RequestBuilder } from './components/RequestBuilder'
+import { RequestBuilder } from "./components/RequestBuilder"
 
 function MainLayout() {
     return (
@@ -6,7 +6,7 @@ function MainLayout() {
             <div className="text-white p-3">Title Bar...</div>
             <div className="text-xl  p-10 text-center bg-white text-black flex-auto">
                 API Extender
-                <RequestBuilder/>
+                <RequestBuilder />
             </div>
         </div>
     )
