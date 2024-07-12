@@ -1,4 +1,100 @@
 import { getStringifiedJSON, COLOR_CLS } from "../src/util"
+import { TokenizeJsonString } from "../src/tokenizer"
+
+// syntax highlighting mit tokenizer...
+const highlight = (input, indentation) => {
+    const jsonStr = JSON.stringify(input, null, indentation)
+    if (!jsonStr) return undefined
+
+    const tokens = TokenizeJsonString(jsonStr)
+
+    const type2cls = {
+        bool: COLOR_CLS.bool,
+        number: COLOR_CLS.num,
+        string: COLOR_CLS.str,
+        key: COLOR_CLS.key,
+        null: COLOR_CLS.null,
+        'symbol-[': COLOR_CLS.default,
+        'symbol-]': COLOR_CLS.default,
+        'symbol-{': COLOR_CLS.default,
+        'symbol-}': COLOR_CLS.default,
+        // normalerweise sollten wir hier auch "symbol-," und "symbol-:" einfärben
+    }
+    
+    let result = ''
+    let pos = 0
+    const lastPos = tokens.length - 1
+    while (pos <= lastPos) {
+        let { type, raw, end } = tokens[pos]
+        if (type === 'string' && pos < lastPos && tokens[pos + 1].raw === ':') {
+            // object key
+            type = 'key'
+            raw += ':'
+            pos++
+        } else if (end && pos < lastPos) {
+            // empty object or array
+            if (tokens[pos + 1].raw === end) {
+                raw += end
+                pos++
+            }
+        }
+        const color = type2cls[type] ? type2cls[type] : null
+        result += color ? `<span class="${color}">${raw}</span>` : raw
+        pos++
+    }
+    return result
+}
+
+const compareHighlighting = (cases) => {
+    test(`Compare highlighting results`, () => {
+        for (const json of cases) {
+            const actual = getStringifiedJSON(json, 2)
+            const expected = highlight(json, 2)
+            expect(actual, 'Original: ' + JSON.stringify(json)).toEqual(expected)
+        }
+    })
+}
+
+compareHighlighting(
+    [
+        undefined,
+        null,
+        0,
+        -1,
+        0.5,
+//        -5.6E+24,                      // number mit Exponenten werden nicht erkannt...
+//        0.5E-8,                       
+        "",
+        "abc",
+        "\\",
+        "\\\"",
+//        "\\\":",                      // das dürfte bekannt sein
+        "\n",
+        "\r\n",
+        "\t",
+        "{\n}",
+        "[]",
+        "\uffff",
+        [],
+//        [[]],                         // hier wird der äußere Array-start und das Ende nicht eingefärbt
+//        [{}],
+//        [1, 2],                       // im Prinzip nicht falsch, aber der span beinhaltet hier auch die whitespaces
+        {},
+//        {foo: 'bar'},                 // hier wird jeweils der Object-start und das Ende nicht eingefärbt
+//        {foo: 'bar', foo2: 'bar2'},   
+//        {foo: {}},
+/*                 
+        {
+            string: "value",
+            number: 123,
+            boolean: true,
+            nullValue: null,
+            object: { nested: "object", deep: [0, 10] },
+            array: ["item1", "item2"]
+        }
+            */
+    ]
+)
 
 //getStringifiedJSON
 test('should return undefined if myJson is undefined', () => {
