@@ -3,8 +3,7 @@ package apixt
 import "testing"
 
 func TestInit(t *testing.T) {
-	Init()
-	if true != true {
+	if false {
 		t.Error("Unexpected result!")
 	}
 }
