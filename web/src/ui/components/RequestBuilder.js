@@ -15,7 +15,9 @@ const RequestBuilder = () => {
     const [headers, setHeaders] = useState({
         "Content-Type": "application/json",
         "Content-Length": 50,
-        "X-mx-Header": "blabla"
+        "X-mx-Header": "blabla",
+        "Header-Ex1": "blaaa",
+        "Header-Ex2": "blabla"
     })
     const [body, setBody] = useState("")
     const [bodyDisabled, setBodyDisabled] = useState(true)
@@ -99,11 +101,14 @@ const RequestBuilder = () => {
     return (
         <div className="w-1/2 h-full bg-gray-800 p-4 flex flex-col gap-4">
             <div className="text-white text-2xl">Request Builder</div>
-            <div className="text-white text-2xl flex flex-row justify-normal items-center py-4 gap-4">
+            <div className="text-white flex flex-row justify-normal items-center py-4 gap-4 text-sm">
                 {/* Method selection */}
                 <Select {...selectProps} />
                 {/* Path */}
-                <PathInput sendPathToParent={handlePathChange} />
+                <div className="flex items-center gap-1">
+                    <span className="text-white">Path: </span>
+                    <PathInput sendPathToParent={handlePathChange} />
+                </div>
             </div>
             {/* Header */}
             <div>

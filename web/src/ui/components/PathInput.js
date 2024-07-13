@@ -101,16 +101,11 @@ const PathInput = ({ sendPathToParent }) => {
                         span.innerHTML = pathInputValue
                         parent.appendChild(span)
                     }
-                    const pathEl = document.createElement("span")
-                    pathEl.textContent = "Path: "
-                    pathEl.setAttribute("class", "text-white text-sm pr-2")
-                    parent.insertBefore(pathEl, parent.children[0])
                 }
                 sendPathToParent(
                     [...parent.children]
                         .reduce((val, span) => val + span.textContent, "")
                         .replace(/\s/g, "")
-                        .replace("Path:", "") //Unschöne Lösung MUSS ICH NOCH BESSER MACHEN
                 )
                 removeEventListener("keydown", pathHandler)
             }
