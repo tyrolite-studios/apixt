@@ -1,8 +1,4 @@
 import "./index.css"
-import { createRoot } from "react-dom/client"
-import { MainLayout } from "./ui/components"
-
-console.log("Booting apixt...")
 
 function toggleCodeBlock(elem) {
     while (!elem.classList.contains("dumpbox")) {
@@ -33,12 +29,3 @@ function reload(hash) {
     }
     window.location.href = currentURL.toString()
 }
-
-// Clear the existing HTML content
-
-addEventListener("DOMContentLoaded", () => {
-    console.log("domloaded")
-    document.body.innerHTML = '<div id="app"></div>'
-    const root = createRoot(document.getElementById("app"))
-    root.render(<MainLayout />)
-})

@@ -2,9 +2,55 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer base {
+    :root {
+        /* For rgb(255 115 179 / <alpha-value>) */
+        --app-bg: 157 180 204;
+        --app: 0, 0, 0;
+                        
+        --primary-bg: 8, 8, 8;
+        --primary: 154, 160, 162;
+        --secondary-bg: 47, 48, 75;
+        --secondary: 154, 160, 162;
+        --ghost-bg: 7, 17, 44;
+
+        --header: 188, 199, 216;
+        --header-bg: 77 92 130;
+
+        --block-header-bg: 96 96 96;
+        --block-header: 240 240 240;
+        --block-header-border: 105 74 74;
+
+        --button-bg: 224 224 224;
+        --button: 101 95 95;
+        --button-border: 165 152 152;
+        
+        --overlay-bg: 0, 0, 0, 0.5;
+    }
+}
+
+.stack-v {
+    display: flex;
+    flex-direction: column;
+}
+
+.stack-h {
+    display: flex;
+    flex-direction: row;
+}
+
+.auto {
+    flex: 1
+}
+
+.full {
+    width: 100%;
+    height: 100%
+}
+
 html {
     width: 100%;
-    height: 100%;
+    height: 100%
 }
 
 body {
@@ -13,13 +59,25 @@ body {
     padding: 0px;
     margin: 0px;
     background-color: #9db4cc;
-    font-family: "Lucida Console", Monaco, monospace;
 }
 
 #app {
     width: 100%;
-    height: 100%
+    height: 100%;
+    font-family: "Lucida Console", Monaco, monospace;}
+
+
+
+.shadow {
+    box-shadow: 0 0 0px 5px var(--active-bg);
 }
+
+.fix-shadow,
+.shadow:hover {
+    box-shadow: 5px 5px 5px #00000088;
+}
+
+
 
 /*
 .dumpbox {
