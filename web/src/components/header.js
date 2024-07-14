@@ -1,10 +1,10 @@
 import { useState, useContext } from "react"
 import { Button } from "./form"
 import { AppContext } from "./context"
-import { useModal } from "./modal"
+import { useModalWindow } from "./modal"
+import { d } from "../core/helper"
 
-function TestModalComponent(props) {
-    console.log(props)
+function Test(props) {
     return (
         <div className="p-8 overflow-auto">
             Lorem ipsos
@@ -50,13 +50,11 @@ function TestModalComponent(props) {
         </div>
     )
 }
-
-function HistoryModalComponent({ openModal }) {
-    const InnerModal = useModal()
+function History({ openModal }) {
     return (
         <div className="p-8">
             History in the making...
-            <Button onClick={openModal} name="Open Inner..." />
+            <Button onClick={openModal} name="Open nested..." />
         </div>
     )
 }
@@ -64,8 +62,8 @@ function HistoryModalComponent({ openModal }) {
 function Header() {
     const aCtx = useContext(AppContext)
 
-    const TestModal = useModal()
-    const HistoryModal = useModal()
+    const TestWindow = useModalWindow()
+    const HistoryWindow = useModalWindow()
 
     const [lastCol, setLastCol] = useState("255, 255, 255")
     const [lastBg, setLastBg] = useState("0, 0, 0")
@@ -82,11 +80,11 @@ function Header() {
         <>
             <div className="stack-h text-sm px-2 py-1 space-x-2 w-full text-header bg-header-bg">
                 <div className="space-x-2">
-                    <Button name="Builder..." onClick={TestModal.open} />
+                    <Button name="Builder..." onClick={TestWindow.open} />
                     <Button
                         name="History..."
                         onClick={() =>
-                            HistoryModal.open({ openModal: TestModal.open })
+                            HistoryWindow.open({ openModal: TestWindow.open })
                         }
                     />
                 </div>
@@ -97,17 +95,14 @@ function Header() {
                     <Button name="Switch Theme" onClick={switchTheme} />
                 </div>
             </div>
-            <TestModal.content
-                name="Here is my first modal!"
-                width="500px"
-                height="400px"
-            >
-                <TestModalComponent {...TestModal.props} />
-            </TestModal.content>
 
-            <HistoryModal.content name="History" className="w-full">
-                <HistoryModalComponent {...HistoryModal.props} />
-            </HistoryModal.content>
+            <TestWindow.content name="Test modal" width="500px" height="400px">
+                <Test {...TestWindow.props} />
+            </TestWindow.content>
+
+            <HistoryWindow.content name="History" className="w-full">
+                <History {...HistoryWindow.props} />
+            </HistoryWindow.content>
         </>
     )
 }

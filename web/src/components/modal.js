@@ -1,36 +1,19 @@
 import { createPortal } from "react-dom"
 import { useContext, useRef, useState, useEffect } from "react"
 import { AppContext } from "./context"
-import { Block, Stack } from "./layout"
+import { Block } from "./layout"
 import { Button } from "./form"
+import { extractFullClasses } from "../core/helper"
+import { useMounted } from "./common"
+import { d } from "../core/helper"
 
-function useComponentUpdate() {
-    const mounted = useMounted()
-    const [updates, setUpdates] = useState(false)
-    const updateRef = useRef(null)
-    updateRef.current = updates
-    return () => {
-        if (mounted.current) {
-            setUpdates(!updateRef.current)
-        }
-    }
-}
-
-function useMounted() {
-    const mounted = useRef(false)
-    useEffect(() => {
-        mounted.current = true
-        return () => {
-            mounted.current = false
-        }
-    })
-    return mounted
-}
-
-function extractFullClasses(cls) {
-    if (!cls) return []
-    const regex = /\b(full|w-full|h-full)\b/g
-    return cls.match(regex) || []
+const isEventInRect = (e, rect) => {
+    return (
+        rect.x <= e.clientX &&
+        rect.x + rect.width >= e.clientX &&
+        rect.y <= e.clientY &&
+        rect.y + rect.height >= e.clientY
+    )
 }
 
 function ModalWindow({
@@ -224,7 +207,7 @@ function ModalWindow({
     }
     const dimAttr = {}
     if (transparent && shadow !== null) {
-        vDivCls.push((shadow ? "" : "fix-") + "shadow")
+        vDivCls.push(shadow ? "" : /* "fix-") + */ "shadow-xl")
         const modalLevel = aContext.getModalLevel()
         dimAttr.onMouseEnter = (e) => setShadow(false)
         dimAttr.onMouseLeave = (e) => {
@@ -253,7 +236,7 @@ function ModalWindow({
     if (closeable) {
         hotKeys.close = close
     }
-    const overlayCls = ["fixed left-0 top-0"]
+    const overlayCls = ["full fixed left-0 top-0"]
     if (!transparent) {
         overlayCls.push("bg-overlay-bg")
     }
@@ -323,11 +306,12 @@ function ModalWindow({
         }
     }, 1);
     */
+
+    //             onLeftClick={(e) => e.stopPropagation()}   aus erstem Block
+
     return (
         <Block
             ref={trapRef}
-            onLeftClick={(e) => e.stopPropagation()}
-            full
             className={overlayCls.join(" ")}
             onClick={onClick}
             zIndex={zIndex - 1}
@@ -341,8 +325,8 @@ function ModalWindow({
                             className={vDivCls.join(" ")}
                             style={vDivStyle}
                         >
-                            <Stack
-                                className="bg-header-bg text-header w-full"
+                            <Block
+                                className="stack-h bg-header-bg text-header w-full"
                                 {...nameAttr}
                             >
                                 <Block className="w-full px-2 text-ellipsis">
@@ -357,7 +341,7 @@ function ModalWindow({
                                 ) : (
                                     ""
                                 )}
-                            </Stack>
+                            </Block>
                             {children}
                         </div>
                     </div>
@@ -403,7 +387,7 @@ function Modal({ ...props }) {
     )
 }
 
-function useModal() {
+function useModalWindow() {
     const context = useContext(AppContext)
     const [isOpen, setIsOpen] = useState(false)
     const propsRef = useRef(null)
@@ -486,4 +470,4 @@ function useModal() {
     }
 }
 
-export { useModal }
+export { useModalWindow }

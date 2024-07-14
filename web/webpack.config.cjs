@@ -26,7 +26,10 @@ if (!isDist) {
     if (!fs.existsSync(initFilePath)) {
         const fileContent = fs.writeFileSync(
             initFilePath,
-            "console.log('Initialize fake API...')\n"
+            `import { runApiExtender } from "../boot"\n` +
+                `\n` +
+                `runApiExtender({ baseUrl: "localhost:8080" })\n` +
+                `\n`
         )
     }
 }
@@ -37,9 +40,7 @@ if (!isDist) {
     minimizer = undefined
     plugins.push(
         new DefinePlugin({
-            definitions: {
-                // TODO: key: JSON.stringified(value)
-            }
+            definitions: {}
         }),
         new HtmlWebpackPlugin({
             filename: "index.html",

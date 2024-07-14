@@ -1,10 +1,35 @@
-import { createContext, useState, useRef } from "react"
+import { createContext, useState, useRef, useContext, useEffect } from "react"
+import { BrowserStorage } from "../core/storage"
 
 const AppContext = createContext(null)
 
+function FixCursorArea() {
+    const aContext = useContext(AppContext)
+    const [fixCursor, setFixCursor] = useState(null)
+
+    useEffect(() => {
+        aContext.register("setFixCursor", setFixCursor)
+    }, [])
+
+    const style = {
+        cursor: fixCursor ? fixCursor : "auto",
+        zIndex: 999999
+    }
+    if (fixCursor === null) {
+        style.display = "none"
+    }
+    return (
+        <div
+            key="fc"
+            style={style}
+            className="fixed top-0 left-0 bg-transparent full"
+        />
+    )
+}
+
 function AppCtx({ children }) {
     const [storage] = useState(() => {
-        return null // new BrowserStorage(localStorage, "tyrolite.apixt.")
+        return BrowserStorage(localStorage, "tyrolite.apixt.")
     })
 
     const registryRef = useRef()
@@ -17,8 +42,46 @@ function AppCtx({ children }) {
         }
         const getModalLevel = () => registry("modalStack").length
 
+        const isInExclusiveMode = () => registry("mode") !== null
+
+        const endExclusiveMode = (id) => {
+            const { mode, listeners, setFixCursor } = registry()
+            if (!id || mode !== id) {
+                return
+            }
+            if (listeners) {
+                for (let type of Object.keys(listeners)) {
+                    removeEventListener(type)
+                }
+            }
+            register("mode", null)
+            setFixCursor(null)
+        }
+
+        const removeEventListener = (type) => {
+            const { listeners } = registry()
+
+            const handlers = listeners[type]
+            if (!handlers || handlers.length === 0) {
+                return
+            }
+            const last = handlers.pop()
+            window.removeEventListener(type, last.handler, last.options)
+            if (last.options.cleanUp) {
+                last.options.cleanUp()
+            }
+        }
+
         registryRef.current = {
+            register,
+            version: "0.1.0",
+            mode: null,
+            confirm: null,
+            settings: null,
+            dirty: false,
+            storage,
             lastTarget: null,
+            listeners: {},
             buttonRefocus: null,
             focusStack: {
                 elem: {},
@@ -91,12 +154,70 @@ function AppCtx({ children }) {
                         old.setShadow()
                     }
                 }
-            }
+            },
+
+            startExclusiveMode: (id, cursor = "auto") => {
+                const { mode, setFixCursor } = registry()
+                if (mode !== null) {
+                    endExclusiveMode(mode)
+                }
+                register("mode", id)
+                setFixCursor(cursor)
+            },
+            isInExclusiveMode,
+            endExclusiveMode,
+            onExclusiveModeEnd: (callback) => {
+                const check = () => {
+                    if (!isInExclusiveMode()) {
+                        callback()
+                    } else {
+                        requestAnimationFrame(check)
+                    }
+                }
+                check()
+            },
+
+            addEventListener: (type, listener, options = false) => {
+                const { mode, listeners } = registry()
+
+                if (!mode)
+                    throw Error(
+                        `No call of start exclusive mode before addEventListener`
+                    )
+
+                const handler = (event, ...params) => {
+                    let result = false
+                    try {
+                        result = listener(event, ...params)
+                    } catch (e) {
+                        console.error(
+                            `An error occured in the event handler "${type}": ${e}`
+                        )
+                        endExclusiveMode(mode) // problems? get from registry
+                    }
+                    if (options.once) {
+                        removeEventListener(type)
+                    }
+                    if (!options.propagate) {
+                        event.stopPropagation()
+                    }
+                    return result
+                }
+                window.addEventListener(type, handler, options)
+                if (!listeners[type]) {
+                    listeners[type] = []
+                }
+                listeners[type].push({ handler, options })
+            },
+            removeEventListener
         }
     }
     return (
         <AppContext.Provider value={registryRef.current}>
-            {children}
+            <>
+                <FixCursorArea key="em" />
+                {children}
+            </>
         </AppContext.Provider>
     )
 }
