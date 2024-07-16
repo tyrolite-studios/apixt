@@ -325,11 +325,11 @@ function ModalWindow({
                             className={vDivCls.join(" ")}
                             style={vDivStyle}
                         >
-                            <Block
-                                className="stack-h bg-header-bg text-header w-full"
-                                {...nameAttr}
-                            >
-                                <Block className="w-full px-2 text-ellipsis">
+                            <Block className="stack-h bg-header-bg text-header w-full">
+                                <Block
+                                    className="w-full px-2 text-ellipsis"
+                                    {...nameAttr}
+                                >
                                     {name}
                                 </Block>
                                 {closeable ? (
@@ -403,7 +403,7 @@ function useModalWindow() {
         context.closeModal(currRef.current)
         setIsOpen(false)
     }
-    const open = (props) => {
+    const open = (props = {}) => {
         openedRef.current++
         propsRef.current = props
         setIsOpen(context.openModal())

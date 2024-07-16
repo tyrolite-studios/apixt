@@ -4,7 +4,6 @@
 
 @layer base {
     :root {
-        /* For rgb(255 115 179 / <alpha-value>) */
         --app-bg: 157 180 204;
         --app: 0, 0, 0;
                         
@@ -16,6 +15,7 @@
 
         --header: 188, 199, 216;
         --header-bg: 77 92 130;
+        --header-border: 0 0 0;
 
         --block-header-bg: 96 96 96;
         --block-header: 240 240 240;
@@ -24,7 +24,12 @@
         --button-bg: 224 224 224;
         --button: 101 95 95;
         --button-border: 165 152 152;
-        
+        --button-hover-bg: 234 234 234;
+
+        --active: 50 50 50;
+        --active-bg: 150 150 150;
+        --active-border: 80 70 45;
+    
         --overlay-bg: 0, 0, 0, 0.5;
     }
 }

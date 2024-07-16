@@ -50,11 +50,19 @@ function Test(props) {
         </div>
     )
 }
-function History({ openModal }) {
+function History({ openModal, close }) {
     return (
         <div className="p-8">
             History in the making...
-            <Button onClick={openModal} name="Open nested..." />
+            <Button onClick={() => openModal()} name="Open nested..." />
+            <Button onClick={() => close()} name="Close" />
+            <Button
+                onClick={() => {
+                    close()
+                    openModal()
+                }}
+                name="Close and open..."
+            />
         </div>
     )
 }
@@ -80,7 +88,10 @@ function Header() {
         <>
             <div className="stack-h text-sm px-2 py-1 space-x-2 w-full text-header bg-header-bg">
                 <div className="space-x-2">
-                    <Button name="Builder..." onClick={TestWindow.open} />
+                    <Button
+                        name="Builder..."
+                        onClick={() => TestWindow.open()}
+                    />
                     <Button
                         name="History..."
                         onClick={() =>
