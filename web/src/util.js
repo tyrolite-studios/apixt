@@ -4,15 +4,12 @@ const getStringifiedJSON = (myJson, indentation) => {
     return JSON.stringify(myJson, null, indentation)
 }
 const isValidJson = (str) => {
-    let parsed
     try {
-        parsed = JSON.parse(str)
+        JSON.parse(str)
+        return true
     } catch (e) {
-        console.error("json error")
-        console.log({ str })
         return false
     }
-    return parsed
 }
 
 const requestHeaderOptions = {
@@ -76,7 +73,6 @@ const requestHeaderOptions = {
 const headerContentTypes = [
     "application/json",
     "application/xml",
-    "application/x-www-form-urlencoded",
     "application/javascript",
     "application/pdf",
     "application/zip",
