@@ -7,10 +7,12 @@
         --app-bg: 157 180 204;
         --app: 0, 0, 0;
                         
-        --primary-bg: 8, 8, 8;
-        --primary: 154, 160, 162;
-        --secondary-bg: 47, 48, 75;
-        --secondary: 154, 160, 162;
+        --primary-bg: 202 215 228;
+        --primary: 82 102 177;
+        --primary-border: 202 215 228;
+        --secondary-bg: 226 216 213;
+        --secondary: 82 102 177;
+        --secondary-border: 202 215 228;
         --ghost-bg: 7, 17, 44;
 
         --header: 188, 199, 216;
