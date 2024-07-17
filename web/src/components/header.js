@@ -3,51 +3,14 @@ import { Button } from "./form"
 import { AppContext } from "./context"
 import { useModalWindow } from "./modal"
 import { d } from "../core/helper"
+import { AutoCompleteInput, headerContentTypes } from "../util"
 
 function Test(props) {
     return (
-        <div className="p-8 overflow-auto">
-            Lorem ipsos
-            <br />
-            Lorem ipsos
-            <br />
-            Lorem ipsos
-            <br />
-            Lorem ipsos
-            <br />
-            Lorem ipsos
-            <br />
-            Lorem ipsos
-            <br />
-            Lorem ipsos
-            <br />
-            Lorem ipsos
-            <br />
-            Lorem ipsos
-            <br />
-            Lorem ipsos
-            <br />
-            Lorem ipsos
-            <br />
-            Lorem ipsos
-            <br />
-            Lorem ipsos
-            <br />
-            Lorem ipsos
-            <br />
-            Lorem ipsos
-            <br />
-            Lorem ipsos
-            <br />
-            Lorem ipsos
-            <br />
-            Lorem ipsos
-            <br />
-            Lorem ipsos
-            <br />
-            Lorem ipsos
-            <br />
-        </div>
+        <AutoCompleteInput
+            recommendations={headerContentTypes}
+            emptyValue="<Enter Value>"
+        />
     )
 }
 function History({ openModal, close }) {
