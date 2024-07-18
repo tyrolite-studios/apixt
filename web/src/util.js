@@ -47,8 +47,10 @@ const headerContentTypes = [
 const AutoCompleteInput = ({ recommendations, emptyValue }) => {
     const [inputValue, setInputValue] = useState("")
     const [firstRecommendation, setFirstRecommendation] = useState("")
+    const [showFirstRecommendation, setShowFirstRecommendation] = useState(true)
     const [listActive, setListActive] = useState(false)
     const [optionPointerIndex, setOptionPointerIndex] = useState(-1)
+    const [scrollWidth, setScrollWidth] = useState(null)
     const [filteredRecommendations, setFilteredRecommendations] = useState(
         recommendations.map((rec) => "p_" + rec)
     )
@@ -92,10 +94,18 @@ const AutoCompleteInput = ({ recommendations, emptyValue }) => {
                     handleInputValueChange(e.target.value)
                 }}
                 onFocus={(e) => {
+                    if (!scrollWidth) setScrollWidth(e.target.scrollWidth)
                     filterRecommendations(e.target.value)
                     setListActive(true)
                 }}
                 onKeyDown={(e) => {
+                    if (
+                        showFirstRecommendation !==
+                        (scrollWidth === e.target.scrollWidth)
+                    )
+                        setShowFirstRecommendation(
+                            scrollWidth === e.target.scrollWidth
+                        )
                     if (e.key === "Enter") {
                         if (optionPointerIndex !== -1) {
                             handleInputValueChange(
@@ -135,7 +145,7 @@ const AutoCompleteInput = ({ recommendations, emptyValue }) => {
                 }}
             />
             <input
-                value={firstRecommendation}
+                value={showFirstRecommendation ? firstRecommendation : ""}
                 readOnly
                 className="text-opacity-40 absolute bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-1 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
             />
