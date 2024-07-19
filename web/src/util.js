@@ -82,7 +82,8 @@ const AutoCompleteInput = ({ recommendations, emptyValue }) => {
     }
 
     const removePrefix = (value) => {
-        return value.replace(/p_|i_/g, "")
+        if (value) return value.replace(/p_|i_/g, "")
+        else return value
     }
 
     return (
@@ -128,13 +129,26 @@ const AutoCompleteInput = ({ recommendations, emptyValue }) => {
                     } else if (e.key === "ArrowDown") {
                         if (filteredRecommendations.length > 0) {
                             const newIndex = optionPointerIndex + 1
-                            if (filteredRecommendations.length > newIndex)
+                            if (filteredRecommendations.length > newIndex) {
                                 setOptionPointerIndex(newIndex)
+                                setFirstRecommendation(
+                                    removePrefix(
+                                        filteredRecommendations[newIndex]
+                                    )
+                                )
+                            }
                         }
                     } else if (e.key === "ArrowUp") {
                         if (filteredRecommendations.length > 0) {
                             const newIndex = optionPointerIndex - 1
-                            if (newIndex >= -1) setOptionPointerIndex(newIndex)
+                            if (newIndex >= -1) {
+                                setOptionPointerIndex(newIndex)
+                                setFirstRecommendation(
+                                    removePrefix(
+                                        filteredRecommendations[newIndex]
+                                    )
+                                )
+                            }
                         }
                     }
                 }}
