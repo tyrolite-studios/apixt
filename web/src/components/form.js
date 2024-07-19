@@ -7,7 +7,7 @@ function Button({ name, onClick, className }) {
 
     const state = clicked ? "active" : "button"
 
-    const cls = ["text-xs border py-1 px-3 hover:bg-button-hover-bg"]
+    const cls = ["text-xs border py-0 px-2 hover:bg-button-hover-bg"]
     if (clicked) {
         cls.push("bg-active-bg text-active border-active-border")
     } else {

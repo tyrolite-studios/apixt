@@ -9,19 +9,32 @@
                         
         --primary-bg: 202 215 228;
         --primary: 82 102 177;
-        --primary-border: 202 215 228;
+        --primary-border: 82 102 177;
+
         --secondary-bg: 226 216 213;
         --secondary: 82 102 177;
-        --secondary-border: 202 215 228;
+        --secondary-border: 82 102 177;
+
+
+
         --ghost-bg: 7, 17, 44;
 
         --header: 188, 199, 216;
         --header-bg: 77 92 130;
         --header-border: 0 0 0;
 
+        --block: 0 0 0;
+        --block-bg: 255 255 255;
+        --block-side-bg: 224 224 224;
+        --block: 0 0 0;
+        --block-bg: 255 255 255;
         --block-header-bg: 96 96 96;
         --block-header: 240 240 240;
         --block-header-border: 105 74 74;
+        --block-footer-bg: 240 240 224;
+        --block-footer: 0 0 0;
+        --block-footer-border: 0 0 0 / 0.1;
+        
 
         --button-bg: 224 224 224;
         --button: 101 95 95;
