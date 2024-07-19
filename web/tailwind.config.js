@@ -13,6 +13,7 @@ export default {
                 "secondary-bg": "rgb(var(--secondary-bg))",
                 secondary: "rgb(var(--secondary))",
                 "secondary-border": "rgb(var(--secondary-border))",
+
                 "ghost-bg": "rgb(var(--ghost-bg))",
 
                 header: "rgb(var(--header))",
@@ -29,9 +30,16 @@ export default {
                 "active-border": "rgb(var(--active-border))",
 
                 "overlay-bg": "rgb(var(--overlay-bg))",
+
+                block: "rgb(var(--block))",
+                "block-bg": "rgb(var(--block-bg))",
+                "block-side-bg": "rgb(var(--block-side-bg))",
                 "block-header": "rgb(var(--block-header))",
                 "block-header-bg": "rgb(var(--block-header-bg))",
-                "block-header-border": "rgb(var(--block-header-border))"
+                "block-header-border": "rgb(var(--block-header-border))",
+                "block-footer": "rgb(var(--block-footer))",
+                "block-footer-bg": "rgb(var(--block-footer-bg))",
+                "block-footer-border": "rgb(var(--block-footer-border))"
             }
         }
     },
