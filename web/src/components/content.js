@@ -1,6 +1,7 @@
 import { useModalWindow } from "./modal"
 import { Button } from "./form"
 import { useState } from "react"
+import { getStringifiedJSON } from "../util"
 
 function Section({ name, children, primary = false }) {
     const [colapsed, setColapsed] = useState(false)
@@ -133,7 +134,7 @@ function LoadingSpinner() {
 function Content() {
     const LoadingWindow = useModalWindow()
 
-    const html = `<pre class="full colapsible">${JSON.stringify({ foo: "bar", "fooo-2": { number: 666 } }, null, 4)}</pre>`
+    const html = `<pre class="full colapsible">${getStringifiedJSON({ foo: "bar", "fooo-3": { number: 666 } }, 4)}</pre>`
 
     return (
         <>

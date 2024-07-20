@@ -1,12 +1,12 @@
 import { TokenizeJsonString } from "./tokenizer"
 
 const COLOR_CLS = {
-    num: "text-crimson",
-    null: "text-blue",
-    bool: "text-purple",
-    str: "text-maroon",
-    key: "text-teal",
-    default: "text-black"
+    num: "text-teal-600",
+    null: "text-blue-500",
+    bool: "text-purple-500",
+    str: "text-rose-400",
+    key: "text-indigo-400",
+    default: "text-slate-400"
 }
 
 const tokenTypeToCls = {
