@@ -56,4 +56,8 @@ const Block = React.forwardRef(({ children, ...props }, ref) => {
     )
 })
 
-export { Block }
+function Icon({ name }) {
+    return <span className="material-icons text-sm">{name}</span>
+}
+
+export { Block, Icon }
