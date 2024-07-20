@@ -238,7 +238,7 @@ function ModalWindow({
     }
     const overlayCls = ["full fixed left-0 top-0"]
     if (!transparent) {
-        overlayCls.push("bg-overlay-bg")
+        overlayCls.push("bg-overlay-bg/50")
     }
 
     const nameAttr = {}
@@ -325,7 +325,7 @@ function ModalWindow({
                             className={vDivCls.join(" ")}
                             style={vDivStyle}
                         >
-                            <Block className="stack-h bg-header-bg text-header w-full">
+                            <Block className="stack-h bg-header-bg text-header-text w-full">
                                 <Block
                                     className="w-full px-2 text-ellipsis"
                                     {...nameAttr}
@@ -334,7 +334,6 @@ function ModalWindow({
                                 </Block>
                                 {closeable ? (
                                     <Button
-                                        name="X"
                                         icon="close"
                                         onClick={(e) => close()}
                                     />
