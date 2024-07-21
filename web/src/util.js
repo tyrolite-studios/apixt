@@ -63,10 +63,12 @@ const AutoCompleteInput = ({ recommendations, emptyValue }) => {
 
     const filterRecommendations = (value) => {
         const foundByPrefix = recommendations.filter((rec) =>
-            rec.startsWith(value)
+            rec.toLowerCase().startsWith(value.toLowerCase())
         )
         const foundByIncludes = recommendations.filter(
-            (rec) => !foundByPrefix.includes(rec) && rec.includes(value)
+            (rec) =>
+                !foundByPrefix.includes(rec.toLowerCase()) &&
+                rec.includes(value.toLowerCase())
         )
         const filtered = [
             ...foundByPrefix.map((rec) => "p_" + rec),
@@ -130,6 +132,10 @@ const AutoCompleteInput = ({ recommendations, emptyValue }) => {
                         if (filteredRecommendations.length > 0) {
                             const newIndex = optionPointerIndex + 1
                             if (filteredRecommendations.length > newIndex) {
+                                const el = document.getElementById(
+                                    filteredRecommendations[newIndex]
+                                )
+                                el.scrollIntoView(false)
                                 setOptionPointerIndex(newIndex)
                                 setFirstRecommendation(
                                     removePrefix(
@@ -142,6 +148,12 @@ const AutoCompleteInput = ({ recommendations, emptyValue }) => {
                         if (filteredRecommendations.length > 0) {
                             const newIndex = optionPointerIndex - 1
                             if (newIndex >= -1) {
+                                if (newIndex !== -1) {
+                                    const el = document.getElementById(
+                                        filteredRecommendations[newIndex]
+                                    )
+                                    el.scrollIntoView(true)
+                                }
                                 setOptionPointerIndex(newIndex)
                                 setFirstRecommendation(
                                     removePrefix(
@@ -168,6 +180,7 @@ const AutoCompleteInput = ({ recommendations, emptyValue }) => {
                     {filteredRecommendations.map((type, index) => (
                         <div
                             key={index}
+                            id={type}
                             className={`p-1 cursor-pointer hover:bg-gray-600 text-left ${filteredRecommendations[optionPointerIndex] === type ? "text-red-200" : ""} ${type.startsWith("p_") ? "bg-green-200" : "bg-red-200"}`}
                             onMouseDown={(e) => e.preventDefault()}
                             onClick={(e) => {
