@@ -6,7 +6,7 @@ const COLOR_CLS = {
     bool: "text-purple-500",
     str: "text-rose-400",
     key: "text-indigo-400",
-    default: "text-slate-400"
+    default: "text-slate-400/80"
 }
 
 const tokenTypeToCls = {

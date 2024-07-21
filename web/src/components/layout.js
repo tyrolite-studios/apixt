@@ -1,4 +1,5 @@
 import React from "react"
+import { ClassNames } from "../core/helper"
 
 const getLayoutProps = ({ className, zIndex, cursor, tab, ...props }) => {
     const cls = []
@@ -46,7 +47,7 @@ const getLayoutProps = ({ className, zIndex, cursor, tab, ...props }) => {
     }
 }
 
-const Block = React.forwardRef(({ children, ...props }, ref) => {
+const Div = React.forwardRef(({ children, ...props }, ref) => {
     const { cls, attr, style, remProps } = getLayoutProps(props)
 
     return (
@@ -56,8 +57,9 @@ const Block = React.forwardRef(({ children, ...props }, ref) => {
     )
 })
 
-function Icon({ name }) {
-    return <span className="material-icons text-sm">{name}</span>
+function Icon({ name, className }) {
+    const cls = new ClassNames("material-icons text-sm", className)
+    return <span className={cls.value}>{name}</span>
 }
 
-export { Block, Icon }
+export { Div, Icon }

@@ -11,6 +11,7 @@ Regarding the styling, we have the following objectives:
 - A consistent look and feel within the app.
 - The user can either select a theme or define one themselves.
 - Switching between Dark/Light mode is only indirectly supported through the selection of a corresponding theme.
+- No mobile support because API development is usually done on desktops or laptops
 
 To achieve these objectives, we need as general UI components as possible that can be reused within the app. The styling should be done through a predefined set of Tailwind CSS classes. Deviations from this should only be made in exceptional cases.
 

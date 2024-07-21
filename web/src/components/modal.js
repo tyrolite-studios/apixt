@@ -1,7 +1,7 @@
 import { createPortal } from "react-dom"
 import { useContext, useRef, useState, useEffect } from "react"
 import { AppContext } from "./context"
-import { Block } from "./layout"
+import { Div } from "./layout"
 import { Button } from "./form"
 import { extractFullClasses } from "../core/helper"
 import { useMounted } from "./common"
@@ -310,7 +310,7 @@ function ModalWindow({
     //             onLeftClick={(e) => e.stopPropagation()}   aus erstem Block
 
     return (
-        <Block
+        <Div
             ref={trapRef}
             className={overlayCls.join(" ")}
             onClick={onClick}
@@ -325,13 +325,13 @@ function ModalWindow({
                             className={vDivCls.join(" ")}
                             style={vDivStyle}
                         >
-                            <Block className="stack-h bg-header-bg text-header-text w-full">
-                                <Block
+                            <Div className="stack-h bg-header-bg text-header-text w-full">
+                                <Div
                                     className="w-full px-2 text-ellipsis"
                                     {...nameAttr}
                                 >
                                     {name}
-                                </Block>
+                                </Div>
                                 {closeable ? (
                                     <Button
                                         icon="close"
@@ -340,13 +340,13 @@ function ModalWindow({
                                 ) : (
                                     ""
                                 )}
-                            </Block>
+                            </Div>
                             {children}
                         </div>
                     </div>
                 </div>
             </div>
-            <Block
+            <Div
                 width={0}
                 height={0}
                 tab
@@ -357,7 +357,7 @@ function ModalWindow({
                     }
                 }}
             />
-        </Block>
+        </Div>
     )
 }
 

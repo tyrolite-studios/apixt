@@ -98,14 +98,14 @@ function CodeBlock({ name, html, hash }) {
             </div>
 
             <div className="stack-h bg-block-bg text-block-text">
-                <div className="py-2 px-1 bg-block-header-bg/20">
+                <div className="py-1 px-1 bg-block-header-bg/20">
                     <Button
                         icon={
                             colapsed
                                 ? "keyboard_arrow_down"
                                 : "keyboard_arrow_up"
                         }
-                        className="py-1 px-1"
+                        className="!px-2 py-1 px-1"
                         onClick={toggle}
                     />
                 </div>

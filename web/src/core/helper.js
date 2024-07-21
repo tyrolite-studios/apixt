@@ -80,10 +80,87 @@ function isObject(obj) {
     return obj && typeof obj === "object" && !isArray(obj)
 }
 
+/**
+ * Returns whether the given value is a function or not
+ *
+ * @param {mixed} value
+ *
+ * @returns {boolean}
+ */
+function isFunction(value) {
+    return typeof value === "function"
+}
+
 function extractFullClasses(cls) {
     if (!cls) return []
     const regex = /\b(full|w-full|h-full)\b/g
     return cls.match(regex) || []
 }
 
-export { d, isString, isArray, isNull, isObject, extractFullClasses }
+class ClassNames {
+    constructor(cls = "", overwrites = "") {
+        this.cls = []
+        this.add(cls)
+        this.overwrites = overwrites
+    }
+
+    add(cls = "") {
+        if (!cls) return
+
+        this.cls.push(cls)
+    }
+
+    addIf(condition, ifCls, elseCls = "") {
+        if (condition) {
+            this.add(ifCls)
+        } else {
+            this.add(elseCls)
+        }
+    }
+
+    addIfProps(clsToCondition) {
+        for (const [cls, condition] of Object.entries(clsToCondition)) {
+            if (isFunction(condition)) {
+                condition = condition()
+            }
+            if (condition) this.add(cls)
+        }
+    }
+
+    getDeletesAndAdds() {
+        const parts = this.overwrites.split(" ")
+        const deletes = []
+        const adds = []
+        for (const part of parts) {
+            if (part[0] === "!") {
+                deletes.push(part.substring(1))
+            } else {
+                adds.push(part)
+            }
+        }
+        return {
+            adds,
+            deletes
+        }
+    }
+
+    get value() {
+        const joined = this.cls.join(" ")
+        if (!this.overwrites) return joined
+
+        const { adds, deletes } = this.getDeletesAndAdds()
+        const parts = joined.split(" ").filter((cls) => !deletes.includes(cls))
+
+        return [...parts, ...adds].join(" ")
+    }
+}
+
+export {
+    d,
+    isString,
+    isArray,
+    isNull,
+    isObject,
+    extractFullClasses,
+    ClassNames
+}
