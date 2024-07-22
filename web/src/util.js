@@ -67,6 +67,7 @@ const AutoCompleteInput = ({ recommendations, emptyValue }) => {
     )
 
     const handleInputValueChange = (value) => {
+        if (!listActive) setListActive(true)
         value = removePrefix(value)
         setInputValue(value)
         filterRecommendations(value)
@@ -120,6 +121,7 @@ const AutoCompleteInput = ({ recommendations, emptyValue }) => {
                     setListActive(true)
                 }}
                 onKeyDown={(e) => {
+                    if (!listActive) return
                     if (
                         showFirstRecommendation !==
                         (scrollWidth === e.target.scrollWidth)
@@ -127,8 +129,32 @@ const AutoCompleteInput = ({ recommendations, emptyValue }) => {
                         setShowFirstRecommendation(
                             scrollWidth === e.target.scrollWidth
                         )
-                    if (e.key === "Enter" || e.key === "ArrowRight") {
-                        handleInputValueChange(firstRecommendation)
+                    if (e.key === "Enter") {
+                        if (firstRecommendation)
+                            handleInputValueChange(firstRecommendation)
+                        else if (optionPointerIndex !== -1)
+                            handleInputValueChange(
+                                filteredRecommendations[optionPointerIndex]
+                            )
+                        setListActive(false)
+                    } else if (e.key === "ArrowRight") {
+                        if (
+                            optionPointerIndex === -1 ||
+                            filteredRecommendations[optionPointerIndex] ===
+                                firstRecommendation
+                        ) {
+                            if (
+                                e.target.selectionEnd === e.target.value.length
+                            ) {
+                                handleInputValueChange(firstRecommendation)
+                                setListActive(false)
+                            }
+                        } else {
+                            handleInputValueChange(
+                                filteredRecommendations[optionPointerIndex]
+                            )
+                            setListActive(false)
+                        }
                     } else if (e.key === "ArrowDown") {
                         if (filteredRecommendations.length > 0) {
                             const newIndex = optionPointerIndex + 1
@@ -141,11 +167,17 @@ const AutoCompleteInput = ({ recommendations, emptyValue }) => {
                                     inline: "nearest"
                                 })
                                 setOptionPointerIndex(newIndex)
-                                setFirstRecommendation(
-                                    removePrefix(
-                                        filteredRecommendations[newIndex]
-                                    )
+                                if (
+                                    !filteredRecommendations[
+                                        newIndex
+                                    ].startsWith("i_")
                                 )
+                                    setFirstRecommendation(
+                                        removePrefix(
+                                            filteredRecommendations[newIndex]
+                                        )
+                                    )
+                                else setFirstRecommendation("")
                             }
                         }
                     } else if (e.key === "ArrowUp") {
@@ -160,13 +192,21 @@ const AutoCompleteInput = ({ recommendations, emptyValue }) => {
                                         block: "nearest",
                                         inline: "nearest"
                                     })
+                                    if (
+                                        !filteredRecommendations[
+                                            newIndex
+                                        ].startsWith("i_")
+                                    )
+                                        setFirstRecommendation(
+                                            removePrefix(
+                                                filteredRecommendations[
+                                                    newIndex
+                                                ]
+                                            )
+                                        )
+                                    else setFirstRecommendation("")
                                 }
                                 setOptionPointerIndex(newIndex)
-                                setFirstRecommendation(
-                                    removePrefix(
-                                        filteredRecommendations[newIndex]
-                                    )
-                                )
                             }
                         }
                     }
@@ -174,7 +214,6 @@ const AutoCompleteInput = ({ recommendations, emptyValue }) => {
                 onBlur={() => {
                     setFirstRecommendation("")
                     setListActive(false)
-                    //Hier den Input beenden
                 }}
             />
             <input
