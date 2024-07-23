@@ -40,6 +40,8 @@ const headerContentTypes = [
     "video/ogg"
 ]
 
+const emptyValue = "<Enter Value>"
+
 const highlightPartOfString = (found, string) => {
     const index = string.toLowerCase().indexOf(found.toLowerCase())
     const [prefix, toHighlight, postfix] = [
@@ -54,7 +56,7 @@ const highlightPartOfString = (found, string) => {
  * @param {*} recommendations Options of Autocomplete as an array
  * @returns
  */
-const AutoCompleteInput = ({ recommendations, emptyValue }) => {
+const AutoCompleteInput = ({ recommendations }) => {
     const [inputValue, setInputValue] = useState("")
     const [firstRecommendation, setFirstRecommendation] = useState("")
     const [showFirstRecommendation, setShowFirstRecommendation] = useState(true)
@@ -67,6 +69,8 @@ const AutoCompleteInput = ({ recommendations, emptyValue }) => {
     )
 
     const handleInputValueChange = (value) => {
+        if (value === undefined) return
+
         if (!listActive) setListActive(true)
         value = removePrefix(value)
         setInputValue(value)
@@ -79,14 +83,14 @@ const AutoCompleteInput = ({ recommendations, emptyValue }) => {
         )
         const foundByIncludes = recommendations.filter(
             (rec) =>
-                !foundByPrefix.includes(rec.toLowerCase()) &&
-                rec.includes(value.toLowerCase())
+                !foundByPrefix.includes(rec) &&
+                rec.toLowerCase().includes(value.toLowerCase())
         )
         const filtered = [
             ...foundByPrefix.map((rec) => "p_" + rec),
             ...foundByIncludes.map((rec) => "i_" + rec)
         ]
-        setFilteredRecommendations(filtered.length > 0 ? filtered : [])
+        setFilteredRecommendations(filtered)
 
         let recommendation = ""
         if (filtered.length > 0 && !filtered[0].startsWith("i_")) {
@@ -114,13 +118,6 @@ const AutoCompleteInput = ({ recommendations, emptyValue }) => {
                 value={inputValue === emptyValue ? "" : inputValue}
                 onChange={(e) => {
                     handleInputValueChange(e.target.value)
-                }}
-                onFocus={(e) => {
-                    if (!scrollWidth) setScrollWidth(e.target.scrollWidth)
-                    filterRecommendations(e.target.value)
-                    setListActive(true)
-                }}
-                onKeyDown={(e) => {
                     if (
                         showFirstRecommendation !==
                         (scrollWidth === e.target.scrollWidth)
@@ -128,24 +125,24 @@ const AutoCompleteInput = ({ recommendations, emptyValue }) => {
                         setShowFirstRecommendation(
                             scrollWidth === e.target.scrollWidth
                         )
-
+                }}
+                onFocus={(e) => {
+                    if (!scrollWidth) setScrollWidth(e.target.scrollWidth)
+                    filterRecommendations(e.target.value)
+                    setListActive(true)
+                }}
+                onKeyDown={(e) => {
                     if (!listActive) return
-                    if (e.key === "Enter") {
-                        if (firstRecommendation)
-                            handleInputValueChange(firstRecommendation)
-                        else if (optionPointerIndex !== -1)
-                            handleInputValueChange(
-                                filteredRecommendations[optionPointerIndex]
-                            )
-                        setListActive(false)
-                    } else if (e.key === "ArrowRight") {
+                    if (e.key === "Enter" || e.key === "ArrowRight") {
                         if (
                             optionPointerIndex === -1 ||
                             filteredRecommendations[optionPointerIndex] ===
                                 firstRecommendation
                         ) {
                             if (
-                                e.target.selectionEnd === e.target.value.length
+                                e.target.selectionEnd ===
+                                    e.target.value.length &&
+                                firstRecommendation
                             ) {
                                 handleInputValueChange(firstRecommendation)
                                 setListActive(false)
@@ -169,14 +166,17 @@ const AutoCompleteInput = ({ recommendations, emptyValue }) => {
                                 })
                                 setOptionPointerIndex(newIndex)
                                 if (
-                                    !filteredRecommendations[
+                                    filteredRecommendations[
                                         newIndex
-                                    ].startsWith("i_")
+                                    ].startsWith("p_")
                                 )
                                     setFirstRecommendation(
-                                        removePrefix(
-                                            filteredRecommendations[newIndex]
-                                        )
+                                        inputValue +
+                                            removePrefix(
+                                                filteredRecommendations[
+                                                    newIndex
+                                                ]
+                                            ).slice(inputValue.length)
                                     )
                                 else setFirstRecommendation("")
                             }
@@ -194,16 +194,17 @@ const AutoCompleteInput = ({ recommendations, emptyValue }) => {
                                         inline: "nearest"
                                     })
                                     if (
-                                        !filteredRecommendations[
+                                        filteredRecommendations[
                                             newIndex
-                                        ].startsWith("i_")
+                                        ].startsWith("p_")
                                     )
                                         setFirstRecommendation(
-                                            removePrefix(
-                                                filteredRecommendations[
-                                                    newIndex
-                                                ]
-                                            )
+                                            inputValue +
+                                                removePrefix(
+                                                    filteredRecommendations[
+                                                        newIndex
+                                                    ]
+                                                ).slice(inputValue.length)
                                         )
                                     else setFirstRecommendation("")
                                 }

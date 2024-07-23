@@ -6,12 +6,7 @@ import { d } from "../core/helper"
 import { AutoCompleteInput, headerContentTypes } from "../util"
 
 function Test(props) {
-    return (
-        <AutoCompleteInput
-            recommendations={headerContentTypes}
-            emptyValue="<Enter Value>"
-        />
-    )
+    return <AutoCompleteInput recommendations={headerContentTypes} />
 }
 function History({ openModal, close }) {
     return (
