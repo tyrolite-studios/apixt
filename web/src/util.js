@@ -121,7 +121,6 @@ const AutoCompleteInput = ({ recommendations, emptyValue }) => {
                     setListActive(true)
                 }}
                 onKeyDown={(e) => {
-                    if (!listActive) return
                     if (
                         showFirstRecommendation !==
                         (scrollWidth === e.target.scrollWidth)
@@ -129,6 +128,8 @@ const AutoCompleteInput = ({ recommendations, emptyValue }) => {
                         setShowFirstRecommendation(
                             scrollWidth === e.target.scrollWidth
                         )
+
+                    if (!listActive) return
                     if (e.key === "Enter") {
                         if (firstRecommendation)
                             handleInputValueChange(firstRecommendation)
