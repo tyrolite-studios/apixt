@@ -54,7 +54,7 @@ const isNull = (value) => value === null
  * @returns {boolean}
  */
 function isString(value) {
-    return typeof value === "string" && value !== null
+    return typeof value === "string"
 }
 
 /**
@@ -77,7 +77,7 @@ function isArray(value) {
  * @returns {boolean}
  */
 function isObject(obj) {
-    return obj && typeof obj === "object" && !isArray(obj)
+    return !!obj && typeof obj === "object" && !isArray(obj)
 }
 
 /**

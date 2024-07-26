@@ -2,29 +2,72 @@ import { useModalWindow } from "./modal"
 import { Button } from "./form"
 import { useState } from "react"
 import { getStringifiedJSON } from "../util"
+import { ClassNames } from "../core/helper"
+import { d } from "../core/helper"
+
+function ContentTree({ root, level = 1 }) {
+    const { type, nodes, ...params } = root
+
+    const nextLevel = type === "section" ? level + 1 : level
+    const children = []
+    if (nodes) {
+        let i = 0
+        for (const node of nodes) {
+            children.push(
+                <ContentTree
+                    key={nextLevel + "_" + i}
+                    root={node}
+                    level={nextLevel}
+                />
+            )
+            i++
+        }
+    }
+    switch (type) {
+        case "root":
+            return <div className="stack-v gap-2">{children}</div>
+
+        case "section":
+            return (
+                <Section {...params} primary={nextLevel % 2 === 1}>
+                    {children}
+                </Section>
+            )
+
+        case "section-group":
+            return <SectionGroup {...params}>{children}</SectionGroup>
+
+        case "code-block":
+            return <CodeBlock {...params} />
+
+        case "dump-block":
+            return <DumpBlock {...params} />
+
+        default:
+            throw Error(`Unknown node type "${type}" given!`)
+    }
+}
 
 function Section({ name, children, primary = false }) {
     const [colapsed, setColapsed] = useState(false)
 
-    const cls = ["px-2 border shadow-xl pt-1 pb-2"]
-    cls.push(
-        primary
-            ? " border-frame-odd-border bg-frame-odd-bg text-frame-odd-text"
-            : " border-frame-even-border bg-frame-even-bg text-frame-even-text"
+    const cls = new ClassNames("px-2 border shadow-xl pt-1 pb-2")
+    cls.addIf(
+        primary,
+        "border-frame-odd-border bg-frame-odd-bg text-frame-odd-text",
+        "border-frame-even-border bg-frame-even-bg text-frame-even-text"
     )
 
     const toggle = () => {
         setColapsed(!colapsed)
     }
 
-    const contentCls = [
+    const contentCls = new ClassNames(
         "stack-v bg-app-bg text-app-text border border-frame-odd-border p-2 gap-2"
-    ]
-    if (colapsed) {
-        contentCls.push("colapsed")
-    }
+    )
+    contentCls.addIf(colapsed, "colapsed")
     return (
-        <div className={cls.join(" ")}>
+        <div className={cls.value}>
             <div className="stack-h gap-2">
                 <div
                     className="bg-frame-odd-border text-frame-odd-bg px-2 py-0"
@@ -39,7 +82,7 @@ function Section({ name, children, primary = false }) {
                 </div>
             </div>
 
-            <div className={contentCls.join(" ")}>{children}</div>
+            <div className={contentCls.value}>{children}</div>
         </div>
     )
 }
@@ -84,10 +127,8 @@ function CodeBlock({ name, html, hash }) {
     const toggle = () => {
         setColapsed(!colapsed)
     }
-    const contentCls = ["auto p-2"]
-    if (colapsed) {
-        contentCls.push("colapsed")
-    }
+    const contentCls = new ClassNames("auto p-2")
+    contentCls.addIf(colapsed, "colapsed")
     return (
         <div className="border border-block-border text-block-header-text bg-block-header-bg">
             <div className="stack-h px-2 py-1">
@@ -110,7 +151,7 @@ function CodeBlock({ name, html, hash }) {
                     />
                 </div>
                 <div
-                    className={contentCls.join(" ")}
+                    className={contentCls.value}
                     dangerouslySetInnerHTML={{ __html: html }}
                 />
             </div>
@@ -131,6 +172,41 @@ function LoadingSpinner() {
     )
 }
 
+const cTree = {
+    type: "root",
+    nodes: [
+        { type: "dump-block", name: "Dump @ Line 33 in woewoeowe" },
+        {
+            type: "section",
+            name: "Tree results",
+            nodes: [
+                {
+                    type: "section-group",
+                    nodes: [
+                        {
+                            type: "section",
+                            name: "Deeper",
+                            nodes: [
+                                {
+                                    type: "section",
+                                    name: "More Deep",
+                                    nodes: [
+                                        {
+                                            type: "code-block",
+                                            name: "Http Request",
+                                            html: `<pre class="full colapsible">${getStringifiedJSON({ foo: "bar", "fooo-3": { number: 666 } }, 4)}</pre>`
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}
+
 function Content() {
     const LoadingWindow = useModalWindow()
 
@@ -139,6 +215,8 @@ function Content() {
     return (
         <>
             <div className="auto text-sm p-2 overflow-auto">
+                <ContentTree root={cTree} />
+
                 <div className="stack-v gap-3">
                     <DumpBlock name="Vardump @/home/user/var/www/test-api/src/TestApi/Domain/Music/Provider/ReleaseKpisProvider.php:238:" />
 
