@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useMemo } from "react"
 
 const headerContentTypes = [
     "application/json",
@@ -42,42 +42,66 @@ const headerContentTypes = [
 
 const emptyValue = "<Enter Value>"
 
-const highlightPartOfString = (found, string) => {
-    const index = string.toLowerCase().indexOf(found.toLowerCase())
-    const [prefix, toHighlight, postfix] = [
-        string.slice(0, index),
-        string.slice(index, found.length + index),
-        string.slice(found.length + index, string.length)
-    ]
-    return { prefix, toHighlight, postfix }
+const splitByMatch = (string, search) => {
+    if (search === "") return [string]
+    const result = []
+    let currentIndex = 0
+    let matchIndex
+
+    while (
+        (matchIndex = string
+            .toLowerCase()
+            .indexOf(search.toLowerCase(), currentIndex)) !== -1
+    ) {
+        result.push(string.slice(currentIndex, matchIndex)) // Prefix
+        result.push(string.slice(matchIndex, matchIndex + search.length)) // Match
+        currentIndex = matchIndex + search.length
+    }
+
+    result.push(string.slice(currentIndex)) // Remaining string after the last match
+    return result
+}
+
+function HighlightMatches({ text, search, className }) {
+    const parts = splitByMatch(text, search)
+    return (
+        <span>
+            {parts.map((part, index) =>
+                part.toLowerCase() === search.toLowerCase() ? (
+                    <span key={index} className={className}>
+                        {part}
+                    </span>
+                ) : (
+                    part
+                )
+            )}
+        </span>
+    )
 }
 /**
  *
  * @param {*} recommendations Options of Autocomplete as an array
  * @returns
  */
-const AutoCompleteInput = ({ recommendations }) => {
+function AutoCompleteInput({ recommendations }) {
     const [inputValue, setInputValue] = useState("")
     const [firstRecommendation, setFirstRecommendation] = useState("")
     const [showFirstRecommendation, setShowFirstRecommendation] = useState(true)
     const [listActive, setListActive] = useState(false)
     const [optionPointerIndex, setOptionPointerIndex] = useState(-1)
     const [scrollWidth, setScrollWidth] = useState(null)
-    const [highlightedParts, setHighlightedParts] = useState([])
-    const [filteredRecommendations, setFilteredRecommendations] = useState(
-        recommendations.map((rec) => "p_" + rec)
-    )
 
-    const handleInputValueChange = (value) => {
-        if (value === undefined) return
-
-        if (!listActive) setListActive(true)
-        value = removePrefix(value)
-        setInputValue(value)
-        filterRecommendations(value)
+    const removePrefix = (value) => {
+        if (value) return value.replace(/p_|i_/g, "")
+        else return value
     }
 
-    const filterRecommendations = (value) => {
+    const filteredRecommendations = useMemo(() => {
+        if (inputValue === undefined) return
+        if (inputValue !== "" && !listActive) setListActive(true)
+
+        const value = removePrefix(inputValue)
+
         const foundByPrefix = recommendations.filter((rec) =>
             rec.toLowerCase().startsWith(value.toLowerCase())
         )
@@ -90,26 +114,17 @@ const AutoCompleteInput = ({ recommendations }) => {
             ...foundByPrefix.map((rec) => "p_" + rec),
             ...foundByIncludes.map((rec) => "i_" + rec)
         ]
-        setFilteredRecommendations(filtered)
 
         let recommendation = ""
         if (filtered.length > 0 && !filtered[0].startsWith("i_")) {
             recommendation =
                 value + removePrefix(filtered[0]).slice(value.length)
         }
-        setFirstRecommendation(recommendation)
+        if (inputValue !== "") setFirstRecommendation(recommendation)
         setOptionPointerIndex(-1)
 
-        const updatedHighlightedParts = filtered.map((type) =>
-            highlightPartOfString(value, removePrefix(type))
-        )
-        setHighlightedParts(updatedHighlightedParts)
-    }
-
-    const removePrefix = (value) => {
-        if (value) return value.replace(/p_|i_/g, "")
-        else return value
-    }
+        return filtered
+    }, [inputValue])
 
     return (
         <div className="flex">
@@ -117,7 +132,7 @@ const AutoCompleteInput = ({ recommendations }) => {
                 className="z-10 bg-transparent border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-1 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
                 value={inputValue === emptyValue ? "" : inputValue}
                 onChange={(e) => {
-                    handleInputValueChange(e.target.value)
+                    setInputValue(e.target.value)
                     if (
                         showFirstRecommendation !==
                         (scrollWidth === e.target.scrollWidth)
@@ -128,7 +143,10 @@ const AutoCompleteInput = ({ recommendations }) => {
                 }}
                 onFocus={(e) => {
                     if (!scrollWidth) setScrollWidth(e.target.scrollWidth)
-                    filterRecommendations(e.target.value)
+                    if (filteredRecommendations[0].startsWith("p_"))
+                        setFirstRecommendation(
+                            removePrefix(filteredRecommendations[0])
+                        )
                     setListActive(true)
                 }}
                 onKeyDown={(e) => {
@@ -144,12 +162,16 @@ const AutoCompleteInput = ({ recommendations }) => {
                                     e.target.value.length &&
                                 firstRecommendation
                             ) {
-                                handleInputValueChange(firstRecommendation)
+                                setInputValue(
+                                    removePrefix(filteredRecommendations[0])
+                                )
                                 setListActive(false)
                             }
                         } else {
-                            handleInputValueChange(
-                                filteredRecommendations[optionPointerIndex]
+                            setInputValue(
+                                removePrefix(
+                                    filteredRecommendations[optionPointerIndex]
+                                )
                             )
                             setListActive(false)
                         }
@@ -182,6 +204,7 @@ const AutoCompleteInput = ({ recommendations }) => {
                             }
                         }
                     } else if (e.key === "ArrowUp") {
+                        e.preventDefault()
                         if (filteredRecommendations.length > 0) {
                             const newIndex = optionPointerIndex - 1
                             if (newIndex >= -1) {
@@ -236,14 +259,14 @@ const AutoCompleteInput = ({ recommendations }) => {
                                 className={`p-1 cursor-pointer hover:bg-gray-600 text-left ${filteredRecommendations[optionPointerIndex] === type ? "text-red-200" : ""} ${type.startsWith("p_") ? "bg-green-200" : "bg-red-200"}`}
                                 onMouseDown={(e) => e.preventDefault()}
                                 onClick={(e) => {
-                                    handleInputValueChange(e.target.textContent)
+                                    setInputValue(e.target.textContent)
                                 }}
                             >
-                                {highlightedParts[index].prefix}
-                                <span className="font-bold">
-                                    {highlightedParts[index].toHighlight}
-                                </span>
-                                {highlightedParts[index].postfix}
+                                <HighlightMatches
+                                    text={removePrefix(type)}
+                                    search={inputValue}
+                                    className={"font-bold"}
+                                />
                             </div>
                         ))}
                     </div>
