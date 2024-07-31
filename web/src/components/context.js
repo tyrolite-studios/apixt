@@ -1,5 +1,9 @@
 import { createContext, useState, useRef, useContext, useEffect } from "react"
 import { BrowserStorage } from "../core/storage"
+import { treeBuilder } from "../core/tree"
+import { getHttpStreamPromise } from "../core/http"
+import { useLoadingSpinner } from "./common"
+import { d } from "../core/helper"
 
 const AppContext = createContext(null)
 
@@ -25,6 +29,16 @@ function FixCursorArea() {
             className="fixed top-0 left-0 bg-transparent full"
         />
     )
+}
+
+function SpinnerDiv() {
+    const aCtx = useContext(AppContext)
+    const LoadingSpinner = useLoadingSpinner()
+    useEffect(() => {
+        aCtx.register("spinner", LoadingSpinner)
+    }, [])
+
+    return <>{LoadingSpinner.Modal}</>
 }
 
 function AppCtx({ children }) {
@@ -74,12 +88,45 @@ function AppCtx({ children }) {
 
         registryRef.current = {
             register,
+            treeBuilder,
             version: "0.1.0",
             mode: null,
             confirm: null,
             settings: null,
+            lastRequest: null,
             dirty: false,
+            spinner: null,
             storage,
+            startContentStream: (request) => {
+                const { treeBuilder, spinner } = registry()
+                treeBuilder.reset()
+
+                register("lastRequest", request)
+                const httpStream = getHttpStreamPromise(request)
+                register("streamAbort", httpStream.abort)
+                const promise = treeBuilder
+                    .processStream(httpStream)
+                    .finally(() => register("streamAbort", null))
+
+                spinner.start(promise, () => {
+                    httpStream.abort()
+                    treeBuilder.abort()
+                })
+            },
+            restartContentStream: () => {
+                const { lastRequest, startContentStream } = registry()
+                if (!lastRequest) return
+
+                startContentStream(lastRequest)
+            },
+            abortContentStream: () => {
+                const { streamAbort } = registry()
+                if (streamAbort) streamAbort()
+            },
+            clearContent: () => {
+                const { treeBuilder } = registry()
+                treeBuilder.reset()
+            },
             lastTarget: null,
             listeners: {},
             buttonRefocus: null,
@@ -215,6 +262,7 @@ function AppCtx({ children }) {
     return (
         <AppContext.Provider value={registryRef.current}>
             <>
+                <SpinnerDiv key="sd" />
                 <FixCursorArea key="em" />
                 {children}
             </>

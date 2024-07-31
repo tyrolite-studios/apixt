@@ -62,4 +62,13 @@ function Icon({ name, className }) {
     return <span className={cls.value}>{name}</span>
 }
 
-export { Div, Icon }
+function Centered({ className, children }) {
+    const cls = new ClassNames("place-content-center text-center", className)
+    return (
+        <div className="grid full">
+            <div className={cls.value}>{children}</div>
+        </div>
+    )
+}
+
+export { Div, Centered, Icon }

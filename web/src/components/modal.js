@@ -154,7 +154,7 @@ function ModalWindow({
                   }
                   target = target.parentNode
               }
-              close()
+              close("click-outside")
               e.stopPropagation()
               e.preventDefault()
           }
@@ -335,7 +335,7 @@ function ModalWindow({
                                 {closeable ? (
                                     <Button
                                         icon="close"
-                                        onClick={(e) => close()}
+                                        onClick={(e) => close("click-button")}
                                     />
                                 ) : (
                                     ""
@@ -394,9 +394,9 @@ function useModalWindow() {
     const openedRef = useRef(0)
     currRef.current = isOpen
 
-    const close = () => {
+    const close = (source) => {
         if (propsRef.current && propsRef.current.cleanUp) {
-            propsRef.current.cleanUp()
+            propsRef.current.cleanUp(source)
         }
         propsRef.current = null
         context.closeModal(currRef.current)

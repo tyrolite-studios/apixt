@@ -1,9 +1,12 @@
 import { useModalWindow } from "./modal"
 import { Button } from "./form"
-import { useState } from "react"
+import { useContext, useRef, useEffect, useState } from "react"
 import { getStringifiedJSON } from "../util"
 import { ClassNames } from "../core/helper"
 import { d } from "../core/helper"
+import { AppContext } from "./context"
+import { Centered } from "./layout"
+import { DualRing } from "./common"
 
 function ContentTree({ root, level = 1 }) {
     const { type, nodes, ...params } = root
@@ -43,9 +46,46 @@ function ContentTree({ root, level = 1 }) {
         case "dump-block":
             return <DumpBlock {...params} />
 
+        case "status":
+            return <StatusBlock {...params} />
+
+        case "loading":
+            return <LoadingBlock />
+
+        case "error":
+            return <ErrorBlock {...params} />
+
         default:
             throw Error(`Unknown node type "${type}" given!`)
     }
+}
+
+function ErrorBlock({ msg }) {
+    const aCtx = useContext(AppContext)
+    return (
+        <div className="bg-warning-bg text-warning-text py-1 px-2 border border-header-border">
+            <div className="stack-h gap-2 full-h">
+                <div># Error: {msg}</div>
+                <div className="auto" />
+                <Button name="Retry" onClick={aCtx.restartContentStream} />
+                <Button name="Clear" onClick={aCtx.clearContent} />
+            </div>
+        </div>
+    )
+}
+
+function StatusBlock() {
+    const aCtx = useContext(AppContext)
+    return (
+        <div className="bg-header-bg text-header-text py-1 px-2 border border-header-border">
+            <div className="stack-h gap-2 full-h">
+                <div># Aborted</div>
+                <div className="auto" />
+                <Button name="Retry" onClick={aCtx.restartContentStream} />
+                <Button name="Clear" onClick={aCtx.clearContent} />
+            </div>
+        </div>
+    )
 }
 
 function Section({ name, children, primary = false }) {
@@ -164,84 +204,49 @@ function CodeBlock({ name, html, hash }) {
     )
 }
 
-function LoadingSpinner() {
+function LoadingBlock({}) {
     return (
-        <div className="grid full">
-            <div className="place-self-center">Loading...</div>
+        <div className="p-2 border border-app-text text-center text-app-text/50">
+            <div className="stack-h text-center justify-center gap-2">
+                <DualRing size={20} className="after:border-1" />
+                <div>Loading...</div>
+            </div>
         </div>
     )
 }
 
-const cTree = {
-    type: "root",
-    nodes: [
-        { type: "dump-block", name: "Dump @ Line 33 in woewoeowe" },
-        {
-            type: "section",
-            name: "Tree results",
-            nodes: [
-                {
-                    type: "section-group",
-                    nodes: [
-                        {
-                            type: "section",
-                            name: "Deeper",
-                            nodes: [
-                                {
-                                    type: "section",
-                                    name: "More Deep",
-                                    nodes: [
-                                        {
-                                            type: "code-block",
-                                            name: "Http Request",
-                                            html: `<pre class="full colapsible">${getStringifiedJSON({ foo: "bar", "fooo-3": { number: 666 } }, 4)}</pre>`
-                                        }
-                                    ]
-                                }
-                            ]
-                        }
-                    ]
-                }
-            ]
-        }
-    ]
-}
-
 function Content() {
-    const LoadingWindow = useModalWindow()
+    const aContext = useContext(AppContext)
+    const [tree, setTree] = useState(null)
+    const contentRef = useRef(null)
 
-    const html = `<pre class="full colapsible">${getStringifiedJSON({ foo: "bar", "fooo-3": { number: 666 } }, 4)}</pre>`
+    useEffect(() => {
+        aContext.treeBuilder.setTreeSetter(setTree)
+    }, [])
+
+    /*
+    const len = tree ? tree.nodes.length : -1
+    useEffect(() => {
+        if (!isLoading || !contentRef.current) return
+
+        contentRef.current.scrollTop = contentRef.current.scrollHeight
+    }, [len])
+    */
+
+    if (!tree)
+        return (
+            <Centered className="text-app-text text-sm">
+                Start a new request...
+            </Centered>
+        )
 
     return (
-        <>
-            <div className="auto text-sm p-2 overflow-auto">
-                <ContentTree root={cTree} />
-
-                <div className="stack-v gap-3">
-                    <DumpBlock name="Vardump @/home/user/var/www/test-api/src/TestApi/Domain/Music/Provider/ReleaseKpisProvider.php:238:" />
-
-                    <Section name="Outer Frame" primary>
-                        <SectionGroup>
-                            <Section name="Inner Frame">
-                                <CodeBlock name="HTTP Request" html={html} />
-                            </Section>
-                        </SectionGroup>
-                        <DumpBlock name="Vardump @/home/user/var/www/test-api/src/TestApi/Domain/Music/Provider/ReleaseKpisProvider.php:238:" />
-                    </Section>
-                    <CodeBlock name="HTTP Request" html={html} />
-                </div>
-            </div>
-
-            <LoadingWindow.content
-                name="Loading..."
-                drag
-                transparent
-                width="250px"
-                height="120px"
-            >
-                <LoadingSpinner {...LoadingWindow.props} />
-            </LoadingWindow.content>
-        </>
+        <div
+            ref={contentRef}
+            className="stack-v gap-2 auto text-sm p-2 overflow-auto"
+        >
+            <ContentTree root={tree} />
+        </div>
     )
 }
 

@@ -2,7 +2,11 @@ import { useState, useContext } from "react"
 import { Button, ButtonGroup, Input, TextArea, Select, Checkbox } from "./form"
 import { AppContext } from "./context"
 import { useModalWindow } from "./modal"
+import { CMD } from "../core/tree"
+import { getStringifiedJSON } from "../util"
+import { useLoadingSpinner } from "./common"
 import { d } from "../core/helper"
+import { treeBuilder } from "../core/tree"
 
 function Test(props) {
     return (
@@ -90,6 +94,91 @@ function Header() {
     const [lastCol, setLastCol] = useState("255 255 255")
     const [lastBg, setLastBg] = useState("0 0 0")
 
+    const fakeLoading = () => {
+        aCtx.startContentStream({
+            response: [
+                { cmd: CMD.ADD_DUMP, name: "Booting message" },
+                { cmd: CMD.OPEN_SECTION, name: "Application" },
+                { cmd: CMD.ADD_DUMP, name: "My special dump" },
+                { cmd: CMD.OPEN_SECTION, name: "HttpRequest" },
+                { cmd: CMD.OPEN_SECTION_DETAILS },
+                {
+                    cmd: CMD.ADD_CODE_BLOCK,
+                    name: "Http Header",
+                    html: "<pre>Content-Type: application/json</pre>"
+                },
+                { cmd: CMD.CLOSE_SECTION_DETAILS },
+                {
+                    cmd: CMD.ADD_CODE_BLOCK,
+                    name: "Http Request",
+                    html: `<pre class="full colapsible">${getStringifiedJSON({ foo: "bar", "fooo-3": { number: 666, hack: true } }, 4)}</pre>`
+                },
+                { cmd: CMD.CLOSE_SECTION },
+                { cmd: CMD.CLOSE_SECTION },
+                { cmd: CMD.OPEN_SECTION, name: "Application" },
+                { cmd: CMD.ADD_DUMP, name: "My special dump" },
+                { cmd: CMD.OPEN_SECTION, name: "HttpRequest" },
+                { cmd: CMD.OPEN_SECTION_DETAILS },
+                {
+                    cmd: CMD.ADD_CODE_BLOCK,
+                    name: "Http Header",
+                    html: "<pre>Content-Type: application/json</pre>"
+                },
+                { cmd: CMD.CLOSE_SECTION_DETAILS },
+                {
+                    cmd: CMD.ADD_CODE_BLOCK,
+                    name: "Http Request",
+                    html: `<pre class="full colapsible">${getStringifiedJSON({ foo: "bar", "fooo-3": { number: 666, hack: true } }, 4)}</pre>`
+                },
+                { cmd: CMD.CLOSE_SECTION },
+                { cmd: CMD.CLOSE_SECTION },
+                { cmd: CMD.END }
+            ]
+        })
+    }
+
+    const errorLoading = () => {
+        aCtx.startContentStream({
+            response: [
+                { cmd: CMD.ADD_DUMP, name: "Booting message" },
+                { cmd: CMD.OPEN_SECTION, name: "Application" },
+                { cmd: CMD.ADD_DUMP, name: "My special dump" },
+                { cmd: CMD.OPEN_SECTION, name: "HttpRequest" },
+                {
+                    cmd: CMD.ADD_CODE_BLOCK,
+                    name: "Http Header",
+                    html: "<pre>Content-Type: application/json</pre>"
+                },
+                { cmd: CMD.CLOSE_SECTION_DETAILS },
+                {
+                    cmd: CMD.ADD_CODE_BLOCK,
+                    name: "Http Request",
+                    html: `<pre class="full colapsible">${getStringifiedJSON({ foo: "bar", "fooo-3": { number: 666, hack: true } }, 4)}</pre>`
+                },
+                { cmd: CMD.CLOSE_SECTION },
+                { cmd: CMD.CLOSE_SECTION },
+                { cmd: CMD.OPEN_SECTION, name: "Application" },
+                { cmd: CMD.ADD_DUMP, name: "My special dump" },
+                { cmd: CMD.OPEN_SECTION, name: "HttpRequest" },
+                { cmd: CMD.OPEN_SECTION_DETAILS },
+                {
+                    cmd: CMD.ADD_CODE_BLOCK,
+                    name: "Http Header",
+                    html: "<pre>Content-Type: application/json</pre>"
+                },
+                { cmd: CMD.CLOSE_SECTION_DETAILS },
+                {
+                    cmd: CMD.ADD_CODE_BLOCK,
+                    name: "Http Request",
+                    html: `<pre class="full colapsible">${getStringifiedJSON({ foo: "bar", "fooo-3": { number: 666, hack: true } }, 4)}</pre>`
+                },
+                { cmd: CMD.CLOSE_SECTION },
+                { cmd: CMD.CLOSE_SECTION },
+                { cmd: CMD.END }
+            ]
+        })
+    }
+
     const switchTheme = () => {
         const style = document.documentElement.style
         const oldBg = style.getPropertyValue("--app-bg")
@@ -103,6 +192,9 @@ function Header() {
         <>
             <div className="stack-h text-sm px-2 py-1 space-x-2 w-full text-header bg-header-bg border border-header-border/50 border-x-0 border-t-0">
                 <ButtonGroup>
+                    <Button name="Load..." onClick={() => fakeLoading()} />
+                    <Button name="Error..." onClick={() => errorLoading()} />
+
                     <Button
                         name="Builder..."
                         onClick={() => TestWindow.open()}
