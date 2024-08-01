@@ -3,10 +3,9 @@ import { Button } from "./form"
 import { AppContext } from "./context"
 import { useModalWindow } from "./modal"
 import { d } from "../core/helper"
-import { AutoCompleteInput, headerContentTypes } from "../util"
 
 function Test(props) {
-    return <AutoCompleteInput recommendations={headerContentTypes} />
+    return <div>Request Builder</div>
 }
 function History({ openModal, close }) {
     return (
