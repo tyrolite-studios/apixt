@@ -83,4 +83,49 @@ function useLoadingSpinner() {
     }
 }
 
-export { useComponentUpdate, useMounted, useLoadingSpinner, DualRing }
+function HighlightMatches({ text, search, className }) {
+    const parts = splitByMatch(text, search)
+    return (
+        <span>
+            {parts.map((part, index) =>
+                part.toLowerCase() === search.toLowerCase() ? (
+                    <span key={index} className={className}>
+                        {part}
+                    </span>
+                ) : (
+                    part
+                )
+            )}
+        </span>
+    )
+}
+
+const splitByMatch = (string, search) => {
+    if (search === "") return [string]
+    const result = []
+    let currentIndex = 0
+    let matchIndex
+
+    const lcString = string.toLowerCase()
+    const lcSearch = search.toLowerCase()
+
+    while ((matchIndex = lcString.indexOf(lcSearch, currentIndex)) !== -1) {
+        result.push(
+            string.slice(currentIndex, matchIndex),
+            string.slice(matchIndex, matchIndex + search.length)
+        )
+        currentIndex = matchIndex + search.length
+    }
+
+    result.push(string.slice(currentIndex))
+    return result
+}
+
+export {
+    useComponentUpdate,
+    useMounted,
+    HighlightMatches,
+    splitByMatch,
+    useLoadingSpinner,
+    DualRing
+}

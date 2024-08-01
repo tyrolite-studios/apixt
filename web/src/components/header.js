@@ -9,50 +9,7 @@ import { d } from "../core/helper"
 import { treeBuilder } from "../core/tree"
 
 function Test(props) {
-    return (
-        <div className="p-8 overflow-auto">
-            Lorem ipsos
-            <br />
-            Lorem ipsos
-            <br />
-            Lorem ipsos
-            <br />
-            Lorem ipsos
-            <br />
-            Lorem ipsos
-            <br />
-            Lorem ipsos
-            <br />
-            Lorem ipsos
-            <br />
-            Lorem ipsos
-            <br />
-            Lorem ipsos
-            <br />
-            Lorem ipsos
-            <br />
-            Lorem ipsos
-            <br />
-            Lorem ipsos
-            <br />
-            Lorem ipsos
-            <br />
-            Lorem ipsos
-            <br />
-            Lorem ipsos
-            <br />
-            Lorem ipsos
-            <br />
-            Lorem ipsos
-            <br />
-            Lorem ipsos
-            <br />
-            Lorem ipsos
-            <br />
-            Lorem ipsos
-            <br />
-        </div>
-    )
+    return <div>Request Builder</div>
 }
 function History({ openModal, close }) {
     const myOptions = { 666: "Evil", 42: "The answer" }
