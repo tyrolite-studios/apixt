@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect, useRef } from "react"
 
 const headerContentTypes = [
     "application/json",
@@ -48,17 +48,18 @@ const splitByMatch = (string, search) => {
     let currentIndex = 0
     let matchIndex
 
-    while (
-        (matchIndex = string
-            .toLowerCase()
-            .indexOf(search.toLowerCase(), currentIndex)) !== -1
-    ) {
-        result.push(string.slice(currentIndex, matchIndex)) // Prefix
-        result.push(string.slice(matchIndex, matchIndex + search.length)) // Match
+    const lcString = string.toLowerCase()
+    const lcSearch = search.toLowerCase()
+
+    while ((matchIndex = lcString.indexOf(lcSearch, currentIndex)) !== -1) {
+        result.push(
+            string.slice(currentIndex, matchIndex),
+            string.slice(matchIndex, matchIndex + search.length)
+        )
         currentIndex = matchIndex + search.length
     }
 
-    result.push(string.slice(currentIndex)) // Remaining string after the last match
+    result.push(string.slice(currentIndex))
     return result
 }
 
@@ -90,18 +91,15 @@ function AutoCompleteInput({ recommendations }) {
     const [listActive, setListActive] = useState(false)
     const [optionPointerIndex, setOptionPointerIndex] = useState(-1)
     const [scrollWidth, setScrollWidth] = useState(null)
+    const optionsRef = useRef(null)
 
     const removePrefix = (value) => {
-        if (value) return value.replace(/p_|i_/g, "")
-        else return value
+        return value ? value.replace(/p_|i_/g, "") : value
     }
 
+    const value = removePrefix(inputValue)
+
     const filteredRecommendations = useMemo(() => {
-        if (inputValue === undefined) return
-        if (inputValue !== "" && !listActive) setListActive(true)
-
-        const value = removePrefix(inputValue)
-
         const foundByPrefix = recommendations.filter((rec) =>
             rec.toLowerCase().startsWith(value.toLowerCase())
         )
@@ -114,16 +112,23 @@ function AutoCompleteInput({ recommendations }) {
             ...foundByPrefix.map((rec) => "p_" + rec),
             ...foundByIncludes.map((rec) => "i_" + rec)
         ]
-
-        let recommendation = ""
-        if (filtered.length > 0 && !filtered[0].startsWith("i_")) {
-            recommendation =
-                value + removePrefix(filtered[0]).slice(value.length)
-        }
-        if (inputValue !== "") setFirstRecommendation(recommendation)
-        setOptionPointerIndex(-1)
-
         return filtered
+    }, [inputValue])
+
+    useEffect(() => {
+        if (inputValue !== "" && !listActive) setListActive(true)
+        let recommendation = ""
+        if (
+            filteredRecommendations.length > 0 &&
+            !filteredRecommendations[0].startsWith("i_")
+        ) {
+            recommendation =
+                value +
+                removePrefix(filteredRecommendations[0]).slice(value.length)
+        }
+        if (inputValue !== "" || (inputValue === "" && listActive))
+            setFirstRecommendation(recommendation)
+        setOptionPointerIndex(-1)
     }, [inputValue])
 
     return (
@@ -176,68 +181,58 @@ function AutoCompleteInput({ recommendations }) {
                             setListActive(false)
                         }
                     } else if (e.key === "ArrowDown") {
-                        if (filteredRecommendations.length > 0) {
-                            const newIndex = optionPointerIndex + 1
-                            if (filteredRecommendations.length > newIndex) {
-                                const el = document.getElementById(
-                                    filteredRecommendations[newIndex]
-                                )
-                                el.scrollIntoView({
-                                    block: "nearest",
-                                    inline: "nearest"
-                                })
-                                setOptionPointerIndex(newIndex)
-                                if (
-                                    filteredRecommendations[
-                                        newIndex
-                                    ].startsWith("p_")
-                                )
-                                    setFirstRecommendation(
-                                        inputValue +
-                                            removePrefix(
-                                                filteredRecommendations[
-                                                    newIndex
-                                                ]
-                                            ).slice(inputValue.length)
-                                    )
-                                else setFirstRecommendation("")
-                            }
-                        }
+                        if (filteredRecommendations.length === 0) return
+                        const newIndex = optionPointerIndex + 1
+                        if (filteredRecommendations.length <= newIndex) return
+
+                        const el = optionsRef.current.children[newIndex]
+                        if (el)
+                            el.scrollIntoView({
+                                block: "nearest",
+                                inline: "nearest"
+                            })
+                        setOptionPointerIndex(newIndex)
+
+                        const recommendationValue = filteredRecommendations[
+                            newIndex
+                        ].startsWith("p_")
+                            ? inputValue +
+                              removePrefix(
+                                  filteredRecommendations[newIndex]
+                              ).slice(inputValue.length)
+                            : ""
+
+                        setFirstRecommendation(recommendationValue)
                     } else if (e.key === "ArrowUp") {
                         e.preventDefault()
-                        if (filteredRecommendations.length > 0) {
-                            const newIndex = optionPointerIndex - 1
-                            if (newIndex >= -1) {
-                                if (newIndex !== -1) {
-                                    const el = document.getElementById(
-                                        filteredRecommendations[newIndex]
-                                    )
-                                    el.scrollIntoView({
-                                        block: "nearest",
-                                        inline: "nearest"
-                                    })
-                                    if (
-                                        filteredRecommendations[
-                                            newIndex
-                                        ].startsWith("p_")
-                                    )
-                                        setFirstRecommendation(
-                                            inputValue +
-                                                removePrefix(
-                                                    filteredRecommendations[
-                                                        newIndex
-                                                    ]
-                                                ).slice(inputValue.length)
-                                        )
-                                    else setFirstRecommendation("")
-                                }
-                                setOptionPointerIndex(newIndex)
-                            }
-                        }
+                        if (filteredRecommendations.length === 0) return
+                        const newIndex = optionPointerIndex - 1
+                        if (newIndex < -1) return
+                        setOptionPointerIndex(newIndex)
+                        if (newIndex === -1) return
+
+                        const el = optionsRef.current.children[newIndex]
+                        if (el)
+                            el.scrollIntoView({
+                                block: "nearest",
+                                inline: "nearest"
+                            })
+
+                        const recommendationValue = filteredRecommendations[
+                            newIndex
+                        ].startsWith("p_")
+                            ? inputValue +
+                              removePrefix(
+                                  filteredRecommendations[newIndex]
+                              ).slice(inputValue.length)
+                            : ""
+
+                        setFirstRecommendation(recommendationValue)
                     }
                 }}
                 onBlur={() => {
                     setFirstRecommendation("")
+                    setOptionPointerIndex(-1)
                     setListActive(false)
                 }}
             />
@@ -251,11 +246,13 @@ function AutoCompleteInput({ recommendations }) {
                     filteredRecommendations.length === 1 &&
                     inputValue === firstRecommendation
                 ) && (
-                    <div className="absolute bg-gray-700 border border-gray-500 rounded mt-8 z-10 max-h-48 overflow-auto">
+                    <div
+                        ref={optionsRef}
+                        className="absolute bg-gray-700 border border-gray-500 rounded mt-8 z-10 max-h-48 overflow-auto"
+                    >
                         {filteredRecommendations.map((type, index) => (
                             <div
                                 key={index}
-                                id={type}
                                 className={`p-1 cursor-pointer hover:bg-gray-600 text-left ${filteredRecommendations[optionPointerIndex] === type ? "text-red-200" : ""} ${type.startsWith("p_") ? "bg-green-200" : "bg-red-200"}`}
                                 onMouseDown={(e) => e.preventDefault()}
                                 onClick={(e) => {
