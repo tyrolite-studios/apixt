@@ -8,50 +8,7 @@ import { RouteSelector } from "./route"
 import { d } from "../core/helper"
 
 function Test(props) {
-    return (
-        <div className="p-8 overflow-auto">
-            Lorem ipsos
-            <br />
-            Lorem ipsos
-            <br />
-            Lorem ipsos
-            <br />
-            Lorem ipsos
-            <br />
-            Lorem ipsos
-            <br />
-            Lorem ipsos
-            <br />
-            Lorem ipsos
-            <br />
-            Lorem ipsos
-            <br />
-            Lorem ipsos
-            <br />
-            Lorem ipsos
-            <br />
-            Lorem ipsos
-            <br />
-            Lorem ipsos
-            <br />
-            Lorem ipsos
-            <br />
-            Lorem ipsos
-            <br />
-            Lorem ipsos
-            <br />
-            Lorem ipsos
-            <br />
-            Lorem ipsos
-            <br />
-            Lorem ipsos
-            <br />
-            Lorem ipsos
-            <br />
-            Lorem ipsos
-            <br />
-        </div>
-    )
+    return <div>Request Builder</div>
 }
 function History({ openModal, close }) {
     const myOptions = { 666: "Evil", 42: "The answer" }
