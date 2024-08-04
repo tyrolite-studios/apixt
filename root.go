@@ -29,7 +29,7 @@ func (n *rootNode) add(content string) {
 
 func (n *rootNode) end() string {
 	n.closed = true
-	return n.html
+	return n.html + `{"cmd": 0}`
 }
 
 func NewRootNode() *rootNode {

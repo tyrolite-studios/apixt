@@ -1,9 +1,5 @@
 package apixt
 
-import (
-	"html"
-)
-
 // --- Dump Block ----
 
 type DumpBlockNode struct {
@@ -39,7 +35,7 @@ func (n *DumpBlockNode) isClosed() bool {
 
 func (n *DumpBlockNode) end() string {
 	n.closed = true
-	return n.html + "</div>"
+	return n.html + `}` + "\n"
 }
 
 func (n *DumpBlockNode) panicIf(haltHash string) bool {
@@ -47,22 +43,22 @@ func (n *DumpBlockNode) panicIf(haltHash string) bool {
 }
 
 func getFooterHtml(footer []pair, isError bool) string {
+
 	footerHtml := ""
+	if isError {
+		footerHtml += `, "isError": true`
+	}
 	if len(footer) > 0 {
-		footerHtml += `<div class="footer`
-		if isError {
-			footerHtml += ` error`
-		}
-		footerHtml += `">`
+		footerHtml += `, "footer": {`
 		i := 1
 		for _, value := range footer {
-			footerHtml += ` <span class="footerkey">` + value[0] + `:</span> <span class="footervalue">` + value[1] + `</span>`
-			if i < len(footer) {
-				footerHtml += ` <span class="footerseparator">|</span>`
+			if i > 1 {
+				footerHtml += ", "
 			}
+			footerHtml += SplitString(value[0]) + `: ` + SplitString(value[1])
 			i++
 		}
-		footerHtml += `</div>`
+		footerHtml += `}`
 	}
 	return footerHtml
 }
@@ -81,20 +77,7 @@ func NewDumpBlockNode(title, inner string, options blockOptions) *DumpBlockNode 
 	} else {
 		hash = generateHash(inner)
 	}
-	content :=
-		`<div class="dumpbox">
-		<div class="header">
-			<div class="title">` + html.EscapeString(title) + `</div>
-			<div><button onclick="reload('` + hash + `')"><nobr> ◼ STOP HERE</nobr></button> </div>
-		</div>
-
-		<div class="center">
-			<div class="collapser" onclick="toggleCodeBlock(this)">
-				<div><span></span></div>
-			</div>
-			<div class="dumpcode">` + inner + `</div>
-		</div>`
-
+	content := `{"cmd": 6, "name": "` + title + `", "html": ` + SplitString(inner) + `, "hash": "` + hash + `" `
 	n := DumpBlockNode{content, hash, options.parent, false}
 	return &n
 }

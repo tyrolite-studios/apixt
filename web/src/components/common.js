@@ -40,8 +40,6 @@ function DualRing({ size = 48, className }) {
 }
 
 function LoadingSpinner({ abort, close }) {
-    // loading finished => close ohne abort
-    // abort-click => abort und danach close
     return (
         <div className="stack-v gaps-1 p-4 text-center">
             <div className="px-4 py-2">Loading...</div>

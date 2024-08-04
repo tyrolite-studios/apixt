@@ -74,17 +74,11 @@
     height: 100%
 }
 
-html {
-    width: 100%;
-    height: 100%
-}
-
-body {
+html, body {
     width: 100%;
     height: 100%;
-    padding: 0px;
-    margin: 0px;
-    background-color: #9db4cc;
+    padding: 0;
+    margin: 0;
 }
 
 #app {

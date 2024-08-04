@@ -4,9 +4,8 @@ import { AppContext } from "./context"
 import { useModalWindow } from "./modal"
 import { CMD } from "../core/tree"
 import { getStringifiedJSON } from "../util"
-import { useLoadingSpinner } from "./common"
+import { RouteSelector } from "./route"
 import { d } from "../core/helper"
-import { treeBuilder } from "../core/tree"
 
 function Test(props) {
     return (
@@ -90,6 +89,7 @@ function Header() {
 
     const TestWindow = useModalWindow()
     const HistoryWindow = useModalWindow()
+    const RoutesWindow = useModalWindow()
 
     const [lastCol, setLastCol] = useState("255 255 255")
     const [lastBg, setLastBg] = useState("0 0 0")
@@ -97,9 +97,12 @@ function Header() {
     const fakeLoading = () => {
         aCtx.startContentStream({
             response: [
-                { cmd: CMD.ADD_DUMP, name: "Booting message" },
                 { cmd: CMD.OPEN_SECTION, name: "Application" },
-                { cmd: CMD.ADD_DUMP, name: "My special dump" },
+                {
+                    cmd: CMD.ADD_DUMP,
+                    name: "Test special dump",
+                    vars: [{ name: "int", value: "666" }]
+                },
                 { cmd: CMD.OPEN_SECTION, name: "HttpRequest" },
                 { cmd: CMD.OPEN_SECTION_DETAILS },
                 {
@@ -111,12 +114,32 @@ function Header() {
                 {
                     cmd: CMD.ADD_CODE_BLOCK,
                     name: "Http Request",
-                    html: `<pre class="full colapsible">${getStringifiedJSON({ foo: "bar", "fooo-3": { number: 666, hack: true } }, 4)}</pre>`
+                    html: `<pre class="full colapsible">${getStringifiedJSON({ foo: "bar", "fooo-3": { number: 666, hack: true } }, 4)}</pre>`,
+                    footer: {
+                        "Content-Type": "application/json",
+                        "Content-Length": "166"
+                    }
                 },
                 { cmd: CMD.CLOSE_SECTION },
                 { cmd: CMD.CLOSE_SECTION },
                 { cmd: CMD.OPEN_SECTION, name: "Application" },
-                { cmd: CMD.ADD_DUMP, name: "My special dump" },
+                {
+                    cmd: CMD.ADD_DUMP,
+                    name: "Test even more special dump",
+                    vars: [
+                        { name: "string", value: '"hey man!"' },
+                        {
+                            name: "object",
+                            value: {
+                                boom: { name: "bool", value: "true" },
+                                "hey ho": {
+                                    name: "array",
+                                    value: [{ name: "int", value: "208" }]
+                                }
+                            }
+                        }
+                    ]
+                },
                 { cmd: CMD.OPEN_SECTION, name: "HttpRequest" },
                 { cmd: CMD.OPEN_SECTION_DETAILS },
                 {
@@ -140,9 +163,17 @@ function Header() {
     const errorLoading = () => {
         aCtx.startContentStream({
             response: [
-                { cmd: CMD.ADD_DUMP, name: "Booting message" },
+                {
+                    cmd: CMD.ADD_DUMP,
+                    name: "Booting error...",
+                    vars: [{ name: "int", value: "666" }]
+                },
                 { cmd: CMD.OPEN_SECTION, name: "Application" },
-                { cmd: CMD.ADD_DUMP, name: "My special dump" },
+                {
+                    cmd: CMD.ADD_DUMP,
+                    name: "Test special dump",
+                    vars: [{ name: "int", value: "666" }]
+                },
                 { cmd: CMD.OPEN_SECTION, name: "HttpRequest" },
                 {
                     cmd: CMD.ADD_CODE_BLOCK,
@@ -153,12 +184,17 @@ function Header() {
                 {
                     cmd: CMD.ADD_CODE_BLOCK,
                     name: "Http Request",
-                    html: `<pre class="full colapsible">${getStringifiedJSON({ foo: "bar", "fooo-3": { number: 666, hack: true } }, 4)}</pre>`
+                    html: `<pre class="full colapsible">${getStringifiedJSON({ foo: "bar", "fooo-3": { number: 666, hack: true } }, 4)}</pre>`,
+                    footer: { "Content-Type": "application/json" }
                 },
                 { cmd: CMD.CLOSE_SECTION },
                 { cmd: CMD.CLOSE_SECTION },
                 { cmd: CMD.OPEN_SECTION, name: "Application" },
-                { cmd: CMD.ADD_DUMP, name: "My special dump" },
+                {
+                    cmd: CMD.ADD_DUMP,
+                    name: "Test special dump",
+                    vars: [{ name: "int", value: "666" }]
+                },
                 { cmd: CMD.OPEN_SECTION, name: "HttpRequest" },
                 { cmd: CMD.OPEN_SECTION_DETAILS },
                 {
@@ -194,6 +230,10 @@ function Header() {
                 <ButtonGroup>
                     <Button name="Load..." onClick={() => fakeLoading()} />
                     <Button name="Error..." onClick={() => errorLoading()} />
+                    <Button
+                        name="Routes..."
+                        onClick={() => RoutesWindow.open()}
+                    />
 
                     <Button
                         name="Builder..."
@@ -215,6 +255,10 @@ function Header() {
                     <Button icon="logout" />
                 </ButtonGroup>
             </div>
+
+            <RoutesWindow.content name="Select Route">
+                <RouteSelector {...RoutesWindow.props} />
+            </RoutesWindow.content>
 
             <TestWindow.content name="Test modal" width="500px" height="400px">
                 <Test {...TestWindow.props} />

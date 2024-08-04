@@ -12,9 +12,9 @@ function Footer() {
     )
 }
 
-function MainLayout(props) {
+function MainLayout({ config }) {
     return (
-        <AppCtx>
+        <AppCtx config={config}>
             <div className="flex flex-col w-full h-full bg-app-bg text-app-text">
                 <Header />
                 <Content />
@@ -25,10 +25,16 @@ function MainLayout(props) {
 }
 
 function ApiExtenderApp({ config }) {
-    console.log("Starting API extender with config", config)
+    const defaultedConfig = {
+        baseUrl: "http://localhost:8082",
+        routes: ["/", "/test-route"],
+        ...config
+    }
+
+    console.log("Starting API extender with config", defaultedConfig)
     return (
         <>
-            <MainLayout config={config} />
+            <MainLayout config={defaultedConfig} />
             <div id="modals" />
         </>
     )

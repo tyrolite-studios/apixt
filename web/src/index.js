@@ -1,4 +1,5 @@
 import "./index.css"
+import { runApiExtender } from "./boot"
 
 function toggleCodeBlock(elem) {
     while (!elem.classList.contains("dumpbox")) {

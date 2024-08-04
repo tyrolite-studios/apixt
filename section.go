@@ -1,9 +1,5 @@
 package apixt
 
-import (
-	"html"
-)
-
 // --- Section Node -----
 
 type SectionNode struct {
@@ -34,7 +30,7 @@ func (n *SectionNode) add(content string) {
 
 func (n *SectionNode) end() string {
 	n.closed = true
-	return n.html + "</div></div>"
+	return n.html + `{"cmd": 2}` + "\n"
 }
 
 func (n *SectionNode) getParent() int {
@@ -42,15 +38,6 @@ func (n *SectionNode) getParent() int {
 }
 
 func NewSectionNode(title string, parent int) *SectionNode {
-	content :=
-		`<div class="dumpsection level_odd extended">
-			<div class="sectionheader" onclick="toggleSessionBlock(this)">
-				<div class="toggler">
-					<div><span></span></div>
-				</div>
-				<div class="sectiontitle"><span class="section-name">` + html.EscapeString(title) + `</span></div>
-    		</div>
-    
-			<div class="sectioncontent">`
+	content := `{"cmd": 1, "name": "` + title + `"}` + "\n"
 	return &SectionNode{content, parent, false}
 }

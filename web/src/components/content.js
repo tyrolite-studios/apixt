@@ -1,8 +1,8 @@
 import { useModalWindow } from "./modal"
 import { Button } from "./form"
-import { useContext, useRef, useEffect, useState } from "react"
+import { useContext, useRef, useEffect, useState, Fragment } from "react"
 import { getStringifiedJSON } from "../util"
-import { ClassNames } from "../core/helper"
+import { ClassNames, isObject, isArray } from "../core/helper"
 import { d } from "../core/helper"
 import { AppContext } from "./context"
 import { Centered } from "./layout"
@@ -46,6 +46,9 @@ function ContentTree({ root, level = 1 }) {
         case "dump-block":
             return <DumpBlock {...params} />
 
+        case "halt":
+            return <HaltBlock {...params} />
+
         case "status":
             return <StatusBlock {...params} />
 
@@ -82,6 +85,29 @@ function StatusBlock() {
                 <div># Aborted</div>
                 <div className="auto" />
                 <Button name="Retry" onClick={aCtx.restartContentStream} />
+                <Button name="Clear" onClick={aCtx.clearContent} />
+            </div>
+        </div>
+    )
+}
+
+function HaltBlock({ next }) {
+    const aCtx = useContext(AppContext)
+    return (
+        <div className="bg-block-footer-bg text-block-footer-text py-1 px-2 border border-header-border">
+            <div className="stack-h gap-2 full-h">
+                <div># Haltet</div>
+                <div className="auto" />
+                <Button
+                    name="Continue"
+                    onClick={() => aCtx.haltContentStream("")}
+                />
+                {next && (
+                    <Button
+                        name="Stop at next"
+                        onClick={() => aCtx.haltContentStream(next)}
+                    />
+                )}
                 <Button name="Clear" onClick={aCtx.clearContent} />
             </div>
         </div>
@@ -135,47 +161,99 @@ function SectionGroup({ children }) {
     )
 }
 
+function KeyValueBlock({ name, iterator }) {
+    return (
+        <div className="stack-v gap-1 border border-header-bg/50 p-1 grid-cols-[min-content_min-content]">
+            <div className="px-2 py-1 bg-header-bg/50 text-app-bg text-xs">
+                {name}
+            </div>
+            <div className="grid grid-cols-2 gap-1 grid-cols-[min-content_min-content]">
+                {iterator.map(([idx, props]) => (
+                    <Fragment key={idx}>
+                        <div className="bg-header-bg/50 text-app-bg px-2 py-1 text-xs whitespace-nowrap">
+                            {idx}
+                        </div>
+                        <div className="">{DumpValue(props)}</div>
+                    </Fragment>
+                ))}
+            </div>
+        </div>
+    )
+}
+
+function DumpValue({ name, value }) {
+    if (isArray(value)) {
+        return KeyValueBlock({
+            name,
+            iterator: value.map((val, idx) => [idx, val])
+        })
+    }
+    if (isObject(value)) {
+        return KeyValueBlock({ name, iterator: Object.entries(value) })
+    }
+    return (
+        <div className="stack-h gap-1">
+            <div className="text-xs text-header-bg px-2 text-right">{name}</div>
+            <pre className="dumparea px-2 text-xs text-block-header-text">
+                {value}
+            </pre>
+        </div>
+    )
+}
+
 function DumpBlock({ name, vars }) {
     return (
         <>
-            <div className="stack-v gap-1">
+            <div className="stack-v gap-1 overflow-auto">
                 <pre className="bg-header-bg/70 px-2 py-0 text-app-bg">
                     {name}
                 </pre>
-                <div className="grid overflow-auto grid-cols-[min-content_min-content] gap-y-1">
-                    <div className="text-xs text-header-bg px-2 text-right">
-                        string
-                    </div>
-                    <pre className="dumparea px-2 text-xs text-block-header-text">
-                        "Here is my dump"
-                    </pre>
-                    <div className="text-xs text-header-bg px-2 text-right">
-                        int
-                    </div>
-                    <pre className="dumparea px-2 text-xs text-block-header-text">
-                        666
-                    </pre>
+
+                <div className="stack-v overflow-auto grid-cols-[min-content_min-content] gap-y-1">
+                    {vars.map((props, i) => (
+                        <DumpValue key={i} {...props} />
+                    ))}
                 </div>
             </div>
         </>
     )
 }
 
-function CodeBlock({ name, html, hash }) {
+function CodeBlock({ name, html, hash, footer, isError }) {
+    const aCtx = useContext(AppContext)
     const [colapsed, setColapsed] = useState(false)
-    const reload = (target) => console.log("reload", target)
     const toggle = () => {
         setColapsed(!colapsed)
     }
     const contentCls = new ClassNames("auto p-2")
     contentCls.addIf(colapsed, "colapsed")
+    const footerElems = []
+    if (footer) {
+        for (const [name, value] of Object.entries(footer)) {
+            footerElems.push(
+                <div key={name} className="px-2">
+                    <span className="text-block-footer-text/50">{name}:</span>{" "}
+                    {value}
+                </div>
+            )
+        }
+    }
+    const footerCls = new ClassNames(
+        "stack-h divide-x-2 divide-block-footer-text/10 text-block-footer-text py-1 text-xs border border-t border-b-0 border-x-0 border-block-border/20"
+    )
+    footerCls.addIf(isError, "bg-warning-bg", "bg-block-footer-bg")
     return (
         <div className="border border-block-border text-block-header-text bg-block-header-bg">
             <div className="stack-h px-2 py-1">
                 <div className="title auto text-left">{name}</div>
-                <div className="stack-h">
-                    <Button name=" ◼ STOP HERE" onclick={() => reload(hash)} />
-                </div>
+                {hash && (
+                    <div className="stack-h">
+                        <Button
+                            name=" ◼ STOP HERE"
+                            onClick={() => aCtx.haltContentStream(hash)}
+                        />
+                    </div>
+                )}
             </div>
 
             <div className="stack-h bg-block-bg text-block-text">
@@ -196,10 +274,7 @@ function CodeBlock({ name, html, hash }) {
                 />
             </div>
 
-            <div className="text-block-footer-text bg-block-footer-bg px-2 py-1 text-xs border border-t border-b-0 border-x-0 border-block-border/20">
-                <span className="text-block-footer-text/50">Content-Type:</span>{" "}
-                text/json
-            </div>
+            {footer && <div className={footerCls.value}>{footerElems}</div>}
         </div>
     )
 }

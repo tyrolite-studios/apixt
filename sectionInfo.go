@@ -30,7 +30,7 @@ func (n *SectionInfoNode) add(content string) {
 
 func (n *SectionInfoNode) end() string {
 	n.closed = true
-	return n.html + "</div>"
+	return n.html + `{"cmd": 4}` + "\n"
 }
 
 func (n *SectionInfoNode) getParent() int {
@@ -38,6 +38,6 @@ func (n *SectionInfoNode) getParent() int {
 }
 
 func NewSectionInfoNode(parent int) *SectionInfoNode {
-	content := `<div class="sectioninfo">`
+	content := `{"cmd": 3}` + "\n"
 	return &SectionInfoNode{content, parent, false}
 }

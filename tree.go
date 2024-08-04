@@ -96,14 +96,7 @@ func (dt *dmpTree) closeAll() {
 		_ = dt.closeNode(i, false, nil)
 	}
 	nextHash := STOP_NEXT_PREFIX + dt.stoppedAtHash
-	dt.html +=
-		`<div class="navbox haltbox">
-			<div class="info">Dump haltet at "` + dt.stoppedAtHash + `"</div>
-			<div class="">
-				<button onclick="reload('` + nextHash + `')">STOP AT NEXT</button>
-				<button onclick="reload('')">CONTINUE</button>
-			</div>
-		</div>`
+	dt.html += "\n" + `{"cmd": 7, "status": "Halted at ` + dt.stoppedAtHash + `", "next": "` + nextHash + `"}`
 	dt.closed = true
 }
 
@@ -278,7 +271,7 @@ func (dt *dmpTree) Get(url string, parent int) (*http.Response, error) {
 }
 
 func NewDumpTree(r *http.Request) *dmpTree {
-	queryHash := r.URL.Query().Get("dump")
+	queryHash := r.Header.Get("Tls-Apixt-Halt")
 	stopNext := uint8(0)
 	if queryHash != "" && queryHash[0:1] == STOP_NEXT_PREFIX {
 		queryHash = queryHash[1:]

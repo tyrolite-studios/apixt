@@ -3,6 +3,7 @@ package apixt
 import (
 	"crypto/md5"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"runtime"
 )
@@ -62,4 +63,12 @@ func generateHash(text string) string {
 	hashString := hex.EncodeToString(hashBytes)
 
 	return hashString
+}
+
+func SplitString(input string) string {
+	jsonStr, err := json.Marshal(input)
+	if err != nil {
+		panic("JSON problem")
+	}
+	return string(jsonStr)
 }

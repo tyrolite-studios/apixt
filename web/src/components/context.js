@@ -41,7 +41,7 @@ function SpinnerDiv() {
     return <>{LoadingSpinner.Modal}</>
 }
 
-function AppCtx({ children }) {
+function AppCtx({ config, children }) {
     const [storage] = useState(() => {
         return BrowserStorage(localStorage, "tyrolite.apixt.")
     })
@@ -88,6 +88,7 @@ function AppCtx({ children }) {
 
         registryRef.current = {
             register,
+            config,
             treeBuilder,
             version: "0.1.0",
             mode: null,
@@ -98,11 +99,11 @@ function AppCtx({ children }) {
             spinner: null,
             storage,
             startContentStream: (request) => {
-                const { treeBuilder, spinner } = registry()
+                const { treeBuilder, spinner, config } = registry()
                 treeBuilder.reset()
 
                 register("lastRequest", request)
-                const httpStream = getHttpStreamPromise(request)
+                const httpStream = getHttpStreamPromise(config, request)
                 register("streamAbort", httpStream.abort)
                 const promise = treeBuilder
                     .processStream(httpStream)
@@ -113,15 +114,26 @@ function AppCtx({ children }) {
                     treeBuilder.abort()
                 })
             },
-            restartContentStream: () => {
+            restartContentStream: (overwrites = {}) => {
                 const { lastRequest, startContentStream } = registry()
                 if (!lastRequest) return
 
-                startContentStream(lastRequest)
+                const { headers, ...options } = lastRequest
+                let addHeaders = {}
+                if (headers && overwrites.headers) {
+                    addHeaders = {
+                        headers: { ...headers, ...overwrites.headers }
+                    }
+                }
+                startContentStream({ ...options, ...overwrites, ...addHeaders })
             },
             abortContentStream: () => {
                 const { streamAbort } = registry()
                 if (streamAbort) streamAbort()
+            },
+            haltContentStream: (hash) => {
+                const { restartContentStream } = registry()
+                restartContentStream({ headers: { "Tls-Apixt-Halt": hash } })
             },
             clearContent: () => {
                 const { treeBuilder } = registry()

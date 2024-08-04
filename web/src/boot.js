@@ -1,3 +1,4 @@
+/* webpackIgnore: true */
 import { createRoot } from "react-dom/client"
 import { ApiExtenderApp } from "./components/app"
 
@@ -12,5 +13,7 @@ const runApiExtender = (config) => {
         { once: true }
     )
 }
+
+window.runApiExtender = runApiExtender
 
 export { runApiExtender }

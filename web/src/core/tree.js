@@ -7,6 +7,7 @@ const CMD = {
     CLOSE_SECTION_DETAILS: 4,
     ADD_DUMP: 5,
     ADD_CODE_BLOCK: 6,
+    HALT: 7,
     END: 0
 }
 
@@ -150,6 +151,11 @@ class TreeBuilder {
                 break
             }
 
+            case CMD.HALT: {
+                this.addNode({ type: "halt", ...props })
+                break
+            }
+
             case CMD.END: {
                 this.ended = true
                 break
@@ -169,6 +175,11 @@ class TreeBuilder {
 
     updateRenderer() {
         if (!this.treeSetter) return
+
+        if (this.state === STATE.WAITING) {
+            this.treeSetter(null)
+            return
+        }
 
         const nodes = [...this.nodes]
         if (this.state === STATE.ERRORED) {
