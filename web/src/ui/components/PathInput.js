@@ -20,7 +20,10 @@ const replaceElementInCollection = (newElement, oldElement, collection) => {
     return collection
 }
 
-const createSpan = (content = "", cls = "text-white text-sm") => {
+const createSpan = (
+    content = "",
+    cls = "text-white text-sm hover:opacity-60 cursor-pointer"
+) => {
     const span = document.createElement("span")
     span.setAttribute("class", cls)
     span.textContent = content
@@ -143,6 +146,7 @@ const PathInput = ({ sendPathToParent }) => {
                         children[index + 1]
                     )
                 }
+                input.selectionEnd = 0
                 input.focus()
                 e.preventDefault()
             } else if (e.key === "Backspace") {
