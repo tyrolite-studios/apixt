@@ -110,10 +110,13 @@ const headerContentTypes = [
     "video/ogg"
 ]
 
+const emptyValue = "<Enter Value>"
+
 export {
     example,
     getStringifiedJSON,
     isValidJson,
     requestHeaderOptions,
-    headerContentTypes
+    headerContentTypes,
+    emptyValue
 }

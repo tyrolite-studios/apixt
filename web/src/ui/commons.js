@@ -1,5 +1,5 @@
-import { useState } from "react"
-import { isValidJson } from "../util"
+import { useState, useEffect, useRef, useMemo } from "react"
+import { isValidJson, emptyValue } from "../util"
 
 const Select = ({ defaultValue, options, onSelect, disabled = false }) => {
     return (
@@ -65,4 +65,358 @@ const JsonTextarea = ({
     )
 }
 
-export { Select, JsonTextarea, Button }
+const KeyValueEditor = ({ object, sendObjectToParent }) => {
+    const [editingValue, setEditingValue] = useState(null)
+
+    const handleDeleteKey = (key) => {
+        const updatedKeys = { ...object.values }
+        delete updatedKeys[key]
+        sendObjectToParent({
+            suggestions: object.suggestions,
+            values: updatedKeys
+        })
+    }
+
+    const addNewKey = (value) => {
+        if (value.trim() !== "" && !object.values.hasOwnProperty(value)) {
+            const updatedKeys = { ...object.values }
+            updatedKeys[value] = { value: emptyValue, type: "string" }
+            sendObjectToParent({
+                suggestions: object.suggestions,
+                values: updatedKeys
+            })
+        }
+    }
+
+    const editValue = (key, value) => {
+        const updatedObject = { ...object }
+        updatedObject.values[key] = {
+            suggestions: updatedObject.values[key].suggestions,
+            type: updatedObject.values[key].type,
+            value
+        }
+        setEditingValue(null)
+        sendObjectToParent(updatedObject)
+    }
+
+    return (
+        <div className="bg-gray-700 p-2 rounded text-sm">
+            {Object.entries(object.values).map(
+                ([key, { value, type, suggestions }]) => (
+                    <div
+                        key={key}
+                        className="text-white flex justify-between items-center"
+                    >
+                        <span>{key}</span>
+                        <div className="flex flex-col">
+                            {editingValue === key ? (
+                                suggestions ? (
+                                    <AutoCompleteInput
+                                        defaultValue={value}
+                                        suggestions={suggestions}
+                                        onClose={(val) => editValue(key, val)}
+                                    />
+                                ) : (
+                                    <input
+                                        type="text"
+                                        defaultValue={value}
+                                        onKeyDown={(e) => {
+                                            if (e.key === "Enter") {
+                                                e.target.blur()
+                                            }
+                                        }}
+                                        onBlur={(e) =>
+                                            editValue(key, e.target.value)
+                                        }
+                                    />
+                                )
+                            ) : (
+                                <span
+                                    onClick={() => setEditingValue(key)}
+                                    className="cursor-pointer flex items-center"
+                                >
+                                    {value === emptyValue ? (
+                                        <div className="text-red-600">
+                                            {value}
+                                        </div>
+                                    ) : (
+                                        value
+                                    )}
+                                    <button
+                                        className="text-sm text-red-500 hover:text-red-800 p-1 ml-2"
+                                        onClick={() => handleDeleteKey(key)}
+                                    >
+                                        X
+                                    </button>
+                                </span>
+                            )}
+                        </div>
+                    </div>
+                )
+            )}
+            <div className="mt-2">
+                {object.suggestions ? (
+                    <AutoCompleteInput
+                        defaultValue=""
+                        suggestions={object.suggestions}
+                        onClose={(value) => addNewKey(value)}
+                    />
+                ) : (
+                    <input />
+                )}
+            </div>
+        </div>
+    )
+}
+
+const splitByMatch = (string, search) => {
+    if (search === "") return [string]
+    const result = []
+    let currentIndex = 0
+    let matchIndex
+
+    const lcString = string.toLowerCase()
+    const lcSearch = search.toLowerCase()
+
+    while ((matchIndex = lcString.indexOf(lcSearch, currentIndex)) !== -1) {
+        result.push(
+            string.slice(currentIndex, matchIndex),
+            string.slice(matchIndex, matchIndex + search.length)
+        )
+        currentIndex = matchIndex + search.length
+    }
+
+    result.push(string.slice(currentIndex))
+    return result
+}
+
+function HighlightMatches({ text, search, className }) {
+    const parts = splitByMatch(text, search)
+    return (
+        <span>
+            {parts.map((part, index) =>
+                part.toLowerCase() === search.toLowerCase() ? (
+                    <span key={index} className={className}>
+                        {part}
+                    </span>
+                ) : (
+                    part
+                )
+            )}
+        </span>
+    )
+}
+/**
+ *
+ * @param {*} suggestions Options of Autocomplete as an array
+ * @returns
+ */
+function AutoCompleteInput({ defaultValue = "", suggestions = [], onClose }) {
+    const [inputValue, setInputValue] = useState(defaultValue)
+    const [firstRecommendation, setFirstRecommendation] = useState("")
+    const [showFirstRecommendation, setShowFirstRecommendation] = useState(true)
+    const [listActive, setListActive] = useState(false)
+    const [optionPointerIndex, setOptionPointerIndex] = useState(-1)
+    const [clientWidth, setClientWidth] = useState(null)
+    const optionsRef = useRef(null)
+
+    const removePrefix = (value) => {
+        return value && typeof value === "string"
+            ? value.replace(/p_|i_/g, "")
+            : value
+    }
+
+    const value = removePrefix(inputValue)
+
+    const filteredSuggestions = useMemo(() => {
+        const foundByPrefix = suggestions.filter((rec) =>
+            rec.toLowerCase().startsWith(value.toLowerCase())
+        )
+        const foundByIncludes = suggestions.filter(
+            (rec) =>
+                !foundByPrefix.includes(rec) &&
+                rec.toLowerCase().includes(value.toLowerCase())
+        )
+        const filtered = [
+            ...foundByPrefix.map((rec) => "p_" + rec),
+            ...foundByIncludes.map((rec) => "i_" + rec)
+        ]
+        return filtered
+    }, [inputValue])
+
+    useEffect(() => {
+        if (inputValue !== "" && !listActive) setListActive(true)
+        let recommendation = ""
+        if (
+            filteredSuggestions.length > 0 &&
+            !filteredSuggestions[0].startsWith("i_")
+        ) {
+            recommendation =
+                value + removePrefix(filteredSuggestions[0]).slice(value.length)
+        }
+        if (inputValue !== "" || (inputValue === "" && listActive))
+            setFirstRecommendation(recommendation)
+        setOptionPointerIndex(-1)
+        if (
+            filteredSuggestions.length === 1 &&
+            removePrefix(filteredSuggestions[0]) === value
+        )
+            setListActive(false)
+    }, [inputValue])
+
+    return (
+        <div className="flex">
+            <input
+                className="z-10 bg-transparent border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-1 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
+                value={inputValue === emptyValue ? "" : inputValue}
+                onChange={(e) => {
+                    setInputValue(e.target.value)
+                    if (
+                        showFirstRecommendation !==
+                        (clientWidth === e.target.scrollWidth)
+                    )
+                        setShowFirstRecommendation(
+                            clientWidth === e.target.scrollWidth
+                        )
+                }}
+                onFocus={(e) => {
+                    if (!clientWidth) setClientWidth(e.target.clientWidth)
+                    if (filteredSuggestions[0].startsWith("p_"))
+                        setFirstRecommendation(
+                            removePrefix(filteredSuggestions[0])
+                        )
+                    setListActive(true)
+                }}
+                onKeyDown={(e) => {
+                    if (e.key === "Enter" && !listActive) {
+                        //Hier benutzt er dann alle funktionen vom onBlur, sollte man vllt schöner lösen?
+                        e.target.blur()
+                    }
+                    if (!listActive) return
+                    if (e.key === "Enter" || e.key === "ArrowRight") {
+                        if (e.key === "ArrowRight") {
+                            if (
+                                showFirstRecommendation !==
+                                (clientWidth === e.target.scrollWidth)
+                            )
+                                setShowFirstRecommendation(
+                                    clientWidth === e.target.scrollWidth
+                                )
+                        }
+                        if (
+                            optionPointerIndex === -1 ||
+                            filteredSuggestions[optionPointerIndex] ===
+                                firstRecommendation
+                        ) {
+                            if (
+                                e.target.selectionEnd ===
+                                    e.target.value.length &&
+                                firstRecommendation
+                            ) {
+                                setInputValue(
+                                    removePrefix(filteredSuggestions[0])
+                                )
+                                setListActive(false)
+                            }
+                        } else {
+                            setInputValue(
+                                removePrefix(
+                                    filteredSuggestions[optionPointerIndex]
+                                )
+                            )
+                            setListActive(false)
+                        }
+                    } else if (e.key === "ArrowDown") {
+                        if (filteredSuggestions.length === 0) return
+                        const newIndex = optionPointerIndex + 1
+                        if (filteredSuggestions.length <= newIndex) return
+
+                        const el = optionsRef.current.children[newIndex]
+                        if (el)
+                            el.scrollIntoView({
+                                block: "nearest",
+                                inline: "nearest"
+                            })
+                        setOptionPointerIndex(newIndex)
+
+                        const recommendationValue = filteredSuggestions[
+                            newIndex
+                        ].startsWith("p_")
+                            ? inputValue +
+                              removePrefix(filteredSuggestions[newIndex]).slice(
+                                  inputValue.length
+                              )
+                            : ""
+
+                        setFirstRecommendation(recommendationValue)
+                    } else if (e.key === "ArrowUp") {
+                        e.preventDefault()
+                        if (filteredSuggestions.length === 0) return
+                        const newIndex = optionPointerIndex - 1
+                        if (newIndex < -1) return
+                        setOptionPointerIndex(newIndex)
+                        if (newIndex === -1) return
+
+                        const el = optionsRef.current.children[newIndex]
+                        if (el)
+                            el.scrollIntoView({
+                                block: "nearest",
+                                inline: "nearest"
+                            })
+
+                        const recommendationValue = filteredSuggestions[
+                            newIndex
+                        ].startsWith("p_")
+                            ? inputValue +
+                              removePrefix(filteredSuggestions[newIndex]).slice(
+                                  inputValue.length
+                              )
+                            : ""
+
+                        setFirstRecommendation(recommendationValue)
+                    }
+                }}
+                onBlur={() => {
+                    setFirstRecommendation("")
+                    setOptionPointerIndex(-1)
+                    onClose(inputValue)
+                    setInputValue("")
+                    setListActive(false)
+                }}
+            />
+            <input
+                value={showFirstRecommendation ? firstRecommendation : ""}
+                readOnly
+                className="text-opacity-40 absolute bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-1 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
+            />
+            {listActive &&
+                !(
+                    filteredSuggestions.length === 1 &&
+                    inputValue === firstRecommendation
+                ) && (
+                    <div
+                        ref={optionsRef}
+                        className="absolute bg-gray-700 border border-gray-500 rounded mt-8 z-10 max-h-48 overflow-auto"
+                    >
+                        {filteredSuggestions.map((type, index) => (
+                            <div
+                                key={index}
+                                className={`p-1 cursor-pointer hover:bg-gray-600 text-left ${filteredSuggestions[optionPointerIndex] === type ? "text-red-200" : ""} ${type.startsWith("p_") ? "bg-green-200" : "bg-red-200"}`}
+                                onMouseDown={(e) => e.preventDefault()}
+                                onClick={(e) => {
+                                    setInputValue(e.target.textContent)
+                                }}
+                            >
+                                <HighlightMatches
+                                    text={removePrefix(type)}
+                                    search={inputValue}
+                                    className={"font-bold"}
+                                />
+                            </div>
+                        ))}
+                    </div>
+                )}
+        </div>
+    )
+}
+export { Select, JsonTextarea, Button, KeyValueEditor }

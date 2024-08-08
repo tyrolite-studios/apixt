@@ -1,4 +1,4 @@
-import { Select, JsonTextarea, Button } from "../commons"
+import { Select, JsonTextarea, Button, KeyValueEditor } from "../commons"
 import { useState } from "react"
 import { PathInput } from "./PathInput"
 import { headerContentTypes, requestHeaderOptions } from "../../util"
@@ -7,11 +7,23 @@ const RequestBuilder = () => {
     const [method, setMethod] = useState("post")
     const [path, setPath] = useState("")
     const [headers, setHeaders] = useState({
-        "Content-Type": "application/json",
-        "Content-Length": 50,
-        "X-mx-Header": "blabla",
-        "Header-Ex1": "blaaa",
-        "Header-Ex2": "blabla"
+        values: {
+            "Content-Type": {
+                value: "application/json",
+                type: "string",
+                suggestions: headerContentTypes
+            },
+            "Content-Length": {
+                value: 50,
+                type: "number",
+                min: 0
+            },
+            "X-mx-Header": {
+                value: "blabla",
+                type: "string"
+            }
+        },
+        suggestions: Object.keys(requestHeaderOptions)
     })
     const [body, setBody] = useState("")
     const [jsonTextValue, setJsonTextValue] = useState("")
@@ -20,18 +32,6 @@ const RequestBuilder = () => {
     const [isJson, setIsJson] = useState(true)
     const [jsonIsValid, setJsonIsValid] = useState(false)
     const [headersVisible, setHeadersVisible] = useState(false)
-    const [editingHeader, setEditingHeader] = useState(null)
-    const [newHeader, setNewHeader] = useState("")
-    const [headerListActive, setHeaderListActive] = useState(false)
-    const [firstContentTypeRecommendation, setFirstContentTypeRecommendation] =
-        useState("")
-    const [firstHeaderRecommendation, setFirstHeaderRecommendation] =
-        useState("")
-    const [filteredContentTypes, setFilteredContentTypes] =
-        useState(headerContentTypes)
-    const [filteredHeaders, setFilteredHeaders] = useState(
-        Object.keys(requestHeaderOptions)
-    )
 
     const handleMethodChange = (selectedMethod) => {
         setMethod(selectedMethod)
@@ -55,41 +55,17 @@ const RequestBuilder = () => {
         setPath(path)
     }
 
-    const handleHeaderValueChange = (key, newValue) => {
-        if (!newValue) newValue = emptyValue
-        setHeaders({
-            ...headers,
-            [key]: newValue
-        })
-    }
-
-    const handleDeleteHeader = (key) => {
-        const updatedHeaders = { ...headers }
-        delete updatedHeaders[key]
-        setHeaders(updatedHeaders)
-    }
-
-    const addNewHeader = () => {
-        if (newHeader.trim() !== "" && !headers.hasOwnProperty(newHeader)) {
-            setHeaders((prevHeaders) => ({
-                ...prevHeaders,
-                [newHeader]: requestHeaderOptions[newHeader] || emptyValue
-            }))
-            setNewHeader("")
-        }
-    }
-
     const handleSubmit = () => {
-        const emptyHeaders = Object.keys(headers).filter(
-            (header) => headers[header] === emptyValue
+        const emptyHeaders = Object.keys(headers.values).filter(
+            (header) => headers.values[header] === emptyValue
         )
         for (const header of emptyHeaders) {
-            delete headers[header]
+            delete headers.values[header]
         }
 
         const requestParams = {
             method,
-            headers: headers,
+            headers: headers.values,
             body
         }
         console.log("Submitting request:", requestParams)
@@ -113,14 +89,6 @@ const RequestBuilder = () => {
                 })
         }
     }
-    const filterContentTypes = (e) => {
-        const filtered = headerContentTypes.filter((type) =>
-            type.startsWith(e.target.value)
-        )
-        setFilteredContentTypes(filtered)
-        setFirstContentTypeRecommendation(filtered[0])
-    }
-
     const selectProps = {
         options: {
             post: "POST",
@@ -134,10 +102,9 @@ const RequestBuilder = () => {
     }
 
     const emptyValue = "<Enter Value>"
-
-    const headerPreview = Object.entries(headers)
-        .filter(([key, value]) => value !== emptyValue)
-        .map(([key, value]) => `${key}: ${value}`)
+    const headerPreview = Object.entries(headers.values)
+        .filter(([key, { value }]) => value !== emptyValue)
+        .map(([key, { value }]) => `${key}: ${value}`)
         .join(", ")
 
     return (
@@ -164,175 +131,12 @@ const RequestBuilder = () => {
                     </button>
                 </div>
                 {headersVisible ? (
-                    <div className="bg-gray-700 p-2 rounded text-sm">
-                        {Object.entries(headers).map(([key, value]) => (
-                            <div
-                                key={key}
-                                className="text-white flex justify-between items-center"
-                            >
-                                <span>{key}</span>
-                                <div className="flex flex-col">
-                                    {editingHeader === key ? (
-                                        [
-                                            <input
-                                                key={0}
-                                                className="ml-1 z-10 bg-transparent border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-1 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
-                                                type={
-                                                    isNaN(value)
-                                                        ? "text"
-                                                        : "number"
-                                                }
-                                                value={
-                                                    value === emptyValue
-                                                        ? ""
-                                                        : value
-                                                }
-                                                onChange={(e) => {
-                                                    handleHeaderValueChange(
-                                                        key,
-                                                        e.target.value
-                                                    )
-                                                    if (
-                                                        key === "Content-Type"
-                                                    ) {
-                                                        filterContentTypes(e)
-                                                    }
-                                                }}
-                                                onFocus={(e) =>
-                                                    filterContentTypes(e)
-                                                }
-                                                onKeyDown={(e) => {
-                                                    if (e.key === "Enter") {
-                                                        setEditingHeader(null)
-                                                    }
-                                                }}
-                                                onBlur={(e) => {
-                                                    setEditingHeader(null)
-                                                    handleHeaderValueChange(
-                                                        key,
-                                                        value
-                                                    )
-                                                }}
-                                                autoFocus
-                                            />,
-                                            <input
-                                                key={1}
-                                                value={
-                                                    firstContentTypeRecommendation
-                                                }
-                                                readOnly
-                                                className="text-opacity-40 absolute ml-1 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-1 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
-                                            />
-                                        ]
-                                    ) : (
-                                        <span
-                                            onClick={() =>
-                                                setEditingHeader(key)
-                                            }
-                                            className="cursor-pointer flex items-center"
-                                        >
-                                            {value === emptyValue ? (
-                                                <div className="text-red-600">
-                                                    {value}
-                                                </div>
-                                            ) : (
-                                                value
-                                            )}
-                                            <button
-                                                className="text-sm text-red-500 hover:text-red-800 p-1 ml-2"
-                                                onClick={() =>
-                                                    handleDeleteHeader(key)
-                                                }
-                                            >
-                                                X
-                                            </button>
-                                        </span>
-                                    )}
-                                    {editingHeader === key &&
-                                    key === "Content-Type" ? (
-                                        <ul className="absolute bg-gray-700 border border-gray-500 rounded mt-8 z-10 max-h-48 overflow-auto">
-                                            {filteredContentTypes.map(
-                                                (type, index) => (
-                                                    <li
-                                                        key={index}
-                                                        className="p-1 cursor-pointer hover:bg-gray-600 text-left"
-                                                        onMouseDown={(e) =>
-                                                            e.preventDefault()
-                                                        }
-                                                        onClick={() => {
-                                                            handleHeaderValueChange(
-                                                                key,
-                                                                type
-                                                            )
-                                                            setEditingHeader(
-                                                                null
-                                                            )
-                                                        }}
-                                                    >
-                                                        {type}
-                                                    </li>
-                                                )
-                                            )}
-                                        </ul>
-                                    ) : null}
-                                </div>
-                            </div>
-                        ))}
-                        <div className="mt-2">
-                            <input
-                                className="absolute z-10 bg-transparent border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-1 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
-                                type="text"
-                                value={newHeader}
-                                onChange={(e) => {
-                                    const filtered = Object.keys(
-                                        requestHeaderOptions
-                                    ).filter((header) =>
-                                        header
-                                            .toLowerCase()
-                                            .startsWith(
-                                                e.target.value.toLowerCase()
-                                            )
-                                    )
-                                    setFilteredHeaders(filtered)
-                                    setFirstHeaderRecommendation(filtered[0])
-                                    setNewHeader(e.target.value)
-                                }}
-                                onFocus={(e) => setHeaderListActive(true)}
-                                onBlur={(e) => {
-                                    addNewHeader()
-                                    setHeaderListActive(false)
-                                }}
-                            />
-                            <input
-                                placeholder={firstHeaderRecommendation}
-                                className="absolute bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-1 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
-                            />
-                            <div className="h-8"></div>
-                            {headerListActive && (
-                                <div className="absolute bg-gray-700 border border-gray-500 rounded z-10 max-h-48 overflow-auto">
-                                    {filteredHeaders.map((header, index) => (
-                                        <div
-                                            key={index}
-                                            className="p-1 text-white cursor-pointer hover:bg-gray-600 text-left"
-                                            onClick={() => {
-                                                setHeaders((prevHeaders) => ({
-                                                    ...prevHeaders,
-                                                    [header]: emptyValue
-                                                }))
-                                                setEditingHeader(null)
-                                                setNewHeader("")
-                                            }}
-                                            onMouseDown={(e) =>
-                                                e.preventDefault()
-                                            }
-                                        >
-                                            {header}
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    </div>
+                    <KeyValueEditor
+                        object={headers}
+                        sendObjectToParent={(newHeaders) =>
+                            setHeaders(newHeaders)
+                        }
+                    />
                 ) : (
                     <div className="text-white bg-gray-700 p-2 rounded text-sm text-left">
                         <span className="truncate block overflow-hidden whitespace-nowrap">
@@ -406,7 +210,7 @@ const RequestBuilder = () => {
             {/* Submit button */}
             {method &&
             path &&
-            Object.keys(headers).length !== 0 &&
+            Object.keys(headers.values).length !== 0 &&
             (method === "post" && isJson ? jsonIsValid : true) ? (
                 <Button onClick={handleSubmit} mode="active" label="Submit" />
             ) : null}
