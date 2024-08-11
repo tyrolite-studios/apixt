@@ -105,7 +105,11 @@ const devServer = isDist
 const indexEntry = path.resolve(baseDir, "src/index.js")
 const entryFiles = isDist
     ? { apixt: indexEntry }
-    : [indexEntry, path.resolve(baseDir, "src/dev/init.js")]
+    : [
+          indexEntry,
+          path.resolve(baseDir, "src/dev/init.js"),
+          path.resolve(baseDir, "src/dev-plugins.js")
+      ]
 
 const optimization = !isDist
     ? {

@@ -77,7 +77,7 @@ func NewDumpBlockNode(title, inner string, options blockOptions) *DumpBlockNode 
 	} else {
 		hash = generateHash(inner)
 	}
-	content := `{"cmd": 6, "name": "` + title + `", "html": ` + SplitString(inner) + `, "hash": "` + hash + `" `
+	content := `{"cmd": 6, "name": "` + title + `", "mime": "text/json", "html": ` + SplitString(inner) + `, "hash": "` + hash + `" `
 	n := DumpBlockNode{content, hash, options.parent, false}
 	return &n
 }
