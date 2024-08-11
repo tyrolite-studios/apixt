@@ -1,7 +1,7 @@
 import { useEffect } from "react"
-import { useModalWindow } from "../../components/modal"
-import { PluginRegistry } from "../../core/plugin"
-import { Button } from "../../components/form"
+import { useModalWindow } from "components/modal"
+import { PluginRegistry } from "core/plugin"
+import { Button } from "components/form"
 
 function HistoryWidget({}) {
     const routePlugin = PluginRegistry.getActivePlugin("routeSelector")

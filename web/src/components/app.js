@@ -2,11 +2,11 @@ import { useContext, useEffect } from "react"
 import { AppCtx, AppContext } from "./context"
 import { Header } from "./header"
 import { Content } from "./content"
-import { PluginRegistry } from "../core/plugin"
-import { d } from "../core/helper"
-import "../plugins/history/plugin"
-import "../plugins/routeSelector/plugin"
-import "../plugins/syntaxHighlighter/plugin"
+import { PluginRegistry } from "core/plugin"
+import { d } from "core/helper"
+import "plugins/history/plugin"
+import "plugins/routeSelector/plugin"
+import "plugins/syntaxHighlighter/plugin"
 
 function Footer() {
     const aContext = useContext(AppContext)

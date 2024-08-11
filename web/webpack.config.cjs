@@ -193,7 +193,11 @@ const webpackConfig = {
     },
     plugins,
     resolve: {
-        alias: {},
+        alias: {
+            core: path.resolve(baseDir, "src/core") + "/",
+            components: path.resolve(baseDir, "src/components") + "/",
+            plugins: path.resolve(baseDir, "src/plugins") + "/"
+        },
         extensions: [".js", ".cjs", ".jsx"]
     },
     devServer

@@ -1,5 +1,5 @@
-import { Button } from "../components/form"
-import { d } from "../core/helper"
+import { Button } from "components/form"
+import { d } from "core/helper"
 
 const implement = (name) => {
     throw Error(`Plugin must implement getter ${name}`)

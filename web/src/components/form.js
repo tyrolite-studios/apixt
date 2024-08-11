@@ -1,7 +1,7 @@
 import { useContext, useState, useMemo, useEffect, useRef } from "react"
 import { AppContext } from "./context"
 import { Icon } from "./layout"
-import { ClassNames, d } from "../core/helper"
+import { ClassNames, d } from "core/helper"
 import { HighlightMatches } from "./common"
 
 function Button({ name, onClick, icon, className }) {

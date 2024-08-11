@@ -1,6 +1,6 @@
-import { AbstractPlugin, PluginRegistry } from "../../core/plugin"
-import { CMD } from "../../core/tree"
-import { d } from "../../core/helper"
+import { AbstractPlugin, PluginRegistry } from "core/plugin"
+import { CMD } from "core/tree"
+import { d } from "core/helper"
 
 const fakeResponse = [
     { cmd: CMD.OPEN_SECTION, name: "Application" },

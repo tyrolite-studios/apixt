@@ -1,1 +1,1 @@
-import "./plugins/fakeRequests/plugin"
+import "plugins/fakeRequests/plugin"

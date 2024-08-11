@@ -1,9 +1,9 @@
 import { useState, useContext } from "react"
 import { Button, ButtonGroup, Input, TextArea, Select, Checkbox } from "./form"
 import { useModalWindow } from "./modal"
-import { PluginRegistry } from "../core/plugin"
+import { PluginRegistry } from "core/plugin"
 import { Settings } from "./settings"
-import { d } from "../core/helper"
+import { d } from "core/helper"
 
 function Header() {
     const SettingsWindow = useModalWindow()

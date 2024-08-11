@@ -1,9 +1,9 @@
 import { createContext, useState, useRef, useContext, useEffect } from "react"
-import { BrowserStorage } from "../core/storage"
-import { treeBuilder } from "../core/tree"
-import { getHttpStreamPromise } from "../core/http"
+import { BrowserStorage } from "core/storage"
+import { treeBuilder } from "core/tree"
+import { getHttpStreamPromise } from "core/http"
 import { useComponentUpdate, useLoadingSpinner } from "./common"
-import { d } from "../core/helper"
+import { d } from "core/helper"
 
 const AppContext = createContext(null)
 

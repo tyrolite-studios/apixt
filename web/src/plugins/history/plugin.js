@@ -1,4 +1,4 @@
-import { AbstractPlugin, PluginRegistry } from "../../core/plugin"
+import { AbstractPlugin, PluginRegistry } from "core/plugin"
 import { HistoryWindow, HistoryWidget } from "./components"
 
 class Plugin extends AbstractPlugin {

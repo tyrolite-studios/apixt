@@ -1,9 +1,9 @@
-import { useModalWindow } from "../../components/modal"
+import { useModalWindow } from "components/modal"
 import { useContext, useEffect } from "react"
-import { AppContext } from "../../components/context"
-import { Div } from "../../components/layout"
-import { Button, Input } from "../../components/form"
-import { d } from "../../core/helper"
+import { AppContext } from "components/context"
+import { Div } from "components/layout"
+import { Button, Input } from "components/form"
+import { d } from "core/helper"
 
 function RouteSelector({ close, plugin }) {
     const aCtx = useContext(AppContext)
