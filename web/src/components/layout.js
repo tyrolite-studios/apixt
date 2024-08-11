@@ -1,5 +1,5 @@
 import React from "react"
-import { ClassNames } from "../core/helper"
+import { ClassNames } from "core/helper"
 
 const getLayoutProps = ({ className, zIndex, cursor, tab, ...props }) => {
     const cls = []

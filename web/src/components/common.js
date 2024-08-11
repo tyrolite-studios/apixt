@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect } from "react"
 import { useModalWindow } from "./modal"
-import { ClassNames, d } from "../core/helper"
+import { ClassNames, d } from "core/helper"
 import { Button } from "./form"
 import { Div } from "./layout"
 

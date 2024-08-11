@@ -1,9 +1,9 @@
 import { createContext, useState, useRef, useContext, useEffect } from "react"
-import { BrowserStorage } from "../core/storage"
-import { treeBuilder } from "../core/tree"
-import { getHttpStreamPromise } from "../core/http"
-import { useLoadingSpinner } from "./common"
-import { d } from "../core/helper"
+import { BrowserStorage } from "core/storage"
+import { treeBuilder } from "core/tree"
+import { getHttpStreamPromise } from "core/http"
+import { useComponentUpdate, useLoadingSpinner } from "./common"
+import { d } from "core/helper"
 
 const AppContext = createContext(null)
 
@@ -46,6 +46,7 @@ function AppCtx({ config, children }) {
         return BrowserStorage(localStorage, "tyrolite.apixt.")
     })
 
+    const update = useComponentUpdate()
     const registryRef = useRef()
     const registry = (key = null) =>
         key ? registryRef.current[key] : registryRef.current
@@ -88,6 +89,11 @@ function AppCtx({ config, children }) {
 
         registryRef.current = {
             register,
+            update: () => {
+                registryRef.current = { ...registry() }
+                update()
+            },
+            updates: 0,
             config,
             treeBuilder,
             version: "0.1.0",

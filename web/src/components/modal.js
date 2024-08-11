@@ -3,9 +3,8 @@ import { useContext, useRef, useState, useEffect } from "react"
 import { AppContext } from "./context"
 import { Div } from "./layout"
 import { Button } from "./form"
-import { extractFullClasses } from "../core/helper"
+import { extractFullClasses, d } from "core/helper"
 import { useMounted } from "./common"
-import { d } from "../core/helper"
 
 const isEventInRect = (e, rect) => {
     return (

@@ -78,7 +78,7 @@ func getHtmlJsonDump(jsonString string) string {
 	if err != nil {
 		log.Fatalf("Could not marshal: %s", err)
 	}
-	return "<pre class=\"code\">" + string(jsonData) + "</pre>"
+	return string(jsonData)
 }
 
 func getHtmlPlain(title string, pairs []pair) string {

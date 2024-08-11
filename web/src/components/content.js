@@ -1,12 +1,11 @@
-import { useModalWindow } from "./modal"
 import { Button } from "./form"
 import { useContext, useRef, useEffect, useState, Fragment } from "react"
-import { getStringifiedJSON } from "../util"
-import { ClassNames, isObject, isArray } from "../core/helper"
-import { d } from "../core/helper"
+import { ClassNames, isObject, isArray } from "core/helper"
+import { d } from "core/helper"
 import { AppContext } from "./context"
-import { Centered } from "./layout"
+import { Centered, Div } from "./layout"
 import { DualRing } from "./common"
+import { PluginRegistry } from "core/plugin"
 
 function ContentTree({ root, level = 1 }) {
     const { type, nodes, ...params } = root
@@ -219,7 +218,7 @@ function DumpBlock({ name, vars }) {
     )
 }
 
-function CodeBlock({ name, html, hash, footer, isError }) {
+function CodeBlock({ name, html, hash, footer, isError, mime }) {
     const aCtx = useContext(AppContext)
     const [colapsed, setColapsed] = useState(false)
     const toggle = () => {
@@ -242,6 +241,14 @@ function CodeBlock({ name, html, hash, footer, isError }) {
         "stack-h divide-x-2 divide-block-footer-text/10 text-block-footer-text py-1 text-xs border border-t border-b-0 border-x-0 border-block-border/20"
     )
     footerCls.addIf(isError, "bg-warning-bg", "bg-block-footer-bg")
+
+    const pipeline = PluginRegistry.getContentPipeline(mime)
+    while (pipeline.length) {
+        const exec = pipeline.shift()
+        html = exec(html)
+    }
+    html = `<pre class="full colapsible">${html}</pre>`
+
     return (
         <div className="border border-block-border text-block-header-text bg-block-header-bg">
             <div className="stack-h px-2 py-1">
@@ -290,6 +297,20 @@ function LoadingBlock({}) {
     )
 }
 
+function WidgetBlock({ children }) {
+    return <Div className="border p-1 border-app-text/50">{children}</Div>
+}
+
+function Widgets({ widgets }) {
+    return (
+        <Div className="mx-auto grid" width="50%">
+            {widgets.map((widget, i) => (
+                <WidgetBlock key={i}>{widget}</WidgetBlock>
+            ))}
+        </Div>
+    )
+}
+
 function Content() {
     const aContext = useContext(AppContext)
     const [tree, setTree] = useState(null)
@@ -310,8 +331,13 @@ function Content() {
 
     if (!tree)
         return (
-            <Centered className="text-app-text text-sm">
-                Start a new request...
+            <Centered>
+                <div className="stack-v gap-2">
+                    <div className="text-app-text text-sm">
+                        Start a new request...
+                    </div>
+                    <Widgets widgets={PluginRegistry.widgets} />
+                </div>
             </Centered>
         )
 

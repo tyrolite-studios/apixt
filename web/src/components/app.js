@@ -1,7 +1,12 @@
-import { useContext } from "react"
+import { useContext, useEffect } from "react"
 import { AppCtx, AppContext } from "./context"
 import { Header } from "./header"
 import { Content } from "./content"
+import { PluginRegistry } from "core/plugin"
+import { d } from "core/helper"
+import "plugins/history/plugin"
+import "plugins/routeSelector/plugin"
+import "plugins/syntaxHighlighter/plugin"
 
 function Footer() {
     const aContext = useContext(AppContext)
@@ -12,6 +17,17 @@ function Footer() {
     )
 }
 
+function Plugins() {
+    const aCtx = useContext(AppContext)
+    const elems = PluginRegistry.components
+
+    useEffect(() => {
+        PluginRegistry.setContext(aCtx)
+    }, [])
+
+    return <>{elems}</>
+}
+
 function MainLayout({ config }) {
     return (
         <AppCtx config={config}>
@@ -19,6 +35,7 @@ function MainLayout({ config }) {
                 <Header />
                 <Content />
                 <Footer />
+                <Plugins />
             </div>
         </AppCtx>
     )

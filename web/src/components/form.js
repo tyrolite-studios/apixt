@@ -1,7 +1,7 @@
 import { useContext, useState, useMemo, useEffect, useRef } from "react"
 import { AppContext } from "./context"
 import { Icon } from "./layout"
-import { ClassNames } from "../core/helper"
+import { ClassNames, d } from "core/helper"
 import { HighlightMatches } from "./common"
 
 function Button({ name, onClick, icon, className }) {
@@ -245,12 +245,20 @@ function ButtonGroup({ className, children }) {
 
 // dummy input elems...
 
-function Input({ name, className }) {
+function Input({ name, value, className }) {
     const cls = new ClassNames(
         "text-sm text-input-text hover:brightness-110 focus:outline-none focus:ring focus:ring-offset-0 focus:ring-focus-border bg-input-bg border border-input-border px-2",
         className
     )
-    return <input name="" type="text" className={cls.value} />
+    return (
+        <input
+            value={value}
+            readOnly
+            name=""
+            type="text"
+            className={cls.value}
+        />
+    )
 }
 
 function TextArea({ className, value }) {
@@ -277,7 +285,7 @@ function Select({ className, options }) {
     return <select className={cls.value}>{elems}</select>
 }
 
-function Checkbox({ value, className }) {
+function Checkbox({ value, set, className }) {
     const cls = new ClassNames(
         "checked:bg-active-bg text-sm text-input-text bg-input-bg hover:brightness-110 focus:outline-none focus:ring focus:ring-offset-0 focus:ring-focus-border bg-input-bg border border-input-border px-1",
         className
@@ -286,6 +294,9 @@ function Checkbox({ value, className }) {
         <input
             type="checkbox"
             value={value}
+            onChange={(e) => {
+                set(!value)
+            }}
             checked={value}
             className={cls.value}
         />

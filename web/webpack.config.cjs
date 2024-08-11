@@ -105,7 +105,11 @@ const devServer = isDist
 const indexEntry = path.resolve(baseDir, "src/index.js")
 const entryFiles = isDist
     ? { apixt: indexEntry }
-    : [indexEntry, path.resolve(baseDir, "src/dev/init.js")]
+    : [
+          indexEntry,
+          path.resolve(baseDir, "src/dev/init.js"),
+          path.resolve(baseDir, "src/dev-plugins.js")
+      ]
 
 const optimization = !isDist
     ? {
@@ -189,7 +193,11 @@ const webpackConfig = {
     },
     plugins,
     resolve: {
-        alias: {},
+        alias: {
+            core: path.resolve(baseDir, "src/core") + "/",
+            components: path.resolve(baseDir, "src/components") + "/",
+            plugins: path.resolve(baseDir, "src/plugins") + "/"
+        },
         extensions: [".js", ".cjs", ".jsx"]
     },
     devServer
