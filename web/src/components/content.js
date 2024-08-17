@@ -1,4 +1,4 @@
-import { Button } from "./form"
+import { Button, ButtonGroup } from "./form"
 import { useContext, useRef, useEffect, useState, Fragment } from "react"
 import { ClassNames, isObject, isArray } from "core/helper"
 import { d } from "core/helper"
@@ -218,7 +218,8 @@ function DumpBlock({ name, vars }) {
     )
 }
 
-function CodeBlock({ name, html, hash, footer, isError, mime }) {
+function CodeBlock(props) {
+    const { name, html, hash, footer, isError, mime } = props
     const aCtx = useContext(AppContext)
     const [colapsed, setColapsed] = useState(false)
     const toggle = () => {
@@ -242,25 +243,21 @@ function CodeBlock({ name, html, hash, footer, isError, mime }) {
     )
     footerCls.addIf(isError, "bg-warning-bg", "bg-block-footer-bg")
 
+    let renderHtml = html
     const pipeline = PluginRegistry.getContentPipeline(mime)
     while (pipeline.length) {
         const exec = pipeline.shift()
-        html = exec(html)
+        renderHtml = exec(renderHtml)
     }
-    html = `<pre class="full colapsible">${html}</pre>`
+    renderHtml = `<pre class="full colapsible">${renderHtml}</pre>`
+
+    const buttons = [...PluginRegistry.getBlockButtons({ ...props, ctx: aCtx })]
 
     return (
         <div className="border border-block-border text-block-header-text bg-block-header-bg">
             <div className="stack-h px-2 py-1">
                 <div className="title auto text-left">{name}</div>
-                {hash && (
-                    <div className="stack-h">
-                        <Button
-                            name=" ◼ STOP HERE"
-                            onClick={() => aCtx.haltContentStream(hash)}
-                        />
-                    </div>
-                )}
+                {buttons.length > 0 && <ButtonGroup>{buttons}</ButtonGroup>}
             </div>
 
             <div className="stack-h bg-block-bg text-block-text">
@@ -277,7 +274,7 @@ function CodeBlock({ name, html, hash, footer, isError, mime }) {
                 </div>
                 <div
                     className={contentCls.value}
-                    dangerouslySetInnerHTML={{ __html: html }}
+                    dangerouslySetInnerHTML={{ __html: renderHtml }}
                 />
             </div>
 

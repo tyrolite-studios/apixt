@@ -7,6 +7,7 @@ import { d } from "core/helper"
 import "plugins/history/plugin"
 import "plugins/routeSelector/plugin"
 import "plugins/syntaxHighlighter/plugin"
+import "plugins/halt/plugin"
 
 function Footer() {
     const aContext = useContext(AppContext)
@@ -19,7 +20,7 @@ function Footer() {
 
 function Plugins() {
     const aCtx = useContext(AppContext)
-    const elems = PluginRegistry.components
+    const elems = PluginRegistry.windows
 
     useEffect(() => {
         PluginRegistry.setContext(aCtx)

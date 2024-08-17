@@ -8,7 +8,8 @@ const implement = (name) => {
 class AbstractPlugin {
     constructor() {
         this._active = this.defaultActive
-        this._buttons = []
+        this._headerButtons = []
+        this._blockButtons = []
         this._buttonHandler = {}
         this._contentHandler = []
 
@@ -17,17 +18,76 @@ class AbstractPlugin {
 
     init() {}
 
-    addButton(id, name = id) {
-        this._buttons.push({
-            id,
-            name,
+    addHook(id, handler) {
+        PluginRegistry.addHook(id, this, handler)
+    }
+
+    assertButtonProps(props, registeredIds) {
+        const { id, onClick, name } = props
+
+        let error = null
+        if (!id) {
+            error = `Button must have an id property with a non-empty value`
+        } else if (registeredIds.includes(id)) {
+            error = `Button with id "${id}" already exists`
+        } else if (onClick) {
+            error = `Button "${id}" was added with an onClick handler. Please use setButtonHandler("${id}", handler) instead`
+        }
+        if (!name) {
+            props.name = id
+        }
+        if (!error) return
+
+        throw Error(`Plugin "${this.id}": ${error}!`)
+    }
+
+    addHeaderButton(props) {
+        this.assertButtonProps(
+            props,
+            this._headerButtons.map((item) => item.id)
+        )
+
+        this._headerButtons.push({
+            ...props,
             onClick: () => {
-                const handler = this._buttonHandler[id]
+                const handler = this._buttonHandler[props.id]
                 if (!handler) return
 
                 handler({ plugin: this, ctx })
             }
         })
+    }
+
+    addBlockButton({ isActive = () => true, ...props }) {
+        this.assertButtonProps(
+            props,
+            this._blockButtons.map((item) => item.id)
+        )
+        this._blockButtons.push({
+            ...props,
+            isActive
+        })
+    }
+
+    getBlockButtons(props) {
+        const buttons = []
+        for (const { id, name, isActive } of this._blockButtons) {
+            if (!isActive(props)) continue
+
+            buttons.push(
+                <Button
+                    key={id}
+                    name={name}
+                    onClick={() => {
+                        const handler = this._buttonHandler[props.id]
+                        if (!handler) return
+
+                        handler({ plugin: this, ...props })
+                    }}
+                />
+            )
+        }
+        return buttons
     }
 
     setContentHandler(handler) {
@@ -59,15 +119,15 @@ class AbstractPlugin {
         implement("defaultActive")
     }
 
-    get buttons() {
-        return this._buttons
+    get headerButtons() {
+        return this._headerButtons
     }
 
     get contentHandler() {
         return this._contentHandler
     }
 
-    getContent() {
+    getWindows() {
         return
     }
 
@@ -84,10 +144,33 @@ const plugins = []
 const id2plugin = new Map()
 let ctx = null
 
+const HOOKS = {
+    FETCH_CONTENT: 1
+}
+
+const allHooks = {}
+
 const PluginRegistry = {
     add(plugin) {
         plugins.push(plugin)
         id2plugin.set(plugin.id, plugin)
+    },
+
+    addHook(id, plugin, handler) {
+        if (!allHooks[id]) allHooks[id] = []
+        allHooks[id].push({ plugin, handler })
+    },
+
+    applyHooks(id, props) {
+        const idHooks = allHooks[id]
+        if (!idHooks) return props
+
+        for (const { plugin, handler } of idHooks) {
+            if (!plugin.active) continue
+
+            handler(props)
+        }
+        return props
     },
 
     has(id) {
@@ -157,20 +240,32 @@ const PluginRegistry = {
         return pipeline
     },
 
-    get buttons() {
+    get headerButtons() {
         const result = []
         for (const plugin of plugins) {
-            if (!plugin.active || !plugin.buttons.length) continue
+            if (!plugin.active || !plugin.headerButtons.length) continue
 
-            result.push(...plugin.buttons)
+            result.push(...plugin.headerButtons)
         }
         return result
     },
 
-    get components() {
+    getBlockButtons(props) {
+        const result = []
+        const activePlugins = PluginRegistry.getActivePlugins()
+        for (const plugin of activePlugins) {
+            const buttons = plugin.getBlockButtons(props)
+            if (!buttons.length) continue
+
+            result.push(...buttons)
+        }
+        return result
+    },
+
+    get windows() {
         const result = []
         for (const plugin of plugins) {
-            const content = plugin.getContent({ plugin })
+            const content = plugin.getWindows({ plugin })
             if (!content) continue
 
             result.push(content)
@@ -190,4 +285,4 @@ const PluginRegistry = {
     }
 }
 
-export { AbstractPlugin, PluginRegistry }
+export { AbstractPlugin, PluginRegistry, HOOKS }

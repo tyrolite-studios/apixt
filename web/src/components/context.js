@@ -4,6 +4,7 @@ import { treeBuilder } from "core/tree"
 import { getHttpStreamPromise } from "core/http"
 import { useComponentUpdate, useLoadingSpinner } from "./common"
 import { d } from "core/helper"
+import { HOOKS, PluginRegistry } from "../core/plugin"
 
 const AppContext = createContext(null)
 
@@ -105,6 +106,8 @@ function AppCtx({ config, children }) {
             spinner: null,
             storage,
             startContentStream: (request) => {
+                PluginRegistry.applyHooks(HOOKS.FETCH_CONTENT, request)
+
                 const { treeBuilder, spinner, config } = registry()
                 treeBuilder.reset()
 
