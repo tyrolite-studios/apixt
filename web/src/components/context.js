@@ -1,9 +1,17 @@
-import { createContext, useState, useRef, useContext, useEffect } from "react"
+import {
+    createContext,
+    useState,
+    useRef,
+    useMemo,
+    useContext,
+    useEffect
+} from "react"
 import { BrowserStorage } from "core/storage"
 import { treeBuilder } from "core/tree"
 import { getHttpStreamPromise } from "core/http"
 import { useComponentUpdate, useLoadingSpinner } from "./common"
 import { d } from "core/helper"
+import { HOOKS, PluginRegistry } from "../core/plugin"
 
 const AppContext = createContext(null)
 
@@ -41,10 +49,28 @@ function SpinnerDiv() {
     return <>{LoadingSpinner.Modal}</>
 }
 
+const defaultSettings = {
+    tabSpaces: 4
+}
+
 function AppCtx({ config, children }) {
-    const [storage] = useState(() => {
-        return BrowserStorage(localStorage, "tyrolite.apixt.")
+    const globalStorage = useMemo(() => {
+        return BrowserStorage(localStorage, "tyrolite.apixt.global")
+    }, [])
+    const [settings, setSettingsRaw] = useState(() => {
+        return globalStorage.getJson("settings", {
+            ...defaultSettings,
+            plugins: PluginRegistry.getDefaultStates()
+        })
     })
+    const setSettings = (settings) => {
+        globalStorage.setJson("settings", settings)
+        setSettingsRaw(settings)
+    }
+    useEffect(() => {
+        PluginRegistry.setStates(settings.plugins)
+        requestAnimationFrame(() => PluginRegistry.updateApp())
+    }, [])
 
     const update = useComponentUpdate()
     const registryRef = useRef()
@@ -87,6 +113,10 @@ function AppCtx({ config, children }) {
             }
         }
 
+        const clearSettings = () => {
+            globalStorage.deleteJson("settings")
+        }
+
         registryRef.current = {
             register,
             update: () => {
@@ -99,12 +129,16 @@ function AppCtx({ config, children }) {
             version: "0.1.0",
             mode: null,
             confirm: null,
-            settings: null,
+            settings,
+            setSettings,
+            clearSettings,
             lastRequest: null,
             dirty: false,
             spinner: null,
-            storage,
+            globalStorage,
             startContentStream: (request) => {
+                PluginRegistry.applyHooks(HOOKS.FETCH_CONTENT, request)
+
                 const { treeBuilder, spinner, config } = registry()
                 treeBuilder.reset()
 

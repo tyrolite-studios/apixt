@@ -245,17 +245,18 @@ function ButtonGroup({ className, children }) {
 
 // dummy input elems...
 
-function Input({ name, value, className }) {
+function Input({ id, name, set, value, type = "text", className }) {
     const cls = new ClassNames(
         "text-sm text-input-text hover:brightness-110 focus:outline-none focus:ring focus:ring-offset-0 focus:ring-focus-border bg-input-bg border border-input-border px-2",
         className
     )
     return (
         <input
+            id={id}
             value={value}
-            readOnly
-            name=""
-            type="text"
+            onChange={(e) => set(e.target.value)}
+            name={name}
+            type={type}
             className={cls.value}
         />
     )

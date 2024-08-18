@@ -1,5 +1,4 @@
-import { useState, useContext } from "react"
-import { Button, ButtonGroup, Input, TextArea, Select, Checkbox } from "./form"
+import { Button, ButtonGroup } from "./form"
 import { useModalWindow } from "./modal"
 import { PluginRegistry } from "core/plugin"
 import { Settings } from "./settings"
@@ -8,11 +7,19 @@ import { d } from "core/helper"
 function Header() {
     const SettingsWindow = useModalWindow()
 
+    const logout = () => {
+        window.clearJwt()
+        window.destroyApiExtender()
+        requestAnimationFrame(() => {
+            window.runLoginApp()
+        })
+    }
+
     return (
         <>
             <div className="stack-h text-sm px-2 py-1 space-x-2 w-full text-header bg-header-bg border border-header-border/50 border-x-0 border-t-0">
                 <ButtonGroup>
-                    {PluginRegistry.buttons.map(({ id, ...props }, i) => (
+                    {PluginRegistry.headerButtons.map(({ id, ...props }, i) => (
                         <Button key={i} {...props} />
                     ))}
                 </ButtonGroup>
@@ -25,7 +32,7 @@ function Header() {
                         name="Settings"
                         onClick={() => SettingsWindow.open()}
                     />
-                    <Button icon="logout" />
+                    <Button icon="logout" onClick={() => logout()} />
                 </ButtonGroup>
             </div>
 

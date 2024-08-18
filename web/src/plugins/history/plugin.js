@@ -1,5 +1,6 @@
-import { AbstractPlugin, PluginRegistry } from "core/plugin"
+import { AbstractPlugin, PluginRegistry, HOOKS } from "core/plugin"
 import { HistoryWindow, HistoryWidget } from "./components"
+import { d } from "core/helper"
 
 class Plugin extends AbstractPlugin {
     get id() {
@@ -19,14 +20,20 @@ class Plugin extends AbstractPlugin {
     }
 
     init() {
-        this.addButton("history", "History...")
+        this.addHeaderButton({
+            id: "history",
+            name: "History..."
+        })
+        this.addHook(HOOKS.FETCH_CONTENT, (request) => {
+            d("History hook...", request)
+        })
     }
 
     getWidget(props) {
         return <HistoryWidget key={this.id} {...props} />
     }
 
-    getContent(props) {
+    getWindows(props) {
         return <HistoryWindow key={this.id} {...props} />
     }
 }

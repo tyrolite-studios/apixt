@@ -20,7 +20,7 @@ class Plugin extends AbstractPlugin {
     }
 
     init() {
-        this.addButton("selector", "Routes...")
+        this.addHeaderButton({ id: "selector", name: "Routes..." })
         this.openEditorHandler = null
     }
 
@@ -34,7 +34,7 @@ class Plugin extends AbstractPlugin {
         this.openEditorHandler(props)
     }
 
-    getContent(props) {
+    getWindows(props) {
         return <RoutesModal key={this.id} {...props} />
     }
 }

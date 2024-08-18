@@ -1,9 +1,12 @@
-import { Fragment } from "react"
+import { Fragment, useContext } from "react"
 import { PluginRegistry } from "core/plugin"
-import { Checkbox } from "./form"
+import { Button, Checkbox } from "./form"
 import { useComponentUpdate } from "./common"
+import { AppContext } from "./context"
+import { d } from "core/helper"
 
 function PluginsOverview({}) {
+    const aCtx = useContext(AppContext)
     const update = useComponentUpdate()
     const allPlugins = PluginRegistry.getAll()
 
@@ -18,7 +21,12 @@ function PluginsOverview({}) {
                                 <Checkbox
                                     value={plugin.active}
                                     set={(value) => {
-                                        plugin.setActive(value)
+                                        aCtx.settings.plugins[plugin.id] =
+                                            plugin.setActive(value)
+                                        aCtx.setSettings({
+                                            ...aCtx.settings,
+                                            plugins: PluginRegistry.getStates()
+                                        })
                                         update()
                                     }}
                                 />
@@ -34,6 +42,14 @@ function PluginsOverview({}) {
                         </Fragment>
                     )
                 })}
+            </div>
+
+            <div className="pb-1">Settings:</div>
+            <div>
+                <Button
+                    name="Default settings"
+                    onClick={() => aCtx.clearSettings()}
+                />
             </div>
         </div>
     )

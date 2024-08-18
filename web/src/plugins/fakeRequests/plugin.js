@@ -149,8 +149,8 @@ class Plugin extends AbstractPlugin {
     }
 
     init() {
-        this.addButton("load", "Fake load...")
-        this.addButton("error", "Fake error...")
+        this.addHeaderButton({ id: "load", name: "Fake load..." })
+        this.addHeaderButton({ id: "error", name: "Fake error..." })
         this.setButtonHandler("load", ({ ctx }) => {
             ctx.startContentStream({
                 response: fakeResponse

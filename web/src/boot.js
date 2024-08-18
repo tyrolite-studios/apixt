@@ -1,19 +1,21 @@
 /* webpackIgnore: true */
-import { createRoot } from "react-dom/client"
+import { createRoot, unmount } from "react-dom/client"
 import { ApiExtenderApp } from "./components/app"
+import { d } from "core/helper"
+
+let root = null
 
 const runApiExtender = (config) => {
-    addEventListener(
-        "DOMContentLoaded",
-        () => {
-            document.body.innerHTML = '<div id="app"></div>'
-            const root = createRoot(document.getElementById("app"))
-            root.render(<ApiExtenderApp config={config} />)
-        },
-        { once: true }
-    )
+    document.body.innerHTML = '<div id="app"></div>'
+    root = createRoot(document.getElementById("app"))
+    root.render(<ApiExtenderApp config={config} />)
+}
+
+const destroyApiExtender = () => {
+    root.unmount()
 }
 
 window.runApiExtender = runApiExtender
+window.destroyApiExtender = destroyApiExtender
 
 export { runApiExtender }

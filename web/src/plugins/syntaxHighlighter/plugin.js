@@ -23,10 +23,10 @@ class Plugin extends AbstractPlugin {
         this.setContentHandler({
             type: "decorator",
             match: (mime) => mime.endsWith("/json"),
-            exec: (input) => {
+            exec: (input, ctx) => {
                 try {
                     const parsed = JSON.parse(input)
-                    return getStringifiedJSON(parsed, 4)
+                    return getStringifiedJSON(parsed, ctx.settings.tabSpaces)
                 } catch (e) {
                     return "Error parsing JSON: " + e.message
                 }
