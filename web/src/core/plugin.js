@@ -209,6 +209,29 @@ const PluginRegistry = {
         return result
     },
 
+    getStates() {
+        const states = {}
+        for (const plugin of plugins) {
+            states[plugin.id] = plugin.active
+        }
+        return states
+    },
+
+    setStates(states) {
+        for (const [id, state] of Object.entries(states)) {
+            const plugin = id2plugin.get(id)
+            if (plugin) plugin.setActive(state)
+        }
+    },
+
+    getDefaultStates() {
+        const states = {}
+        for (const plugin of plugins) {
+            states[plugin.id] = plugin.defaultActive
+        }
+        return states
+    },
+
     getContentPipeline(mime) {
         const pipeline = []
 

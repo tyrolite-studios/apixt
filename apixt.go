@@ -29,11 +29,17 @@ type arg interface{}
 const DUMP_PARAM = "dump"
 const STOP_NEXT_PREFIX = "-"
 
+type Credentials struct {
+	Username string
+	Password string
+}
+
 type ApixtConfig struct {
 	BaseUrl    string   `json:"baseUrl"`
 	DumpPath   string   `json:"dumpPath"`
 	Routes     []string `json:"routes"`
 	DumpHeader string   `json:"dumpHeader"`
+	Users      []Credentials
 }
 
 var currConfig ApixtConfig
@@ -191,20 +197,32 @@ type PageData struct {
 	Config template.JS
 }
 
+var apixtJs string
+
+func getApixtJs() (string, error) {
+	if apixtJs == "" {
+		js, err := os.ReadFile(filepath.Join("..", "apixt", "web", "dist", "apixt.js"))
+		if err != nil {
+			return "", err
+		}
+		apixtJs = string(js)
+	}
+	return apixtJs, nil
+}
+
 func GetResolvedTemplate() (string, error) {
 
-	css, err := os.ReadFile(filepath.Join("..", "apixt", "web", "dist", "apixt.css"))
+	css, err := os.ReadFile(filepath.Join("..", "apixt", "web", "dist", "index.css"))
 	if err != nil {
 		return "", err
 	}
-	js, err := os.ReadFile(filepath.Join("..", "apixt", "web", "dist", "apixt.js"))
+	js, err := os.ReadFile(filepath.Join("..", "apixt", "web", "dist", "index.js"))
 	if err != nil {
 		return "", err
 	}
 
-	// Parse die Templates
 	tmpl, err := template.ParseFiles(
-		filepath.Join("..", "apixt", "templates", "xt.html"),
+		filepath.Join("..", "apixt", "templates", "index.html"),
 	)
 	if err != nil {
 		return "", err
@@ -215,7 +233,6 @@ func GetResolvedTemplate() (string, error) {
 		fmt.Println("Error converting to JSON:", err)
 	}
 
-	// Daten für das Template
 	data := PageData{
 		Title:  "My Page",
 		CSS:    template.CSS(string(css)),
@@ -223,17 +240,77 @@ func GetResolvedTemplate() (string, error) {
 		Config: template.JS(string(configJSON)),
 	}
 
-	// Render das Template in einen bytes.Buffer
 	var renderedTemplate bytes.Buffer
 	if err := tmpl.Execute(&renderedTemplate, data); err != nil {
 		return "", err
 	}
-
-	// Konvertiere den Buffer zu einem string und gib ihn zurück
 	return renderedTemplate.String(), nil
 }
 
-func dumpHandler(w http.ResponseWriter, r *http.Request) {
+var jwtCookie = "tls.apixt.jwt"
+var jwt string = "uwhbwe23we23"
+
+func dumpJsHandler(w http.ResponseWriter, r *http.Request) {
+	cookie, err := r.Cookie(jwtCookie)
+	validated := false
+	if err == nil && cookie.Value == jwt {
+		validated = true
+	}
+
+	if !validated {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+	w.Header().Set("Content-Type", "text/javascript")
+	w.WriteHeader(http.StatusOK)
+	body, err := getApixtJs()
+	if err != nil {
+		panic("No apixt js!")
+	}
+
+	body += "; window.runApiExtender({})"
+
+	w.Write([]byte(body))
+}
+
+func sendAuthReponse(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "text/json")
+	w.WriteHeader(http.StatusOK)
+
+	body := `{"jwt": "` + jwt + `", "config": {"user ": "mstein"}}`
+
+	w.Write([]byte(body))
+
+}
+
+func refreshHandler(w http.ResponseWriter, r *http.Request) {
+	bearer := r.Header.Get("Authorization")
+	if bearer != "Bearer "+jwt {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+	sendAuthReponse(w)
+}
+
+func loginHandler(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "Unable to parse form", http.StatusBadRequest)
+		return
+	}
+	username := r.FormValue("username")
+	password := r.FormValue("password")
+
+	for _, user := range currConfig.Users {
+		if user.Username == username && user.Password == password {
+			sendAuthReponse(w)
+			return
+
+		}
+	}
+	w.WriteHeader(http.StatusUnauthorized)
+}
+
+func indexHandler(w http.ResponseWriter, r *http.Request) {
 	body, err := GetResolvedTemplate()
 	if err != nil {
 		panic(err)
@@ -254,8 +331,12 @@ func Init(oldHandler *http.ServeMux, config ApixtConfig) *Dmux {
 		html_body = body
 	}
 	var mux *Dmux = &Dmux{oldHandler, nil}
-	var dumpRoute = "/" + config.DumpPath
-	oldHandler.HandleFunc(dumpRoute, dumpHandler)
+	var dumpRoute = " /" + config.DumpPath
+	var dumpJsRoute = "GET" + dumpRoute + "/index.js"
+	oldHandler.HandleFunc(dumpJsRoute, dumpJsHandler)
+	oldHandler.HandleFunc("GET"+dumpRoute, indexHandler)
+	oldHandler.HandleFunc("POST"+dumpRoute, loginHandler)
+	oldHandler.HandleFunc("GET"+dumpRoute+"/refresh", refreshHandler)
 
 	fmt.Printf("Registering dump route %s\n", dumpRoute)
 	return mux

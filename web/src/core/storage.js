@@ -33,16 +33,18 @@ const BrowserStorage = (storage, prefix = "") => {
         if (key.startsWith(prefix)) keys.add(key.substring(idIndex))
     }
     const api = {
-        get: (id) => {
+        get: (id, _default) => {
             const value = storage.getItem(prefix + id)
-            if (value === null) return
+            if (value === null) return _default
 
             return value
         },
-        // TODO extract type from key-naem
-        getByType: (type, id) => {
-            const value = storage.getItem(prefix + id)
-            if (value === null) return
+        getJson: (id, _default) => {
+            return api.getByType("json", id, _default)
+        },
+        getByType: (type, id, _default) => {
+            const value = api.get(id + "_" + type)
+            if (value === undefined) return _default
 
             switch (type) {
                 case "json":
@@ -52,13 +54,15 @@ const BrowserStorage = (storage, prefix = "") => {
         },
 
         has: (id) => keys.has(id),
+        hasJson: (id) => api.hasByType(id, "json"),
+        hasByType: (id, type) => api.has(id + "_" + type),
 
         set: (id, value) => {
             if (!isString(value))
                 throw Error(`value for id "${id}" to a string`)
 
             try {
-                storage.setItem(prefix + id, encoded)
+                storage.setItem(prefix + id, value)
             } catch (e) {
                 if (isQuotaExceededException(e)) {
                     isFull = true
@@ -69,14 +73,15 @@ const BrowserStorage = (storage, prefix = "") => {
 
             return true
         },
-
+        setJson: (id, value) => {
+            return api.setByType("json", id, value)
+        },
         setByType: (type, id, value) => {
             if (value === undefined)
                 throw Error(`Cannot store undefined value for id "${id}"`)
 
             const encoded = api.encode(type, value)
-
-            return api.set(id, encoded)
+            return api.set(id + "_" + type, encoded)
         },
 
         delete: (id) => {
@@ -86,6 +91,10 @@ const BrowserStorage = (storage, prefix = "") => {
             keys.delete(id)
             isFull = false
             return true
+        },
+        deleteJson: (id) => api.deleteByType("json", id),
+        deleteByType: (type, id) => {
+            return api.delete(id + "_" + type)
         },
 
         keys: () => [...keys],
@@ -120,6 +129,7 @@ const BrowserStorage = (storage, prefix = "") => {
             throw Error(`Unsupported type "${type}" for encoding given!`)
         }
     }
+    return api
 }
 
 export { BrowserStorage }

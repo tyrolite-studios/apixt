@@ -88,25 +88,13 @@ plugins.push(
 
 const devtool = isDist ? undefined : "eval-cheap-source-map"
 
-const devServer = isDist
-    ? undefined
-    : {
-          server: {
-              type: "http",
-              options: {}
-          },
-          client: { progress: true, overlay: true, logging: "info" },
-          open: true,
-          compress: undefined,
-          static: path.resolve(baseDir, "dist"),
-          port: 8082
-      }
-
+const loginEntry = path.resolve(baseDir, "src/login.js")
 const indexEntry = path.resolve(baseDir, "src/index.js")
 const entryFiles = isDist
-    ? { apixt: indexEntry }
+    ? { apixt: loginEntry }
     : [
           indexEntry,
+          loginEntry,
           path.resolve(baseDir, "src/dev/init.js"),
           path.resolve(baseDir, "src/dev-plugins.js")
       ]
@@ -123,84 +111,118 @@ const optimization = !isDist
           splitChunks: false
       }
 
-const webpackConfig = {
-    mode: isDist ? "production" : "development",
-    stats: { preset: "normal" },
-    ignoreWarnings: [{ message: /Critical dependency/ }],
-    performance: {
-        //        hints: false,
-        //        maxEntrypointSize: 250000
-    },
-    name: "apixt",
-    context: path.resolve(baseDir),
-    dependencies: [],
-    devtool,
-    entry: entryFiles,
-    output: {
-        path: path.resolve(baseDir, "dist"),
-        clean: true,
-        filename: "[name].js",
-        publicPath: "/"
-    },
-    optimization,
-    module: {
-        rules: [
-            {
-                test: /\.(js|jsx)$/,
-                use: {
-                    loader: "babel-loader",
-                    options: {
-                        presets: [
-                            [
-                                "@babel/preset-env",
-                                {
-                                    targets: {
-                                        browsers: [
-                                            ">2.25%, not ie 11, not op_mini all"
-                                        ]
-                                    },
-                                    exclude: ["proposal-dynamic-import"]
-                                }
-                            ],
-                            [
-                                "@babel/preset-react",
-                                {
-                                    runtime: "automatic"
-                                }
-                            ]
-                        ]
-                    }
-                }
-            },
-            {
-                test: /\.(css)$/,
-                use: [
-                    isDist ? MiniCssExtractPlugin.loader : "style-loader",
-                    {
-                        loader: "css-loader",
-                        options: { sourceMap: !isDist, importLoaders: 1 }
-                    },
-                    "postcss-loader"
-                ]
-            },
-            {
-                test: /\.(woff|woff2|eot|ttf|otf)$/i,
-                type: "asset/resource",
-                generator: { filename: "[name][ext]" }
-            },
-            { test: /\.m?js$/, resolve: { fullySpecified: false } }
-        ]
-    },
-    plugins,
-    resolve: {
-        alias: {
-            core: path.resolve(baseDir, "src/core") + "/",
-            components: path.resolve(baseDir, "src/components") + "/",
-            plugins: path.resolve(baseDir, "src/plugins") + "/"
+const getWebpackConfig = (name, entryFiles) => {
+    const isIndex = name === "index"
+
+    const devServer =
+        isDist || !isIndex
+            ? undefined
+            : {
+                  server: {
+                      type: "http",
+                      options: {}
+                  },
+                  client: { progress: true, overlay: true, logging: "info" },
+                  open: true,
+                  compress: undefined,
+                  static: path.resolve(baseDir, "dist"),
+                  port: 8082
+              }
+
+    const webpackConfig = {
+        mode: isDist ? "production" : "development",
+        stats: { preset: "normal" },
+        ignoreWarnings: [{ message: /Critical dependency/ }],
+        performance: {
+            //        hints: false,
+            //        maxEntrypointSize: 250000
         },
-        extensions: [".js", ".cjs", ".jsx"]
-    },
-    devServer
+        name,
+        context: path.resolve(baseDir),
+        dependencies: name !== "index" ? ["index"] : [],
+        devtool,
+        entry: entryFiles,
+        output: {
+            path: path.resolve(baseDir, "dist"),
+            clean: isIndex,
+            filename: "[name].js",
+            publicPath: "/"
+        },
+        optimization,
+        module: {
+            rules: [
+                {
+                    test: /\.(js|jsx)$/,
+                    use: {
+                        loader: "babel-loader",
+                        options: {
+                            presets: [
+                                [
+                                    "@babel/preset-env",
+                                    {
+                                        targets: {
+                                            browsers: [
+                                                ">2.25%, not ie 11, not op_mini all"
+                                            ]
+                                        },
+                                        exclude: ["proposal-dynamic-import"]
+                                    }
+                                ],
+                                [
+                                    "@babel/preset-react",
+                                    {
+                                        runtime: "automatic"
+                                    }
+                                ]
+                            ]
+                        }
+                    }
+                },
+                {
+                    test: /\.(css)$/,
+                    use: [
+                        isDist ? MiniCssExtractPlugin.loader : "style-loader",
+                        {
+                            loader: "css-loader",
+                            options: { sourceMap: !isDist, importLoaders: 1 }
+                        },
+                        "postcss-loader"
+                    ]
+                },
+                {
+                    test: /\.(woff|woff2|eot|ttf|otf)$/i,
+                    type: "asset/resource",
+                    generator: { filename: "[name][ext]" }
+                },
+                { test: /\.m?js$/, resolve: { fullySpecified: false } }
+            ]
+        },
+        plugins,
+        resolve: {
+            alias: {
+                core: path.resolve(baseDir, "src/core") + "/",
+                components: path.resolve(baseDir, "src/components") + "/",
+                plugins: path.resolve(baseDir, "src/plugins") + "/"
+            },
+            extensions: [".js", ".cjs", ".jsx"]
+        },
+        devServer
+    }
+    return webpackConfig
 }
 
-module.exports = webpackConfig
+const webpackConfigs = isDist
+    ? [
+          getWebpackConfig("index", { index: loginEntry }),
+          getWebpackConfig("apixt", { apixt: indexEntry })
+      ]
+    : [
+          getWebpackConfig("index", [
+              loginEntry,
+              indexEntry,
+              // path.resolve(baseDir, "src/dev/init.js"),
+              path.resolve(baseDir, "src/dev-plugins.js")
+          ])
+      ]
+
+module.exports = webpackConfigs

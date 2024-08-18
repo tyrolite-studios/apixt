@@ -132,8 +132,8 @@ class ClassNames {
         const deletes = []
         const adds = []
         for (const part of parts) {
-            if (part[0] === "!") {
-                deletes.push(part.substring(1))
+            if (part.startsWith("not_")) {
+                deletes.push(part.substring(4))
             } else {
                 adds.push(part)
             }

@@ -7,6 +7,14 @@ import { d } from "core/helper"
 function Header() {
     const SettingsWindow = useModalWindow()
 
+    const logout = () => {
+        window.clearJwt()
+        window.destroyApiExtender()
+        requestAnimationFrame(() => {
+            window.runLoginApp()
+        })
+    }
+
     return (
         <>
             <div className="stack-h text-sm px-2 py-1 space-x-2 w-full text-header bg-header-bg border border-header-border/50 border-x-0 border-t-0">
@@ -24,7 +32,7 @@ function Header() {
                         name="Settings"
                         onClick={() => SettingsWindow.open()}
                     />
-                    <Button icon="logout" />
+                    <Button icon="logout" onClick={() => logout()} />
                 </ButtonGroup>
             </div>
 

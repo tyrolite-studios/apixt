@@ -166,7 +166,7 @@ function KeyValueBlock({ name, iterator }) {
             <div className="px-2 py-1 bg-header-bg/50 text-app-bg text-xs">
                 {name}
             </div>
-            <div className="grid grid-cols-2 gap-1 grid-cols-[min-content_min-content]">
+            <div className="grid gap-1 grid-cols-[min-content_min-content]">
                 {iterator.map(([idx, props]) => (
                     <Fragment key={idx}>
                         <div className="bg-header-bg/50 text-app-bg px-2 py-1 text-xs whitespace-nowrap">
@@ -247,7 +247,7 @@ function CodeBlock(props) {
     const pipeline = PluginRegistry.getContentPipeline(mime)
     while (pipeline.length) {
         const exec = pipeline.shift()
-        renderHtml = exec(renderHtml)
+        renderHtml = exec(renderHtml, aCtx)
     }
     renderHtml = `<pre class="full colapsible">${renderHtml}</pre>`
 
@@ -268,7 +268,7 @@ function CodeBlock(props) {
                                 ? "keyboard_arrow_down"
                                 : "keyboard_arrow_up"
                         }
-                        className="!px-2 py-1 px-1"
+                        className="not_px-2 py-1 px-1"
                         onClick={toggle}
                     />
                 </div>
