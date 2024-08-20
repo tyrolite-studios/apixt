@@ -38,6 +38,7 @@ const createInput = (
     cls = "ml-1 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
 ) => {
     const input = document.createElement("input")
+    input.setAttribute("autocomplete", "off")
     input.setAttribute("type", type)
     input.setAttribute("id", id)
     input.setAttribute("placeholder", placeholder)
@@ -235,6 +236,7 @@ const PathInput = ({ sendPathToParent }) => {
                 id="path-input"
                 className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
                 placeholder="Enter path"
+                autoComplete="off"
                 onFocus={handlePathInput}
             />
         </div>

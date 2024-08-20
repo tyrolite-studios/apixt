@@ -88,6 +88,15 @@ const KeyValueEditor = ({ object, sendObjectToParent }) => {
         }
     }
 
+    const editKey = (key, newKey) => {
+        setEditingValue(null)
+        if (key === newKey) return
+        const updatedObject = { ...object }
+        updatedObject.values[newKey] = updatedObject.values[key]
+        delete updatedObject.values[key]
+        sendObjectToParent(updatedObject)
+    }
+
     const editValue = (key, value) => {
         const updatedObject = { ...object }
         updatedObject.values[key] = {
@@ -107,9 +116,35 @@ const KeyValueEditor = ({ object, sendObjectToParent }) => {
                         key={key}
                         className="text-white flex justify-between items-center"
                     >
-                        <span>{key}</span>
+                        {editingValue === key ? (
+                            object.suggestions ? (
+                                <AutoCompleteInput
+                                    defaultValue={key}
+                                    suggestions={object.suggestions}
+                                    onClose={(newKey) => editKey(key, newKey)}
+                                />
+                            ) : (
+                                <input
+                                    type="text"
+                                    defaultValue={key}
+                                    onKeyDown={(e) => {
+                                        if (e.key === "Enter") {
+                                            e.target.blur()
+                                        }
+                                    }}
+                                    onBlur={(e) => editKey(key, e.target.value)}
+                                />
+                            )
+                        ) : (
+                            <span
+                                onClick={() => setEditingValue(key)}
+                                className="cursor-pointer flex items-center"
+                            >
+                                {key}
+                            </span>
+                        )}
                         <div className="flex flex-col">
-                            {editingValue === key ? (
+                            {editingValue === key + value ? (
                                 suggestions ? (
                                     <AutoCompleteInput
                                         defaultValue={value}
@@ -132,7 +167,7 @@ const KeyValueEditor = ({ object, sendObjectToParent }) => {
                                 )
                             ) : (
                                 <span
-                                    onClick={() => setEditingValue(key)}
+                                    onClick={() => setEditingValue(key + value)}
                                     className="cursor-pointer flex items-center"
                                 >
                                     {value === emptyValue ? (
@@ -188,6 +223,21 @@ const splitByMatch = (string, search) => {
 
     result.push(string.slice(currentIndex))
     return result
+}
+
+function HighlightKeys({ obj }) {
+    const keys = Object.keys(obj)
+    return (
+        <div>
+            {keys.map((key, index) => (
+                <span key={index}>
+                    <span className="opacity-50">{key}: </span>
+                    {obj[key].value}
+                    {index === keys.length - 1 ? " " : ", "}
+                </span>
+            ))}
+        </div>
+    )
 }
 
 function HighlightMatches({ text, search, className }) {
@@ -419,4 +469,4 @@ function AutoCompleteInput({ defaultValue = "", suggestions = [], onClose }) {
         </div>
     )
 }
-export { Select, JsonTextarea, Button, KeyValueEditor }
+export { Select, JsonTextarea, Button, KeyValueEditor, HighlightKeys }

@@ -1,4 +1,10 @@
-import { Select, JsonTextarea, Button, KeyValueEditor } from "../commons"
+import {
+    Select,
+    JsonTextarea,
+    Button,
+    KeyValueEditor,
+    HighlightKeys
+} from "../commons"
 import { useState } from "react"
 import { PathInput } from "./PathInput"
 import { headerContentTypes, requestHeaderOptions } from "../../util"
@@ -102,11 +108,6 @@ const RequestBuilder = () => {
     }
 
     const emptyValue = "<Enter Value>"
-    const headerPreview = Object.entries(headers.values)
-        .filter(([key, { value }]) => value !== emptyValue)
-        .map(([key, { value }]) => `${key}: ${value}`)
-        .join(", ")
-
     return (
         <div className="w-1/2 h-full bg-gray-800 p-4 flex flex-col gap-4">
             <div className="text-white text-2xl">Request Builder</div>
@@ -116,7 +117,12 @@ const RequestBuilder = () => {
                 {/* Path */}
                 <div className="flex items-center gap-1">
                     <span className="text-white">Path: </span>
-                    <PathInput sendPathToParent={handlePathChange} />
+                    <input
+                        value={path}
+                        onChange={(e) => handlePathChange(e.target.value)}
+                        className="ml-1 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
+                    />
+                    {/* <PathInput sendPathToParent={handlePathChange} /> */}
                 </div>
             </div>
             {/* Header */}
@@ -140,7 +146,7 @@ const RequestBuilder = () => {
                 ) : (
                     <div className="text-white bg-gray-700 p-2 rounded text-sm text-left">
                         <span className="truncate block overflow-hidden whitespace-nowrap">
-                            {headerPreview}
+                            <HighlightKeys obj={headers.values} />
                         </span>
                     </div>
                 )}
@@ -169,13 +175,13 @@ const RequestBuilder = () => {
                         </div>
                         {isJson ? (
                             <div className="text-sm p-1">
-                                {jsonIsValid ? (
+                                {jsonIsValid || body === "" ? (
                                     <div className="text-green-700">
-                                        Valid JSON
+                                        Valid Body
                                     </div>
                                 ) : (
                                     <div className="text-red-700">
-                                        Invalid JSON
+                                        Invalid Body
                                     </div>
                                 )}
                             </div>
@@ -211,7 +217,9 @@ const RequestBuilder = () => {
             {method &&
             path &&
             Object.keys(headers.values).length !== 0 &&
-            (method === "post" && isJson ? jsonIsValid : true) ? (
+            (method === "post" && isJson
+                ? jsonIsValid || body === ""
+                : true) ? (
                 <Button onClick={handleSubmit} mode="active" label="Submit" />
             ) : null}
         </div>
