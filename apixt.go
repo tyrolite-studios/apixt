@@ -267,8 +267,14 @@ func dumpJsHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		panic("No apixt js!")
 	}
+	jsonConfig, err := json.Marshal(currConfig)
+	if err != nil {
+		panic("Could not generate config json")
+	}
 
-	body += "; window.runApiExtender({})"
+	body += "; window.runApiExtender("
+	body += string(jsonConfig)
+	body += ")"
 
 	w.Write([]byte(body))
 }
@@ -277,7 +283,11 @@ func sendAuthReponse(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "text/json")
 	w.WriteHeader(http.StatusOK)
 
-	body := `{"jwt": "` + jwt + `", "config": {"user ": "mstein"}}`
+	jsonConfig, err := json.Marshal(currConfig)
+	if err != nil {
+		panic("Could not generate config json")
+	}
+	body := `{"jwt": "` + jwt + `", "config": ` + string(jsonConfig) + `}`
 
 	w.Write([]byte(body))
 

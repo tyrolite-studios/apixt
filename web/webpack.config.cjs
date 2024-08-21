@@ -220,8 +220,8 @@ const webpackConfigs = isDist
           getWebpackConfig("index", [
               loginEntry,
               indexEntry,
-              // path.resolve(baseDir, "src/dev/init.js"),
-              path.resolve(baseDir, "src/dev-plugins.js")
+              path.resolve(baseDir, "src/dev-plugins.js"),
+              path.resolve(baseDir, "src/dev/init.js")
           ])
       ]
 

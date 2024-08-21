@@ -79,7 +79,7 @@ class AbstractPlugin {
                     key={id}
                     name={name}
                     onClick={() => {
-                        const handler = this._buttonHandler[props.id]
+                        const handler = this._buttonHandler[id]
                         if (!handler) return
 
                         handler({ plugin: this, ...props })

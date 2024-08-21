@@ -26,6 +26,7 @@ class Plugin extends AbstractPlugin {
             isActive: ({ hash }) => !!hash
         })
         this.setButtonHandler("halt", ({ ctx, hash }) => {
+            d(999)
             ctx.haltContentStream(hash)
         })
     }

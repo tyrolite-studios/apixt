@@ -1,7 +1,4 @@
-import { useState, useEffect } from "react"
-import { Input } from "./form"
 import { BrowserStorage } from "core/storage"
-import { d } from "core/helper"
 
 const url = new URL(window.location.href)
 url.search = ""
@@ -10,9 +7,6 @@ const baseUrl = url.toString()
 let storage = null
 
 function LoginApp({ config }) {
-    const [username, setUsername] = useState("")
-    const [password, setPassword] = useState("")
-
     if (storage === null) {
         storage = BrowserStorage(localStorage, "tls.apixt.")
     }
@@ -46,7 +40,7 @@ function LoginApp({ config }) {
         return true
     }
 
-    useEffect(() => {
+    const autoRefresh = () => {
         window.clearJwt = clearJwt
 
         const jwt = storage.getJson("jwt")
@@ -75,7 +69,7 @@ function LoginApp({ config }) {
                 initApiExtender(config)
             })
             .catch(clearJwt)
-    }, [])
+    }
 
     const login = function (e) {
         if (checkDevLogin()) return
@@ -103,48 +97,36 @@ function LoginApp({ config }) {
             .catch(clearJwt)
     }
 
-    return (
-        <div className="full bg-app-bg text-app-text">
-            <div className="grid place-content-center h-full">
-                <form id="login-form" className="text-center" onSubmit={login}>
-                    <div className="stack-v gap-2 border-header-border border shadow-md">
-                        <div className="bg-header-bg text-header-text px-2">
-                            Login
-                        </div>
+    document.body.innerHTML =
+        '<div class="full bg-app-bg text-app-text">' +
+        '<div class="grid place-content-center h-full">' +
+        '<form id="login-form" class="text-center" onSubmit={login}>' +
+        '<div class="stack-v gap-2 border-header-border border shadow-md">' +
+        '<div class="bg-header-bg text-header-text px-2">' +
+        "Login" +
+        "</div>" +
+        '<div class="stack-v gap-2 px-3">' +
+        '<div class="stack-h gap-2">' +
+        '<div class="text-xs">Username:</div>' +
+        '<input id="username" name="username" type="text" />' +
+        "</div>" +
+        '<div class="stack-h gap-2">' +
+        '<div class="text-xs">Password:</div>' +
+        '<input type="password" name="password" />' +
+        "</div>" +
+        '<div class="pb-2">' +
+        '<button class="bg-button-bg text-button-text border border-button-border text-xs px-2">' +
+        "Submit" +
+        "</button>" +
+        "</div>" +
+        "</div>" +
+        "</div>" +
+        "</form>" +
+        "</div>" +
+        "</div>"
 
-                        <div className="stack-v gap-2 px-3">
-                            <div className="stack-h gap-2">
-                                <div className="text-xs">Username:</div>
-                                <Input
-                                    id="username"
-                                    name="username"
-                                    value={username}
-                                    set={setUsername}
-                                    type="text"
-                                />
-                            </div>
-
-                            <div className="stack-h gap-2">
-                                <div className="text-xs">Password:</div>
-                                <Input
-                                    type="password"
-                                    name="password"
-                                    value={password}
-                                    set={setPassword}
-                                />
-                            </div>
-
-                            <div className="pb-2">
-                                <button className="bg-button-bg text-button-text border border-button-border text-xs px-2">
-                                    Submit
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </form>
-            </div>
-        </div>
-    )
+    document.getElementById("login-form").addEventListener("submit", login)
+    autoRefresh()
 }
 
 export { LoginApp }
