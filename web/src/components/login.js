@@ -1,4 +1,5 @@
 import { BrowserStorage } from "core/storage"
+import { d } from "core/helper"
 
 const url = new URL(window.location.href)
 url.search = ""
@@ -44,13 +45,14 @@ function LoginApp({ config }) {
         window.clearJwt = clearJwt
 
         const jwt = storage.getJson("jwt")
-        if (
-            window.loginResponse &&
-            jwt === window.loginResponse.jwt &&
-            checkDevLogin()
-        )
+        if (window.loginResponse) {
+            if (jwt === window.loginResponse.jwt) {
+                checkDevLogin()
+            } else {
+                clearJwt()
+            }
             return
-
+        }
         if (window.runApiExtender || !jwt) return
 
         fetch(baseUrl + "/refresh", {
@@ -72,11 +74,12 @@ function LoginApp({ config }) {
     }
 
     const login = function (e) {
+        e.preventDefault()
+
         if (checkDevLogin()) return
 
         const formData = new FormData(document.getElementById("login-form"))
         const searchParams = new URLSearchParams(formData)
-        e.preventDefault()
 
         fetch(baseUrl, {
             method: "POST",
@@ -100,7 +103,7 @@ function LoginApp({ config }) {
     document.body.innerHTML =
         '<div class="full bg-app-bg text-app-text">' +
         '<div class="grid place-content-center h-full">' +
-        '<form id="login-form" class="text-center" onSubmit={login}>' +
+        '<form id="login-form" class="text-center">' +
         '<div class="stack-v gap-2 border-header-border border shadow-md">' +
         '<div class="bg-header-bg text-header-text px-2">' +
         "Login" +
@@ -108,14 +111,14 @@ function LoginApp({ config }) {
         '<div class="stack-v gap-2 px-3">' +
         '<div class="stack-h gap-2">' +
         '<div class="text-xs">Username:</div>' +
-        '<input id="username" name="username" type="text" />' +
+        '<input id="username" name="username" type="text" autocomplete="username" class="px-2 bg-input-bg text-input-text border-input-border" />' +
         "</div>" +
         '<div class="stack-h gap-2">' +
         '<div class="text-xs">Password:</div>' +
-        '<input type="password" name="password" />' +
+        '<input type="password" name="password" autocomplete="current-password" class="px-2 bg-input-bg text-input-text border-input-border" />' +
         "</div>" +
         '<div class="pb-2">' +
-        '<button class="bg-button-bg text-button-text border border-button-border text-xs px-2">' +
+        '<button type="submit" class="bg-button-bg text-button-text border border-button-border text-xs px-2">' +
         "Submit" +
         "</button>" +
         "</div>" +
@@ -126,7 +129,8 @@ function LoginApp({ config }) {
         "</div>"
 
     document.getElementById("login-form").addEventListener("submit", login)
-    autoRefresh()
+
+    requestAnimationFrame(() => autoRefresh())
 }
 
 export { LoginApp }

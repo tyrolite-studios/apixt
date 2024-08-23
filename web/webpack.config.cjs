@@ -21,15 +21,19 @@ if (!isDist) {
     if (!fs.existsSync(devDir)) {
         fs.mkdirSync(devDir, { recursive: true })
     }
-    const initFilePath = path.resolve(devDir, "init.js")
+    const userFilePath = path.resolve(devDir, "user.js")
 
-    if (!fs.existsSync(initFilePath)) {
+    if (!fs.existsSync(userFilePath)) {
         const fileContent = fs.writeFileSync(
-            initFilePath,
-            `import { runApiExtender } from "../boot"\n` +
-                `\n` +
-                `runApiExtender({ baseUrl: "localhost:8080" })\n` +
-                `\n`
+            userFilePath,
+            `export default ${JSON.stringify(
+                {
+                    jwt: "dev-user",
+                    config: {}
+                },
+                null,
+                4
+            )}`
         )
     }
 }
@@ -220,8 +224,7 @@ const webpackConfigs = isDist
           getWebpackConfig("index", [
               loginEntry,
               indexEntry,
-              path.resolve(baseDir, "src/dev-plugins.js"),
-              path.resolve(baseDir, "src/dev/init.js")
+              path.resolve(baseDir, "src/dev.js")
           ])
       ]
 
