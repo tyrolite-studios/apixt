@@ -277,16 +277,21 @@ function AutoCompleteInput({ defaultValue = "", suggestions = [], onClose }) {
     }
 
     const value = removePrefix(inputValue)
+    const lcValue = value.toLowerCase()
 
     const filteredSuggestions = useMemo(() => {
-        const foundByPrefix = suggestions.filter((rec) =>
-            rec.toLowerCase().startsWith(value.toLowerCase())
-        )
-        const foundByIncludes = suggestions.filter(
-            (rec) =>
+        const foundByPrefix = suggestions.filter((rec) => {
+            const lcRec = rec.toLowerCase()
+            return lcRec.startsWith(lcValue) && lcRec !== lcValue
+        })
+        const foundByIncludes = suggestions.filter((rec) => {
+            const lcRec = rec.toLowerCase()
+            return (
                 !foundByPrefix.includes(rec) &&
-                rec.toLowerCase().includes(value.toLowerCase())
-        )
+                lcRec.includes(lcValue) &&
+                lcRec !== lcValue
+            )
+        })
         const filtered = [
             ...foundByPrefix.map((rec) => "p_" + rec),
             ...foundByIncludes.map((rec) => "i_" + rec)
@@ -331,7 +336,10 @@ function AutoCompleteInput({ defaultValue = "", suggestions = [], onClose }) {
                 }}
                 onFocus={(e) => {
                     if (!clientWidth) setClientWidth(e.target.clientWidth)
-                    if (filteredSuggestions[0].startsWith("p_"))
+                    if (
+                        filteredSuggestions[0] &&
+                        filteredSuggestions[0].startsWith("p_")
+                    )
                         setFirstRecommendation(
                             removePrefix(filteredSuggestions[0])
                         )
@@ -344,6 +352,12 @@ function AutoCompleteInput({ defaultValue = "", suggestions = [], onClose }) {
                     }
                     if (!listActive) return
                     if (e.key === "Enter" || e.key === "ArrowRight") {
+                        if (e.key === "Enter") {
+                            if (optionPointerIndex === -1) {
+                                e.target.blur()
+                                return
+                            }
+                        }
                         if (e.key === "ArrowRight") {
                             if (
                                 showFirstRecommendation !==

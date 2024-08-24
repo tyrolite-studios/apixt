@@ -7,7 +7,11 @@ import {
 } from "../commons"
 import { useState } from "react"
 import { PathInput } from "./PathInput"
-import { headerContentTypes, requestHeaderOptions } from "../../util"
+import {
+    headerContentTypes,
+    requestHeaderOptions,
+    isValidJson
+} from "../../util"
 
 const RequestBuilder = () => {
     const [method, setMethod] = useState("post")
@@ -32,8 +36,7 @@ const RequestBuilder = () => {
         suggestions: Object.keys(requestHeaderOptions)
     })
     const [body, setBody] = useState("")
-    const [jsonTextValue, setJsonTextValue] = useState("")
-    const [RawTextValue, setRawTextValue] = useState("")
+    const [bodyValue, setBodyValue] = useState("")
     const [bodyDisabled, setBodyDisabled] = useState(false)
     const [isJson, setIsJson] = useState(true)
     const [jsonIsValid, setJsonIsValid] = useState(false)
@@ -161,7 +164,8 @@ const RequestBuilder = () => {
                                 mode={isJson ? "active" : "normal"}
                                 onClick={() => {
                                     isJson ? null : setIsJson(true)
-                                    setBody(jsonTextValue)
+                                    setJsonIsValid(isValidJson(bodyValue))
+                                    setBody(bodyValue)
                                 }}
                             />
                             <Button
@@ -169,7 +173,7 @@ const RequestBuilder = () => {
                                 mode={!isJson ? "active" : "normal"}
                                 onClick={() => {
                                     !isJson ? null : setIsJson(false)
-                                    setBody(RawTextValue)
+                                    setBody(bodyValue)
                                 }}
                             />
                         </div>
@@ -195,9 +199,9 @@ const RequestBuilder = () => {
                                 }
                                 sendTextareaValueToParent={(val) => {
                                     setBody(val)
-                                    setJsonTextValue(val)
+                                    setBodyValue(val)
                                 }}
-                                value={jsonTextValue}
+                                value={bodyValue}
                             />
                         ) : (
                             <textarea
@@ -205,9 +209,9 @@ const RequestBuilder = () => {
                                 placeholder="Enter text"
                                 onChange={(e) => {
                                     setBody(e.target.value)
-                                    setRawTextValue(e.target.value)
+                                    setBodyValue(e.target.value)
                                 }}
-                                value={RawTextValue}
+                                value={bodyValue}
                             />
                         )}
                     </div>
