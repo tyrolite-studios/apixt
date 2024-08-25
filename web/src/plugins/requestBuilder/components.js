@@ -115,7 +115,6 @@ const RequestBuilder = () => {
     const emptyValue = "<Enter Value>"
     return (
         <div className="w-1/2 h-full bg-gray-800 p-4 flex flex-col gap-4">
-            <div className="text-white text-2xl">Request Builder</div>
             <div className="text-white flex flex-row justify-normal items-center py-4 gap-4 text-sm">
                 {/* Method selection */}
                 <Select {...selectProps} />
@@ -242,7 +241,11 @@ function RequestBuilderWindow({ plugin }) {
     }, [])
 
     return (
-        <RequestBuilderModal.content name="History" width="70%" height="100%">
+        <RequestBuilderModal.content
+            name="Query Builder"
+            width="70%"
+            height="100%"
+        >
             <RequestBuilder />
         </RequestBuilderModal.content>
     )
