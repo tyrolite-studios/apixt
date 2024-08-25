@@ -1,4 +1,4 @@
-import React, { useState, useRef, act } from "react"
+import React, { useRef } from "react"
 
 /*
 Die Komponente hat noch unschöne Lösungen

@@ -1,12 +1,14 @@
+import { useEffect } from "react"
+import { useModalWindow } from "components/modal"
 import {
     Select,
     JsonTextarea,
     Button,
     KeyValueEditor,
     HighlightKeys
-} from "../commons"
+} from "components/commons"
 import { useState } from "react"
-import { PathInput } from "./PathInput"
+import { PathInput } from "./path-input"
 import {
     headerContentTypes,
     requestHeaderOptions,
@@ -229,4 +231,21 @@ const RequestBuilder = () => {
         </div>
     )
 }
-export { RequestBuilder }
+
+function RequestBuilderWindow({ plugin }) {
+    const RequestBuilderModal = useModalWindow()
+
+    useEffect(() => {
+        plugin.setButtonHandler("builder", () => {
+            RequestBuilderModal.open({})
+        })
+    }, [])
+
+    return (
+        <RequestBuilderModal.content name="History" width="70%" height="100%">
+            <RequestBuilder />
+        </RequestBuilderModal.content>
+    )
+}
+
+export { RequestBuilderWindow }
