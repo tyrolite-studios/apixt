@@ -9,7 +9,7 @@
         {{ .JS }}
     </script>
     <script type="text/javascript">
-        window.runLoginApp({{ .Config }})
+        window.controller.startApp("login", {{ .Config }})
     </script>
 </head>
     

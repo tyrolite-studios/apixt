@@ -3,16 +3,19 @@ import { useModalWindow } from "./modal"
 import { PluginRegistry } from "core/plugin"
 import { Settings } from "./settings"
 import { d } from "core/helper"
+import { useContext } from "react"
+import { AppContext } from "./context"
+import { Icon } from "./layout"
+
+const controller = window.controller
 
 function Header() {
+    const aCtx = useContext(AppContext)
     const SettingsWindow = useModalWindow()
 
     const logout = () => {
-        window.clearJwt()
-        window.destroyApiExtender()
-        requestAnimationFrame(() => {
-            window.runLoginApp()
-        })
+        controller.clearJwt()
+        controller.startApp("login")
     }
 
     return (
@@ -27,6 +30,10 @@ function Header() {
                 <div className="auto" />
 
                 <ButtonGroup>
+                    <div className="stack-h text-header-text text-xs gap-1">
+                        <Icon name="person" className="text-xl" />
+                        <div className="">{aCtx.config.username}</div>
+                    </div>
                     <Button
                         icon="build"
                         name="Settings"

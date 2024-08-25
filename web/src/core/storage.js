@@ -1,4 +1,4 @@
-import { d, isString } from "./helper"
+import { isString } from "./helper"
 
 /**
  * Returns a boolean whether the given exception represents a quota exceeded on a browser storage or not
@@ -59,7 +59,9 @@ const BrowserStorage = (storage, prefix = "") => {
 
         set: (id, value) => {
             if (!isString(value))
-                throw Error(`value for id "${id}" to a string`)
+                throw Error(
+                    `Expected value for id "${id}" to be a string but got ${typeof value}`
+                )
 
             try {
                 storage.setItem(prefix + id, value)

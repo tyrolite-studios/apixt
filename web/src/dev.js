@@ -1,4 +1,13 @@
 import "plugins/fakeRequests/plugin"
-import loginResponse from "./dev/user.js"
+import controller from "core/controller"
+import devConfig from "./dev/config.js"
 
-window.loginResponse = loginResponse
+const { jwt, config } = devConfig
+controller.fixJwt = jwt
+
+controller.setAppOverwrites("apixt", config)
+controller.startApp("login", {
+    apiId: config.apiId,
+    permanent: config.permanent,
+    storePrefix: config.storePrefix
+})

@@ -13,6 +13,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/golang-jwt/jwt/v5"
 )
 
 var html_body string
@@ -29,17 +31,28 @@ type arg interface{}
 const DUMP_PARAM = "dump"
 const STOP_NEXT_PREFIX = "-"
 
+var jwtKey []byte
+
 type Credentials struct {
-	Username string
-	Password string
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+type Claims struct {
+	Username string `json:"username"`
+	jwt.RegisteredClaims
 }
 
 type ApixtConfig struct {
-	BaseUrl    string   `json:"baseUrl"`
-	DumpPath   string   `json:"dumpPath"`
-	Routes     []string `json:"routes"`
-	DumpHeader string   `json:"dumpHeader"`
-	Users      []Credentials
+	ApiId       string        `json:"apiId"`
+	Permanent   bool          `json:"permanent"`
+	BaseUrl     string        `json:"-"`
+	DumpPath    string        `json:"dumpPath"`
+	Routes      []string      `json:"routes"`
+	DumpHeader  string        `json:"dumpHeader"`
+	StorePrefix string        `json:"storePrefix"`
+	JwtSecret   string        `json:"-"`
+	Users       []Credentials `json:"-"`
 }
 
 var currConfig ApixtConfig
@@ -228,16 +241,28 @@ func GetResolvedTemplate() (string, error) {
 		return "", err
 	}
 
-	configJSON, err := json.Marshal(currConfig)
+	bootConfig := struct {
+		ApiId        string `json:"apiId"`
+		Permanent    bool   `json:"permanent"`
+		JwtCookieKey string `json:"jwtCookieKey"`
+		StorePrefix  string `json:"storePrefix"`
+	}{
+		ApiId:        currConfig.ApiId,
+		Permanent:    currConfig.Permanent,
+		JwtCookieKey: jwtCookie,
+		StorePrefix:  currConfig.StorePrefix,
+	}
+
+	bootConfigJSON, err := json.Marshal(bootConfig)
 	if err != nil {
 		fmt.Println("Error converting to JSON:", err)
 	}
 
 	data := PageData{
-		Title:  "My Page",
+		Title:  "Login",
 		CSS:    template.CSS(string(css)),
 		JS:     template.JS(string(js)),
-		Config: template.JS(string(configJSON)),
+		Config: template.JS(string(bootConfigJSON)),
 	}
 
 	var renderedTemplate bytes.Buffer
@@ -247,16 +272,47 @@ func GetResolvedTemplate() (string, error) {
 	return renderedTemplate.String(), nil
 }
 
-var jwtCookie = "tls.apixt.jwt"
-var jwt string = "uwhbwe23we23"
+var jwtCookie string
+
+func getClaimFromToken(token string) (Claims, error) {
+	claims := &Claims{}
+
+	tkn, err := jwt.ParseWithClaims(token, claims, func(token *jwt.Token) (interface{}, error) {
+		return jwtKey, nil
+	})
+	if err != nil {
+		return *claims, err
+	}
+	if !tkn.Valid {
+		return *claims, err
+	}
+	return *claims, nil
+}
+
+func getConfigJson(username string) (string, error) {
+	type configWithUsername struct {
+		ApixtConfig
+		Username string `json:"username"`
+	}
+	rawConfig := configWithUsername{
+		ApixtConfig: currConfig,
+		Username:    username,
+	}
+	jsonConfig, err := json.Marshal(rawConfig)
+	if err != nil {
+		return "", err
+	}
+	return string(jsonConfig), nil
+
+}
 
 func dumpJsHandler(w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie(jwtCookie)
-	validated := false
-	if err == nil && cookie.Value == jwt {
-		validated = true
+	validated := true
+	claim, err := getClaimFromToken(cookie.Value)
+	if err != nil {
+		validated = false
 	}
-
 	if !validated {
 		w.WriteHeader(http.StatusUnauthorized)
 		return
@@ -267,39 +323,60 @@ func dumpJsHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		panic("No apixt js!")
 	}
-	jsonConfig, err := json.Marshal(currConfig)
+
+	configJson, err := getConfigJson(claim.Username)
 	if err != nil {
 		panic("Could not generate config json")
 	}
-
-	body += "; window.runApiExtender("
-	body += string(jsonConfig)
+	body += "; controller.startApp('apixt', "
+	body += configJson
 	body += ")"
 
 	w.Write([]byte(body))
 }
 
-func sendAuthReponse(w http.ResponseWriter) {
+func sendAuthReponse(w http.ResponseWriter, creds Credentials) {
+
+	expirationTime := time.Now().Add(5 * time.Minute)
+	claims := &Claims{
+		Username: creds.Username,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(expirationTime),
+		},
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err := token.SignedString(jwtKey)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
 	w.Header().Set("Content-Type", "text/json")
 	w.WriteHeader(http.StatusOK)
 
-	jsonConfig, err := json.Marshal(currConfig)
+	configJson, err := getConfigJson(creds.Username)
 	if err != nil {
 		panic("Could not generate config json")
 	}
-	body := `{"jwt": "` + jwt + `", "config": ` + string(jsonConfig) + `}`
+	body := `{"jwt": "` + tokenString + `", "config": ` + configJson + `}`
 
 	w.Write([]byte(body))
-
 }
 
 func refreshHandler(w http.ResponseWriter, r *http.Request) {
-	bearer := r.Header.Get("Authorization")
-	if bearer != "Bearer "+jwt {
+	headerValue := r.Header.Get("Authorization")
+	parts := strings.Fields(headerValue)
+
+	if len(parts) != 2 || parts[0] != "Bearer" {
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
-	sendAuthReponse(w)
+	claim, err := getClaimFromToken(parts[1])
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+	sendAuthReponse(w, Credentials{Username: claim.Username})
 }
 
 func loginHandler(w http.ResponseWriter, r *http.Request) {
@@ -312,9 +389,8 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 
 	for _, user := range currConfig.Users {
 		if user.Username == username && user.Password == password {
-			sendAuthReponse(w)
+			sendAuthReponse(w, user)
 			return
-
 		}
 	}
 	w.WriteHeader(http.StatusUnauthorized)
@@ -332,6 +408,8 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 
 func Init(oldHandler *http.ServeMux, config ApixtConfig) *Dmux {
 	currConfig = config
+	jwtCookie = currConfig.StorePrefix + config.ApiId + ".jwt"
+	jwtKey = []byte(currConfig.JwtSecret)
 
 	if html_body == "" {
 		body, err := GetResolvedTemplate()

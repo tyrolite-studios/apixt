@@ -103,6 +103,31 @@ html, body {
     box-shadow: 5px 5px 5px #00000088;
 }
 
+.shake-anim {
+    animation: shake 0.5s ease-in-out 0s 2;
+}
+
+@keyframes shake {
+    0% {
+        margin-left: 0rem;
+    }
+    12% {
+        margin-left: 1.5rem;
+    }
+    25% {
+        margin-left: -1.5rem;
+    }
+    50% {
+        margin-left: 0rem;
+    }
+    65% {
+        margin-left: 1.0rem;
+    }
+    80% {
+        margin-left: -1.0rem;
+    }
+}
+
 .lds-dual-ring {
     display: inline-block;
     width: 100%;
