@@ -4,6 +4,7 @@ import { AppCtx } from "components/context"
 import { createRoot } from "react-dom/client"
 import controller from "core/controller"
 import { Button, Input } from "./components/form"
+import { useModalWindow } from "./components/modal"
 
 function Section({ name, samples }) {
     const elems = []
@@ -40,6 +41,17 @@ function GetInput({ ...props }) {
     return <Input value={value} set={setValue} {...props} />
 }
 
+function GetModal({ children, ...props }) {
+    const ModalWindow = useModalWindow()
+
+    return (
+        <>
+            <Button name="open" onClick={() => ModalWindow.open()} />
+            <ModalWindow.content {...props}>{children}</ModalWindow.content>
+        </>
+    )
+}
+
 function Content({}) {
     return (
         <div className="full bg-app-bg text-app-text">
@@ -73,8 +85,12 @@ function Content({}) {
                 samples={[
                     {
                         name: "Modal (auto-size)",
-                        code: "<MyModal.Content>Hello!</MyModal.Content>",
-                        elem: <Button name="Open" />
+                        code: '<MyModal.content name="Test Modal">Hello here is long text!</MyModal.content>',
+                        elem: (
+                            <GetModal name="Test Modal">
+                                Hello here is long text!
+                            </GetModal>
+                        )
                     }
                 ]}
             />
