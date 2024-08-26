@@ -6,7 +6,8 @@
   "main": "index.js",
   "scripts": {
     "build": "webpack",
-    "dev": "nodemon -q -w web/src -e cjs,js,html,css --exec webpack-dev-server",
+    "ui": "webpack-dev-server --config webpack.ui.config.cjs",
+    "dev": "webpack-dev-server",
     "test": "node --experimental-vm-modules ./node_modules/.bin/jest --config jest.config.js --coverage"
   },
   "author": "TyroLite Studios",
@@ -30,7 +31,6 @@
     "jest-expect-message": "^1.1.3",
     "jest-extended": "^4.0.2",
     "mini-css-extract-plugin": "^2.9.0",
-    "nodemon": "^3.1.4",
     "postcss": "^8.4.39",
     "postcss-loader": "^8.1.1",
     "prettier": "3.3.2",

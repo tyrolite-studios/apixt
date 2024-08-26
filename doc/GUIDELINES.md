@@ -53,9 +53,14 @@ TODO
 ```
 npm run dev
 ```
-Runs a development version of the API extender which doesn't need a host API but is initialized using the file `dev/init.js` which is created automatically on the first run. You can simulate API responses in this file to develop your features (TBD)
+Runs a development version of the API extender which doesn't need a host API. The application is initialized with the config in `dev/config.js` which is created automatically on the first run. You can edit This config file to simulate different features 
 
 ```
 npm run build
 ```
-Builds the minimized files `dist/apixt.js` and `dist/apixt.css` which are used as templates for the host API
+Builds the minimized files `dist/apixt.js` and `dist/apixt.css` which can be used by a host API
+
+```
+npm run ui
+```
+Opens the UI showroom with examples of the UI components

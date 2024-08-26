@@ -4,13 +4,15 @@ import { Icon } from "./layout"
 import { ClassNames, d } from "core/helper"
 import { HighlightMatches } from "./common"
 
-function Button({ name, onClick, icon, value, current, className }) {
+function Button({ name, onClick, icon, value, current, disabled, className }) {
     const aContext = useContext(AppContext)
     const [clicked, setClicked] = useState(false)
 
-    const cls = new ClassNames(
-        "text-xs border py-0 px-2 hover:brightness-110 focus:outline-none focus:ring focus:ring-focus-border",
-        className
+    const cls = new ClassNames("text-xs border py-0 px-2", className)
+    cls.addIf(
+        disabled,
+        "opacity-50",
+        "hover:brightness-110 focus:outline-none focus:ring focus:ring-focus-border"
     )
     cls.addIf(
         (value === undefined && clicked) ||
@@ -21,6 +23,7 @@ function Button({ name, onClick, icon, value, current, className }) {
     return (
         <button
             className={cls.value}
+            disabled={disabled}
             onMouseDown={(e) => {
                 aContext.startExclusiveMode("clicked", "pointer")
                 aContext.addEventListener(

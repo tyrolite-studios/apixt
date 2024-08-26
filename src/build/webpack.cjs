@@ -92,6 +92,7 @@ const devtool = isDist ? undefined : "eval-cheap-source-map"
 
 const indexEntry = path.resolve(baseDir, "src/index.js")
 const apixtEntry = path.resolve(baseDir, "src/apixt.js")
+const uiEntry = path.resolve(baseDir, "src/ui.js")
 
 const optimization = !isDist
     ? {
@@ -206,17 +207,23 @@ const getWebpackConfig = (name, entryFiles) => {
     return webpackConfig
 }
 
-const webpackConfigs = isDist
-    ? [
-          getWebpackConfig("index", { index: indexEntry }),
-          getWebpackConfig("apixt", { apixt: apixtEntry })
-      ]
-    : [
-          getWebpackConfig("index", [
-              indexEntry,
-              apixtEntry,
-              path.resolve(baseDir, "src/dev.js")
-          ])
-      ]
+const getWebpackConfigs = (target) => {
+    if (target === "ui") {
+        return getWebpackConfig("index", { index: uiEntry })
+    }
+    if (isDist) {
+        return [
+            getWebpackConfig("index", { index: indexEntry }),
+            getWebpackConfig("apixt", { apixt: apixtEntry })
+        ]
+    }
+    return [
+        getWebpackConfig("index", [
+            indexEntry,
+            apixtEntry,
+            path.resolve(baseDir, "src/dev.js")
+        ])
+    ]
+}
 
-module.exports = webpackConfigs
+module.exports = getWebpackConfigs
