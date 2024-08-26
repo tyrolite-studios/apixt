@@ -4,7 +4,7 @@ import { Icon } from "./layout"
 import { ClassNames, d } from "core/helper"
 import { HighlightMatches } from "./common"
 
-function Button({ name, onClick, icon, className }) {
+function Button({ name, onClick, icon, value, current, className }) {
     const aContext = useContext(AppContext)
     const [clicked, setClicked] = useState(false)
 
@@ -13,7 +13,8 @@ function Button({ name, onClick, icon, className }) {
         className
     )
     cls.addIf(
-        clicked,
+        (value === undefined && clicked) ||
+            (value !== undefined && value === current),
         "bg-active-bg text-active-text border-active-border",
         "bg-button-bg text-button-text border-button-border"
     )
@@ -44,36 +45,44 @@ function Button({ name, onClick, icon, className }) {
     )
 }
 
+const emptyValue = "<Enter Value>"
+
 /**
  *
  * @param {*} recommendations Options of Autocomplete as an array
  * @returns
  */
-function AutoCompleteInput({ recommendations }) {
-    const [inputValue, setInputValue] = useState("")
+function AutoCompleteInput({ defaultValue = "", suggestions = [], onClose }) {
+    const [inputValue, setInputValue] = useState(defaultValue)
     const [firstRecommendation, setFirstRecommendation] = useState("")
     const [showFirstRecommendation, setShowFirstRecommendation] = useState(true)
     const [listActive, setListActive] = useState(false)
     const [optionPointerIndex, setOptionPointerIndex] = useState(-1)
-    const [scrollWidth, setScrollWidth] = useState(null)
+    const [clientWidth, setClientWidth] = useState(null)
     const optionsRef = useRef(null)
 
     const removePrefix = (value) => {
-        return value ? value.replace(/p_|i_/g, "") : value
+        return value && typeof value === "string"
+            ? value.replace(/p_|i_/g, "")
+            : value
     }
 
     const value = removePrefix(inputValue)
-    const emptyValue = "<Enter Value>"
+    const lcValue = value.toLowerCase()
 
-    const filteredRecommendations = useMemo(() => {
-        const foundByPrefix = recommendations.filter((rec) =>
-            rec.toLowerCase().startsWith(value.toLowerCase())
-        )
-        const foundByIncludes = recommendations.filter(
-            (rec) =>
+    const filteredSuggestions = useMemo(() => {
+        const foundByPrefix = suggestions.filter((rec) => {
+            const lcRec = rec.toLowerCase()
+            return lcRec.startsWith(lcValue) && lcRec !== lcValue
+        })
+        const foundByIncludes = suggestions.filter((rec) => {
+            const lcRec = rec.toLowerCase()
+            return (
                 !foundByPrefix.includes(rec) &&
-                rec.toLowerCase().includes(value.toLowerCase())
-        )
+                lcRec.includes(lcValue) &&
+                lcRec !== lcValue
+            )
+        })
         const filtered = [
             ...foundByPrefix.map((rec) => "p_" + rec),
             ...foundByIncludes.map((rec) => "i_" + rec)
@@ -85,16 +94,20 @@ function AutoCompleteInput({ recommendations }) {
         if (inputValue !== "" && !listActive) setListActive(true)
         let recommendation = ""
         if (
-            filteredRecommendations.length > 0 &&
-            !filteredRecommendations[0].startsWith("i_")
+            filteredSuggestions.length > 0 &&
+            !filteredSuggestions[0].startsWith("i_")
         ) {
             recommendation =
-                value +
-                removePrefix(filteredRecommendations[0]).slice(value.length)
+                value + removePrefix(filteredSuggestions[0]).slice(value.length)
         }
         if (inputValue !== "" || (inputValue === "" && listActive))
             setFirstRecommendation(recommendation)
         setOptionPointerIndex(-1)
+        if (
+            filteredSuggestions.length === 1 &&
+            removePrefix(filteredSuggestions[0]) === value
+        )
+            setListActive(false)
     }, [inputValue])
 
     return (
@@ -106,26 +119,48 @@ function AutoCompleteInput({ recommendations }) {
                     setInputValue(e.target.value)
                     if (
                         showFirstRecommendation !==
-                        (scrollWidth === e.target.scrollWidth)
+                        (clientWidth === e.target.scrollWidth)
                     )
                         setShowFirstRecommendation(
-                            scrollWidth === e.target.scrollWidth
+                            clientWidth === e.target.scrollWidth
                         )
                 }}
                 onFocus={(e) => {
-                    if (!scrollWidth) setScrollWidth(e.target.scrollWidth)
-                    if (filteredRecommendations[0].startsWith("p_"))
+                    if (!clientWidth) setClientWidth(e.target.clientWidth)
+                    if (
+                        filteredSuggestions[0] &&
+                        filteredSuggestions[0].startsWith("p_")
+                    )
                         setFirstRecommendation(
-                            removePrefix(filteredRecommendations[0])
+                            removePrefix(filteredSuggestions[0])
                         )
                     setListActive(true)
                 }}
                 onKeyDown={(e) => {
+                    if (e.key === "Enter" && !listActive) {
+                        //Hier benutzt er dann alle funktionen vom onBlur, sollte man vllt schöner lösen?
+                        e.target.blur()
+                    }
                     if (!listActive) return
                     if (e.key === "Enter" || e.key === "ArrowRight") {
+                        if (e.key === "Enter") {
+                            if (optionPointerIndex === -1) {
+                                e.target.blur()
+                                return
+                            }
+                        }
+                        if (e.key === "ArrowRight") {
+                            if (
+                                showFirstRecommendation !==
+                                (clientWidth === e.target.scrollWidth)
+                            )
+                                setShowFirstRecommendation(
+                                    clientWidth === e.target.scrollWidth
+                                )
+                        }
                         if (
                             optionPointerIndex === -1 ||
-                            filteredRecommendations[optionPointerIndex] ===
+                            filteredSuggestions[optionPointerIndex] ===
                                 firstRecommendation
                         ) {
                             if (
@@ -134,22 +169,22 @@ function AutoCompleteInput({ recommendations }) {
                                 firstRecommendation
                             ) {
                                 setInputValue(
-                                    removePrefix(filteredRecommendations[0])
+                                    removePrefix(filteredSuggestions[0])
                                 )
                                 setListActive(false)
                             }
                         } else {
                             setInputValue(
                                 removePrefix(
-                                    filteredRecommendations[optionPointerIndex]
+                                    filteredSuggestions[optionPointerIndex]
                                 )
                             )
                             setListActive(false)
                         }
                     } else if (e.key === "ArrowDown") {
-                        if (filteredRecommendations.length === 0) return
+                        if (filteredSuggestions.length === 0) return
                         const newIndex = optionPointerIndex + 1
-                        if (filteredRecommendations.length <= newIndex) return
+                        if (filteredSuggestions.length <= newIndex) return
 
                         const el = optionsRef.current.children[newIndex]
                         if (el)
@@ -159,19 +194,19 @@ function AutoCompleteInput({ recommendations }) {
                             })
                         setOptionPointerIndex(newIndex)
 
-                        const recommendationValue = filteredRecommendations[
+                        const recommendationValue = filteredSuggestions[
                             newIndex
                         ].startsWith("p_")
                             ? inputValue +
-                              removePrefix(
-                                  filteredRecommendations[newIndex]
-                              ).slice(inputValue.length)
+                              removePrefix(filteredSuggestions[newIndex]).slice(
+                                  inputValue.length
+                              )
                             : ""
 
                         setFirstRecommendation(recommendationValue)
                     } else if (e.key === "ArrowUp") {
                         e.preventDefault()
-                        if (filteredRecommendations.length === 0) return
+                        if (filteredSuggestions.length === 0) return
                         const newIndex = optionPointerIndex - 1
                         if (newIndex < -1) return
                         setOptionPointerIndex(newIndex)
@@ -184,13 +219,13 @@ function AutoCompleteInput({ recommendations }) {
                                 inline: "nearest"
                             })
 
-                        const recommendationValue = filteredRecommendations[
+                        const recommendationValue = filteredSuggestions[
                             newIndex
                         ].startsWith("p_")
                             ? inputValue +
-                              removePrefix(
-                                  filteredRecommendations[newIndex]
-                              ).slice(inputValue.length)
+                              removePrefix(filteredSuggestions[newIndex]).slice(
+                                  inputValue.length
+                              )
                             : ""
 
                         setFirstRecommendation(recommendationValue)
@@ -199,6 +234,8 @@ function AutoCompleteInput({ recommendations }) {
                 onBlur={() => {
                     setFirstRecommendation("")
                     setOptionPointerIndex(-1)
+                    onClose(inputValue)
+                    setInputValue("")
                     setListActive(false)
                 }}
             />
@@ -209,17 +246,17 @@ function AutoCompleteInput({ recommendations }) {
             />
             {listActive &&
                 !(
-                    filteredRecommendations.length === 1 &&
+                    filteredSuggestions.length === 1 &&
                     inputValue === firstRecommendation
                 ) && (
                     <div
                         ref={optionsRef}
                         className="absolute bg-gray-700 border border-gray-500 rounded mt-8 z-10 max-h-48 overflow-auto"
                     >
-                        {filteredRecommendations.map((type, index) => (
+                        {filteredSuggestions.map((type, index) => (
                             <div
                                 key={index}
-                                className={`p-1 cursor-pointer hover:bg-gray-600 text-left ${filteredRecommendations[optionPointerIndex] === type ? "text-red-200" : ""} ${type.startsWith("p_") ? "bg-green-200" : "bg-red-200"}`}
+                                className={`p-1 cursor-pointer hover:bg-gray-600 text-left ${filteredSuggestions[optionPointerIndex] === type ? "text-red-200" : ""} ${type.startsWith("p_") ? "bg-green-200" : "bg-red-200"}`}
                                 onMouseDown={(e) => e.preventDefault()}
                                 onClick={(e) => {
                                     setInputValue(e.target.textContent)
@@ -270,7 +307,13 @@ function TextArea({ className, value }) {
     return <textarea className={cls.value}>{value}</textarea>
 }
 
-function Select({ className, options }) {
+function Select({
+    className,
+    options,
+    defaultValue,
+    onSelect = () => {},
+    disabled = false
+}) {
     const cls = new ClassNames(
         "text-sm text-input-text hover:brightness-110 focus:outline-none focus:ring focus:ring-offset-0 focus:ring-focus-border bg-input-bg border border-input-border px-2",
         className
@@ -283,7 +326,18 @@ function Select({ className, options }) {
             </option>
         )
     }
-    return <select className={cls.value}>{elems}</select>
+    return (
+        <select
+            className={cls.value}
+            disabled={disabled}
+            onChange={(e) => onSelect(e.target.value)}
+            defaultValue={Object.keys(options).find(
+                (option) => option === defaultValue
+            )}
+        >
+            {elems}
+        </select>
+    )
 }
 
 function Checkbox({ value, set, className }) {

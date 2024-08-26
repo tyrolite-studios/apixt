@@ -1,19 +1,14 @@
 import { useEffect } from "react"
 import { useModalWindow } from "components/modal"
-import {
-    Select,
-    JsonTextarea,
-    Button,
-    KeyValueEditor,
-    HighlightKeys
-} from "components/commons"
+import { Select, Button } from "components/form"
+// import { Button } from "components/commons"
+import { KeyValueEditor, HighlightKeys, JsonTextarea } from "components/common"
 import { useState } from "react"
+import { isValidJson, d } from "core/helper"
 import { PathInput } from "./path-input"
-import {
-    headerContentTypes,
-    requestHeaderOptions,
-    isValidJson
-} from "../../util"
+import { headerContentTypes, requestHeaderOptions } from "./helper"
+
+const emptyValue = "<Enter Value>"
 
 const RequestBuilder = () => {
     const [method, setMethod] = useState("post")
@@ -112,9 +107,8 @@ const RequestBuilder = () => {
         onSelect: handleMethodChange
     }
 
-    const emptyValue = "<Enter Value>"
     return (
-        <div className="w-1/2 h-full bg-gray-800 p-4 flex flex-col gap-4">
+        <div className="w-1/2 h-full p-2 flex flex-col gap-4">
             <div className="text-white flex flex-row justify-normal items-center py-4 gap-4 text-sm">
                 {/* Method selection */}
                 <Select {...selectProps} />
@@ -161,8 +155,10 @@ const RequestBuilder = () => {
                     <div className="flex justify-between items-center">
                         <div className="flex">
                             <Button
-                                label="JSON"
-                                mode={isJson ? "active" : "normal"}
+                                name="JSON"
+                                value={true}
+                                current={isJson}
+                                className="not_py-0 not_px-2 py-2 px-4"
                                 onClick={() => {
                                     isJson ? null : setIsJson(true)
                                     setJsonIsValid(isValidJson(bodyValue))
@@ -170,8 +166,10 @@ const RequestBuilder = () => {
                                 }}
                             />
                             <Button
-                                label="Raw"
-                                mode={!isJson ? "active" : "normal"}
+                                name="Raw"
+                                value={false}
+                                current={isJson}
+                                className="not_py-0 not_px-2 py-2 px-4"
                                 onClick={() => {
                                     !isJson ? null : setIsJson(false)
                                     setBody(bodyValue)

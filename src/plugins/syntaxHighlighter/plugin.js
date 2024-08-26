@@ -1,5 +1,5 @@
 import { AbstractPlugin, PluginRegistry } from "core/plugin"
-import { getStringifiedJSON } from "../../util"
+import { getStringifiedJSON } from "./helper"
 import { d } from "core/helper"
 
 class Plugin extends AbstractPlugin {

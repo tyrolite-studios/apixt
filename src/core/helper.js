@@ -155,12 +155,22 @@ class ClassNames {
     }
 }
 
+const isValidJson = (str) => {
+    try {
+        JSON.parse(str)
+        return true
+    } catch (e) {
+        return false
+    }
+}
+
 export {
     d,
     isString,
     isArray,
     isNull,
     isObject,
+    isValidJson,
     extractFullClasses,
     ClassNames
 }
