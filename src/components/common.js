@@ -27,6 +27,35 @@ function useMounted() {
     return mounted
 }
 
+function useExtractDimProps(
+    { width, minWidth, maxWidth, height, minHeight, maxHeight },
+    style = {}
+) {
+    if (width) {
+        style.width = width
+    }
+    if (minWidth) {
+        style.minWidth = maxWidth ? `min(${minWidth}, ${maxWidth})` : minWidth
+    }
+    if (maxWidth) {
+        style.maxWidth = minWidth ? `max(${minWidth}, ${maxWidth})` : maxWidth
+    }
+    if (height) {
+        style.height = height
+    }
+    if (minHeight) {
+        style.minHeight = maxHeight
+            ? `min(${minHeight}, ${maxHeight})`
+            : minHeight
+    }
+    if (maxHeight) {
+        style.maxHeight = minHeight
+            ? `max(${minHeight}, ${maxHeight})`
+            : maxHeight
+    }
+    return style
+}
+
 function DualRing({ size = 48, className }) {
     const cls = new ClassNames("lds-dual-ring", className)
     cls.addIf(size <= 20, "after:border", "after:border-4")
@@ -51,7 +80,7 @@ function LoadingSpinner({ abort, close }) {
             <div>
                 <Button
                     name="Abort"
-                    onClick={() => {
+                    onPressed={() => {
                         abort()
                     }}
                 />
@@ -187,7 +216,7 @@ const KeyValueEditor = ({ object, sendObjectToParent }) => {
                             )
                         ) : (
                             <span
-                                onClick={() => setEditingValue(key)}
+                                onPressed={() => setEditingValue(key)}
                                 className="cursor-pointer flex items-center"
                             >
                                 {key}
@@ -230,7 +259,7 @@ const KeyValueEditor = ({ object, sendObjectToParent }) => {
                                     <Button
                                         icon="delete"
                                         className="text-sm text-red-500 hover:text-red-800 p-1 ml-2"
-                                        onClick={() => handleDeleteKey(key)}
+                                        onPressed={() => handleDeleteKey(key)}
                                     />
                                 </span>
                             )}
@@ -297,6 +326,7 @@ const JsonTextarea = ({
 export {
     useComponentUpdate,
     useMounted,
+    useExtractDimProps,
     HighlightMatches,
     splitByMatch,
     useLoadingSpinner,

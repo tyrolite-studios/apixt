@@ -18,7 +18,7 @@ function HistoryWidget({}) {
                         <div>
                             <Button
                                 icon="edit"
-                                onClick={() =>
+                                onPressed={() =>
                                     routePlugin.openEditor({
                                         route: "/music/data/filter"
                                     })
@@ -33,7 +33,7 @@ function HistoryWidget({}) {
                         <div>
                             <Button
                                 icon="edit"
-                                onClick={() =>
+                                onPressed={() =>
                                     routePlugin.openEditor({
                                         route: "/music.it/filter/genre"
                                     })

@@ -1,48 +1,113 @@
 import { useContext, useState, useMemo, useEffect, useRef } from "react"
 import { AppContext } from "./context"
 import { Icon } from "./layout"
-import { ClassNames, d } from "core/helper"
-import { HighlightMatches } from "./common"
+import { ClassNames, isEventInRect, d } from "core/helper"
+import { HighlightMatches, useMounted, useExtractDimProps } from "./common"
 
-function Button({ name, onClick, icon, value, current, disabled, className }) {
+function Button({
+    name,
+    onPressed,
+    onPressedEnd,
+    icon,
+    value,
+    activated,
+    disabled,
+    reverse,
+    full,
+    sized = true,
+    colored = true,
+    padded = true,
+    styled = true,
+    bordered = true,
+    className,
+    iconClassName,
+    ...props
+}) {
     const aContext = useContext(AppContext)
+    const mounted = useMounted()
     const [clicked, setClicked] = useState(false)
 
-    const cls = new ClassNames("text-xs border py-0 px-2", className)
+    const style = useExtractDimProps(props)
+
+    const cls = new ClassNames("", className)
+    cls.addIf(styled && sized, "text-xs")
+    cls.addIf(styled && padded, "py-0 px-2")
     cls.addIf(
         disabled,
         "opacity-50",
-        "hover:brightness-110 focus:outline-none focus:ring focus:ring-focus-border"
+        styled
+            ? "hover:brightness-110 focus:outline-none focus:ring focus:ring-focus-border"
+            : ""
+    )
+    const isActive =
+        (value === undefined && clicked) ||
+        (value !== undefined && value === activated)
+
+    cls.addIf(
+        isActive && styled && colored,
+        "bg-active-bg text-active-text" +
+            (bordered ? " border-active-border" : "")
     )
     cls.addIf(
-        (value === undefined && clicked) ||
-            (value !== undefined && value === current),
-        "bg-active-bg text-active-text border-active-border",
-        "bg-button-bg text-button-text border-button-border"
+        !isActive && styled && colored,
+        "bg-button-bg text-button-text" +
+            (bordered ? " border-button-border" : "")
     )
+    cls.addIf(styled && bordered, "border")
+    const innerCls = new ClassNames("gap-1 justify-center")
+    innerCls.addIf(reverse, "rstack-h", "stack-h")
+    cls.addIf(full, "w-full")
+
+    const iconCls = new ClassNames("not_leading-none", iconClassName)
+
+    const initPressedHandling = (startEvent, releaseEvent) => {
+        aContext.startExclusiveMode("clicked", "pointer")
+
+        let btnElem = startEvent.target
+        while (btnElem.nodeName !== "BUTTON") btnElem = btnElem.parentNode
+
+        aContext.addEventListener(
+            releaseEvent,
+            (e) => {
+                aContext.endExclusiveMode("clicked")
+                if (!mounted.current) return
+
+                setClicked(false)
+                if (onPressedEnd) {
+                    const outside =
+                        releaseEvent !== "mouseup"
+                            ? false
+                            : !isEventInRect(e, btnElem.getBoundingClientRect())
+                    onPressedEnd(outside)
+                }
+            },
+            { once: true }
+        )
+        startEvent.stopPropagation()
+        startEvent.preventDefault()
+        setClicked(true)
+
+        btnElem.focus()
+
+        if (onPressed) onPressed(startEvent)
+    }
+
     return (
         <button
             className={cls.value}
             disabled={disabled}
-            onMouseDown={(e) => {
-                aContext.startExclusiveMode("clicked", "pointer")
-                aContext.addEventListener(
-                    "mouseup",
-                    (e) => {
-                        aContext.endExclusiveMode("clicked")
-                        setClicked(false)
-                        onClick()
-                    },
-                    { once: true }
-                )
-                e.stopPropagation()
-                e.preventDefault()
-                setClicked(true)
+            style={style}
+            onKeyDown={(e) => {
+                if (e.keyCode !== 32 || clicked) {
+                    return
+                }
+                initPressedHandling(e, "keyup")
             }}
+            onMouseDown={(e) => initPressedHandling(e, "mouseup")}
         >
-            <div className="stack-h gap-1">
-                {name && <div>{name}</div>}
-                {icon && <Icon name={icon} />}
+            <div className={innerCls.value}>
+                {icon && <Icon className={iconCls.value} name={icon} />}
+                {name && <div className="truncate">{name}</div>}
             </div>
         </button>
     )

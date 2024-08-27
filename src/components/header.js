@@ -37,9 +37,14 @@ function Header() {
                     <Button
                         icon="build"
                         name="Settings"
-                        onClick={() => SettingsWindow.open()}
+                        onPressed={() => SettingsWindow.open()}
                     />
-                    <Button icon="logout" onClick={() => logout()} />
+                    <Button
+                        icon="logout"
+                        onPressedEnd={(outside) => {
+                            if (!outside) logout()
+                        }}
+                    />
                 </ButtonGroup>
             </div>
 

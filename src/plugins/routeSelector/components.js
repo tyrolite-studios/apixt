@@ -26,7 +26,7 @@ function RouteSelector({ close, plugin }) {
                     </Div>
                     <Button
                         icon="edit"
-                        onClick={() => plugin.openEditor({ route })}
+                        onPressed={() => plugin.openEditor({ route })}
                     />
                 </div>
             ))}

@@ -23,15 +23,15 @@ class AbstractPlugin {
     }
 
     assertButtonProps(props, registeredIds) {
-        const { id, onClick, name } = props
+        const { id, onPressed, name } = props
 
         let error = null
         if (!id) {
             error = `Button must have an id property with a non-empty value`
         } else if (registeredIds.includes(id)) {
             error = `Button with id "${id}" already exists`
-        } else if (onClick) {
-            error = `Button "${id}" was added with an onClick handler. Please use setButtonHandler("${id}", handler) instead`
+        } else if (onPressed) {
+            error = `Button "${id}" was added with an onPressed handler. Please use setButtonHandler("${id}", handler) instead`
         }
         if (!name) {
             props.name = id
@@ -49,7 +49,7 @@ class AbstractPlugin {
 
         this._headerButtons.push({
             ...props,
-            onClick: () => {
+            onPressed: () => {
                 const handler = this._buttonHandler[props.id]
                 if (!handler) return
 
@@ -78,7 +78,7 @@ class AbstractPlugin {
                 <Button
                     key={id}
                     name={name}
-                    onClick={() => {
+                    onPressed={() => {
                         const handler = this._buttonHandler[id]
                         if (!handler) return
 

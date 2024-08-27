@@ -91,6 +91,15 @@ function isFunction(value) {
     return typeof value === "function"
 }
 
+function isEventInRect(e, rect) {
+    const x = e.clientX
+    const y = e.clientY
+
+    return (
+        x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom
+    )
+}
+
 function extractFullClasses(cls) {
     if (!cls) return []
     const regex = /\b(full|w-full|h-full)\b/g
@@ -171,6 +180,7 @@ export {
     isNull,
     isObject,
     isValidJson,
+    isEventInRect,
     extractFullClasses,
     ClassNames
 }

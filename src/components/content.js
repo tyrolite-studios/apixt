@@ -69,8 +69,8 @@ function ErrorBlock({ msg }) {
             <div className="stack-h gap-2 full-h">
                 <div># Error: {msg}</div>
                 <div className="auto" />
-                <Button name="Retry" onClick={aCtx.restartContentStream} />
-                <Button name="Clear" onClick={aCtx.clearContent} />
+                <Button name="Retry" onPressed={aCtx.restartContentStream} />
+                <Button name="Clear" onPressed={aCtx.clearContent} />
             </div>
         </div>
     )
@@ -83,8 +83,8 @@ function StatusBlock() {
             <div className="stack-h gap-2 full-h">
                 <div># Aborted</div>
                 <div className="auto" />
-                <Button name="Retry" onClick={aCtx.restartContentStream} />
-                <Button name="Clear" onClick={aCtx.clearContent} />
+                <Button name="Retry" onPressed={aCtx.restartContentStream} />
+                <Button name="Clear" onPressed={aCtx.clearContent} />
             </div>
         </div>
     )
@@ -99,15 +99,15 @@ function HaltBlock({ next }) {
                 <div className="auto" />
                 <Button
                     name="Continue"
-                    onClick={() => aCtx.haltContentStream("")}
+                    onPressed={() => aCtx.haltContentStream("")}
                 />
                 {next && (
                     <Button
                         name="Stop at next"
-                        onClick={() => aCtx.haltContentStream(next)}
+                        onPressed={() => aCtx.haltContentStream(next)}
                     />
                 )}
-                <Button name="Clear" onClick={aCtx.clearContent} />
+                <Button name="Clear" onPressed={aCtx.clearContent} />
             </div>
         </div>
     )
@@ -269,7 +269,7 @@ function CodeBlock(props) {
                                 : "keyboard_arrow_up"
                         }
                         className="not_px-2 py-1 px-1"
-                        onClick={toggle}
+                        onPressed={toggle}
                     />
                 </div>
                 <div

@@ -1,5 +1,6 @@
 import React from "react"
 import { ClassNames } from "core/helper"
+import { useExtractDimProps } from "./common"
 
 const getLayoutProps = ({ className, zIndex, cursor, tab, ...props }) => {
     const cls = []
@@ -58,7 +59,7 @@ const Div = React.forwardRef(({ children, ...props }, ref) => {
 })
 
 function Icon({ name, className }) {
-    const cls = new ClassNames("material-icons text-sm", className)
+    const cls = new ClassNames("material-icons leading-none", className)
     return <span className={cls.value}>{name}</span>
 }
 

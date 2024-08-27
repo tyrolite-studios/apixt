@@ -336,7 +336,7 @@ function ModalWindow({
                                 {closeable ? (
                                     <Button
                                         icon="close"
-                                        onClick={(e) => close("click-button")}
+                                        onPressed={(e) => close("click-button")}
                                     />
                                 ) : (
                                     ""

@@ -48,7 +48,7 @@ function PluginsOverview({}) {
             <div className="p-2">
                 <Button
                     name="Default settings"
-                    onClick={() => aCtx.clearSettings()}
+                    onPressed={() => aCtx.clearSettings()}
                 />
             </div>
         </div>

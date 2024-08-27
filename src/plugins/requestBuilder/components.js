@@ -156,10 +156,10 @@ const RequestBuilder = () => {
                         <div className="flex">
                             <Button
                                 name="JSON"
-                                value={true}
-                                current={isJson}
+                                activated={true}
+                                value={isJson}
                                 className="not_py-0 not_px-2 py-2 px-4"
-                                onClick={() => {
+                                onPressed={() => {
                                     isJson ? null : setIsJson(true)
                                     setJsonIsValid(isValidJson(bodyValue))
                                     setBody(bodyValue)
@@ -167,10 +167,10 @@ const RequestBuilder = () => {
                             />
                             <Button
                                 name="Raw"
-                                value={false}
-                                current={isJson}
+                                activated={false}
+                                value={isJson}
                                 className="not_py-0 not_px-2 py-2 px-4"
-                                onClick={() => {
+                                onPressed={() => {
                                     !isJson ? null : setIsJson(false)
                                     setBody(bodyValue)
                                 }}
@@ -223,7 +223,7 @@ const RequestBuilder = () => {
             (method === "post" && isJson
                 ? jsonIsValid || body === ""
                 : true) ? (
-                <Button onClick={handleSubmit} mode="active" label="Submit" />
+                <Button onPressed={handleSubmit} mode="active" label="Submit" />
             ) : null}
         </div>
     )
