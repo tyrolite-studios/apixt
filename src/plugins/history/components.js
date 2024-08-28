@@ -1,4 +1,4 @@
-import { useContext, useEffect } from "react"
+import { useEffect, useState, useMemo } from "react"
 import { useModalWindow } from "components/modal"
 import { PluginRegistry } from "core/plugin"
 import { Button } from "components/form"
@@ -72,8 +72,9 @@ function History({ close }) {
     const { jwt, config } = configFile
     const routes = config.routes
     */
-    const routeSelectorActive = PluginRegistry.isActive("routeSelector")
+    const [routeSearch, setRouteSearch] = useState("")
     const routePlugin = PluginRegistry.getActivePlugin("routeSelector")
+    const routeSelectorActive = routePlugin.active
 
     const exampleRoutes = [
         { method: "POST", route: "/v1/*/*/json" },
@@ -96,50 +97,66 @@ function History({ close }) {
         { method: "GET", route: "blas/json" }
     ]
 
-    const groupedRequests = []
-    const foundRequests = []
+    const [filteredRequests, setFilteredRequests] =
+        useState(exampleLastRequests)
 
-    for (const { method, route } of exampleRoutes) {
-        if (!(method in groupedRequests)) groupedRequests[method] = {}
-        groupedRequests[method][route] = {}
-        const exactMatchIndex = exampleLastRequests.findIndex(
-            (request) => request.method === method && request.route === route
+    const groupedRequests = useMemo(() => {
+        const tmpRequests = []
+        const foundRequests = []
+        for (const { method, route } of exampleRoutes) {
+            if (!(method in tmpRequests)) tmpRequests[method] = {}
+            tmpRequests[method][route] = {}
+            const exactMatchIndex = filteredRequests.findIndex(
+                (request) =>
+                    request.method === method && request.route === route
+            )
+            if (exactMatchIndex !== -1) {
+                tmpRequests[method][route] = {
+                    requests: [filteredRequests[exactMatchIndex].route]
+                }
+                foundRequests.push(filteredRequests[exactMatchIndex].route)
+                continue
+            }
+            const dynamicRoutes = filteredRequests
+                .filter((request) => matchDynamicRoute(request.route, route))
+                .map((request) => request.route)
+            if (dynamicRoutes.length > 0) {
+                tmpRequests[method][route] = {
+                    requests: dynamicRoutes
+                }
+                foundRequests.push(...dynamicRoutes)
+                continue
+            }
+            tmpRequests[method][route] = {
+                requests: []
+            }
+        }
+        const others = filteredRequests.filter(
+            (request) => !foundRequests.includes(request.route)
         )
-        if (exactMatchIndex !== -1) {
-            groupedRequests[method][route] = {
-                requests: [exampleLastRequests[exactMatchIndex].route]
-            }
-            foundRequests.push(exampleLastRequests[exactMatchIndex].route)
-            continue
+        for (const other of others) {
+            if ("" in tmpRequests[other.method])
+                tmpRequests[other.method][""].requests.push(other.route)
+            else
+                tmpRequests[other.method][""] = {
+                    requests: [other.route]
+                }
         }
-        const dynamicRoutes = exampleLastRequests
-            .filter((request) => matchDynamicRoute(request.route, route))
-            .map((request) => request.route)
-        if (dynamicRoutes.length > 0) {
-            groupedRequests[method][route] = {
-                requests: dynamicRoutes
-            }
-            foundRequests.push(...dynamicRoutes)
-            continue
-        }
-        groupedRequests[method][route] = {
-            requests: []
-        }
-    }
-    const others = exampleLastRequests.filter(
-        (request) => !foundRequests.includes(request.route)
-    )
-    for (const other of others) {
-        if ("" in groupedRequests[other.method])
-            groupedRequests[other.method][""].requests.push(other.route)
-        else
-            groupedRequests[other.method][""] = {
-                requests: [other.route]
-            }
-    }
+        return tmpRequests
+    }, [filteredRequests])
 
     return (
         <div className="stack-v p-4">
+            <input
+                defaultValue={routeSearch}
+                onChange={(e) =>
+                    setFilteredRequests(
+                        exampleLastRequests.filter((req) =>
+                            req.route.includes(e.target.value)
+                        )
+                    )
+                }
+            />
             <div>
                 {Object.keys(groupedRequests).map((method) => (
                     <div key={method}>
@@ -147,24 +164,28 @@ function History({ close }) {
                             <div key={route}>
                                 {method} {route === "" ? "" : route}
                                 <div>
-                                    {groupedRequests[method][
-                                        route
-                                    ].requests.map((request, index) => (
-                                        <div key={index}>
-                                            - {request}
-                                            {routeSelectorActive && (
-                                                <Button
-                                                    icon="build"
-                                                    onPressed={() =>
-                                                        routePlugin.openEditor({
-                                                            route: request
-                                                        })
-                                                    }
-                                                />
-                                            )}
-                                            <Button icon="delete" />
-                                        </div>
-                                    ))}
+                                    {groupedRequests[method][route].requests
+                                        .filter((request) =>
+                                            request.includes(routeSearch)
+                                        )
+                                        .map((request, index) => (
+                                            <div key={index}>
+                                                - {request}
+                                                {routeSelectorActive && (
+                                                    <Button
+                                                        icon="build"
+                                                        onPressed={() =>
+                                                            routePlugin.openEditor(
+                                                                {
+                                                                    route: request
+                                                                }
+                                                            )
+                                                        }
+                                                    />
+                                                )}
+                                                <Button icon="delete" />
+                                            </div>
+                                        ))}
                                 </div>
                                 <br />
                             </div>
