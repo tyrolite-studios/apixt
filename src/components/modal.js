@@ -294,7 +294,7 @@ function ModalWindow({
         vDivStyle.maxHeight = null
         vDivStyle.minHeight = null
     } else {
-        vDivStyle.height = "min-content"
+        vDivStyle.height = vDivStyle.height ? vDivStyle.height : "min-content"
     }
     /*
     useHotKeys(dimRef,         {

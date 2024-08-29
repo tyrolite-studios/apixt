@@ -1,6 +1,6 @@
 import { useContext, useState, useMemo, useEffect, useRef } from "react"
 import { AppContext } from "./context"
-import { Icon } from "./layout"
+import { Icon, Div } from "./layout"
 import { ClassNames, isEventInRect, d } from "core/helper"
 import { HighlightMatches, useMounted, useExtractDimProps } from "./common"
 
@@ -89,7 +89,7 @@ function Button({
 
         btnElem.focus()
 
-        if (onPressed) onPressed(startEvent)
+        if (onPressed) onPressed(startEvent, { activated })
     }
 
     return (
@@ -343,9 +343,24 @@ function AutoCompleteInput({ defaultValue = "", suggestions = [], onClose }) {
     )
 }
 
-function ButtonGroup({ className, children }) {
-    const cls = new ClassNames("stack-h gap-2", className)
-    return <div className={cls.value}>{children}</div>
+function ButtonGroup({
+    className,
+    children,
+    gapped = true,
+    wrap = true,
+    ...props
+}) {
+    const style = useExtractDimProps(props)
+
+    const cls = new ClassNames("stack-h", className)
+    cls.addIf(gapped, "gap-2")
+    cls.addIf(wrap, "flex-wrap", "flex-nowrap overflow-auto")
+
+    return (
+        <div tabIndex={0} className={cls.value} style={style}>
+            {children}
+        </div>
+    )
 }
 
 // dummy input elems...
@@ -408,24 +423,158 @@ function Select({
     )
 }
 
-function Checkbox({ value, set, className }) {
+function Checkbox({ value, set, disabled, readOnly, tab = true, className }) {
+    const [clicked, setClicked] = useState(false)
+
+    const aCtx = useContext(AppContext)
     const cls = new ClassNames(
-        "checked:bg-active-bg text-sm text-input-text bg-input-bg hover:brightness-110 focus:outline-none focus:ring focus:ring-offset-0 focus:ring-focus-border bg-input-bg border border-input-border px-1",
+        "text-xs overflow-hidden text-input-text bg-input-bg hover:brightness-110 focus:outline-none focus:ring focus:ring-offset-0 focus:ring-focus-border bg-input-bg border border-input-border",
         className
     )
+    cls.addIf(disabled, "opacity-50")
+    const handleClick = (upEvent) => {
+        aCtx.startExclusiveMode("toggle-bool", "pointer")
+        aCtx.addEventListener(
+            upEvent,
+            () => {
+                aCtx.endExclusiveMode("toggle-bool")
+                setClicked(false)
+            },
+            { once: true }
+        )
+        set(!value)
+        setClicked(true)
+    }
+    const iconCls = new ClassNames("xnot_leading-none font-bold")
+    iconCls.addIf(value, "visible", "invisible")
+
     return (
-        <input
-            type="checkbox"
-            value={value}
-            onChange={(e) => {
-                set(!value)
-            }}
-            checked={value}
+        <Div
+            tab={tab}
+            width="16px"
+            height="16px"
+            cursor={readOnly ? null : "pointer"}
             className={cls.value}
-        />
+            onMouseDown={readOnly ? null : () => handleClick("mouseup")}
+            onKeyDown={
+                readOnly
+                    ? null
+                    : (e) => {
+                          if (e.keyCode !== 32 || clicked) {
+                              return
+                          }
+                          e.preventDefault()
+                          handleClick("keyup")
+                      }
+            }
+        >
+            <Icon className={iconCls.value} name="checked" />
+        </Div>
     )
 }
+/*
+function Checkbox({
+    name,
+    value,
+    rev,
+    size = 14,
+    readOnly,
+    disabled,
+    tab = true,
+    ...props
+}) {
+    const wContext = useContext(WindowContext)
 
+    const [clicked, setClicked] = useState(false)
+
+    const set = useSet(value, props)
+    const { checkBoxType } = useCssProps("checkBoxType")
+    const type = checkBoxType === 0 ? "input" : "button"
+    const cls = [
+        type +
+            "-bg " +
+            type +
+            "-color " +
+            type +
+            "-border-width " +
+            type +
+            "-border-radius " +
+            type +
+            "-border-style " +
+            type +
+            "-border-color"
+    ]
+    if (disabled) {
+        cls.push("disabled")
+        readOnly = true
+    }
+    if (!readOnly) {
+        cls.push("hover-change")
+    } else {
+        tab = false
+        if (!disabled) {
+            cls.push("darker")
+        }
+    }
+    if (tab) {
+        cls.push("focus-box")
+    }
+    const handleClick = (upEvent) => {
+        wContext.startExclusiveMode("toggle-bool", "pointer")
+        wContext.addEventListener(
+            upEvent,
+            () => {
+                wContext.endExclusiveMode("toggle-bool")
+                setClicked(false)
+            },
+            { once: true }
+        )
+        set(!value)
+        setClicked(true)
+    }
+    const items = []
+    items.push(
+        <Block
+            key="i"
+            tab={tab}
+            center="v"
+            cursor={readOnly ? null : "pointer"}
+            className={cls.join(" ")}
+            onLeftClick={readOnly ? null : () => handleClick("mouseup")}
+            onKeyDown={
+                readOnly
+                    ? null
+                    : (e) => {
+                          if (e.keyCode !== 32 || clicked) {
+                              return
+                          }
+                          e.preventDefault()
+                          handleClick("keyup")
+                      }
+            }
+        >
+            <Icon name={value ? "checked" : null} size={size} />
+        </Block>
+    )
+    items.push(
+        <Block key="n" full="h" shorten center="v">
+            {name}
+        </Block>
+    )
+    if (rev) {
+        items.reverse()
+    }
+    if (items.length === 1) {
+        return items[0]
+    }
+    const attr = getDimHAttr(props)
+    return (
+        <Stack gaps {...attr}>
+            {items}
+        </Stack>
+    )
+}
+*/
 function Radio({}) {}
 
 export {

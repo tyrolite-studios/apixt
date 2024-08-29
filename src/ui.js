@@ -3,9 +3,11 @@ import { useState } from "react"
 import { AppCtx } from "components/context"
 import { createRoot } from "react-dom/client"
 import controller from "core/controller"
-import { Button, ButtonGroup, Input } from "./components/form"
-import { Icon } from "./components/layout"
+import { Button, ButtonGroup, Input, Checkbox } from "./components/form"
+import { Icon, Tab, Tabs } from "./components/layout"
+import { ClassNames } from "core/helper"
 import { useModalWindow } from "./components/modal"
+import { useExtractDimProps } from "./components/common"
 
 function Section({ name, samples }) {
     const elems = []
@@ -52,6 +54,11 @@ function GetInput({ ...props }) {
     return <Input value={value} set={setValue} {...props} />
 }
 
+function getCheckbox({ ...props }) {
+    const [value, setValue] = useState(false)
+    return <Checkbox value={value} set={setValue} {...props} />
+}
+
 function GetModal({ children, ...props }) {
     const ModalWindow = useModalWindow()
 
@@ -63,10 +70,44 @@ function GetModal({ children, ...props }) {
     )
 }
 
+function DashedRect({
+    resize = false,
+    resizeX = false,
+    resizeY = false,
+    children,
+    ...props
+}) {
+    const style = useExtractDimProps(props)
+    const cls = new ClassNames("border-4 border-dashed border-app-text/30")
+    cls.addIf(resize, "resize")
+    cls.addIf(resizeX, "resize-x")
+    cls.addIf(resizeY, "resize-y")
+
+    return (
+        <div style={style} className={cls.value}>
+            {children}
+        </div>
+    )
+}
+
 function Content({}) {
+    const customWarning = {
+        info: "The following attributes should only be used exceptionally..."
+    }
+
     return (
         <div className="full bg-app-bg text-app-text">
             <div className="overflow-auto max-h-full">
+                <Section
+                    name="Checkboxes"
+                    samples={[
+                        {
+                            name: "normal checkbox",
+                            code: "<Checkbox value={value} set={set} />",
+                            elem: getCheckbox({})
+                        }
+                    ]}
+                />
                 <Section
                     name="Icons"
                     samples={[
@@ -130,19 +171,13 @@ function Content({}) {
                             name: "min-height & max-height button",
                             code: '<Button name="Text button" minHeight="50px" maxHeight="33%" />',
                             elem: (
-                                <div
-                                    style={{
-                                        height: "100px",
-                                        width: "min-content",
-                                        border: "1px dotted white"
-                                    }}
-                                >
+                                <DashedRect height="100px" width="min-content">
                                     <Button
                                         name="Text button"
                                         minHeight="50px"
                                         maxHeight="33%"
                                     />
-                                </div>
+                                </DashedRect>
                             )
                         },
                         {
@@ -210,9 +245,7 @@ function Content({}) {
                                 />
                             )
                         },
-                        {
-                            info: "The following attributes should only be used exceptionally..."
-                        },
+                        customWarning,
                         {
                             name: "unsized font button",
                             code: '<Button name="Text button" sized={false} />',
@@ -310,7 +343,7 @@ function Content({}) {
                     name="ButtonGroups"
                     samples={[
                         {
-                            name: "Button group",
+                            name: "button group (auto-size)",
                             code: "<ButtonGroup>...</ButtonGroup>",
                             elem: (
                                 <ButtonGroup>
@@ -319,9 +352,99 @@ function Content({}) {
                                     <Button name="Third" />
                                 </ButtonGroup>
                             )
+                        },
+                        {
+                            name: "button group (fixed width & wrap)",
+                            code: '<ButtonGroup width="150px">...</ButtonGroup>',
+                            elem: (
+                                <DashedRect width="min-content" resizeX>
+                                    <ButtonGroup width="150px">
+                                        <Button name="First" />
+                                        <Button name="Second" />
+                                        <Button name="Third one" />
+                                    </ButtonGroup>
+                                </DashedRect>
+                            )
+                        },
+                        {
+                            name: "button group (max-width & no wrap)",
+                            code: '<ButtonGroup maxWidth="150px" wrap={false}>...</ButtonGroup>',
+                            elem: (
+                                <DashedRect width="min-content">
+                                    <ButtonGroup width="150px" wrap={false}>
+                                        <Button name="First" />
+                                        <Button name="Second" />
+                                        <Button name="Third one" />
+                                    </ButtonGroup>
+                                </DashedRect>
+                            )
+                        },
+                        customWarning,
+                        {
+                            name: "ungapped button group",
+                            code: "<ButtonGroup gapped={false}>...</ButtonGroup>",
+                            elem: (
+                                <ButtonGroup gapped={false}>
+                                    <Button name="First" />
+                                    <Button name="Second" />
+                                    <Button name="Third" />
+                                </ButtonGroup>
+                            )
+                        },
+                        {
+                            name: "custom-gapped button group",
+                            code: '<ButtonGroup gapped={false} className="...">...</ButtonGroup>',
+                            elem: (
+                                <ButtonGroup gapped={false} className="gap-4">
+                                    <Button name="First" />
+                                    <Button name="Second" />
+                                    <Button name="Third" />
+                                </ButtonGroup>
+                            )
                         }
                     ]}
                 />
+                <Section
+                    name="Tabs"
+                    samples={[
+                        {
+                            name: "Tabs",
+                            code: '<Tabs><Tab name="Test 1"></Tab></Tabs>',
+                            elem: (
+                                <DashedRect width="400px" height="200px">
+                                    <Tabs>
+                                        <Tab name="Test 1">
+                                            Hello here is tab 1
+                                        </Tab>
+                                        <Tab name="Test 2" active>
+                                            Hello here is tab 2
+                                        </Tab>
+                                        <Tab name="Last Tab">
+                                            The last tab...
+                                        </Tab>
+                                    </Tabs>
+                                </DashedRect>
+                            )
+                        },
+                        {
+                            name: "Tabs 2",
+                            code: '<Tabs><Tab name="Test 1"></Tab></Tabs>',
+                            elem: (
+                                <DashedRect width="400px" height="200px">
+                                    <Tabs className="border" active="Test 2">
+                                        <Tab name="Test 1">
+                                            Hello here is tab 1
+                                        </Tab>
+                                        <Tab name="Test 2">
+                                            Hello here is tab 2
+                                        </Tab>
+                                    </Tabs>
+                                </DashedRect>
+                            )
+                        }
+                    ]}
+                />
+
                 <Section
                     name="Modals"
                     samples={[
