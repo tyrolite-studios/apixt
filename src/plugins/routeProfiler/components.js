@@ -41,9 +41,11 @@ function Profiler({ close }) {
             (res) => res.responseCode === 200
         )
 
-        const averageExecutiontime =
-            successRequests.reduce((sum, el) => sum + el.executionTime, 0) /
-            successRequests.length
+        const totalExecutiontime = successRequests.reduce(
+            (sum, el) => sum + el.executionTime,
+            0
+        )
+        const averageExecutiontime = totalExecutiontime / successRequests.length
     }
 
     const selectProps = {
@@ -57,7 +59,7 @@ function Profiler({ close }) {
             <h1>Route Profiling</h1>
             <div>Select Route: </div>
             <Select {...selectProps} />
-            {selectedRoute && (
+            {routeSelected && (
                 <div>
                     <div>
                         <span>Number of Requests: </span>
