@@ -3,6 +3,7 @@ import { PluginRegistry } from "core/plugin"
 import { Button, Checkbox } from "./form"
 import { useComponentUpdate } from "./common"
 import { AppContext } from "./context"
+import { Tabs, Tab } from "./layout"
 import { d } from "core/helper"
 
 function PluginsOverview({}) {
@@ -11,7 +12,7 @@ function PluginsOverview({}) {
     const allPlugins = PluginRegistry.getAll()
 
     return (
-        <div className="stack-v divide-y divide-app-text/50 w-full">
+        <div className="stack-v divide-y divide-app-text/50 w-full px-2">
             <div className="pb-1">Plugins:</div>
             <div className="grid gap-1 py-1 grid-cols-[min-content_auto]">
                 {allPlugins.map((plugin, i) => {
@@ -55,11 +56,32 @@ function PluginsOverview({}) {
     )
 }
 
+function About() {
+    return (
+        <div className="stack-v gap-2 p-2">
+            <div className="text-2xl">API Extender</div>
+            <div className="text-sm">Version 0.0.1 (Frontend)</div>
+        </div>
+    )
+}
+
 function Settings({}) {
     return (
-        <div className="p-3">
-            <PluginsOverview />
-        </div>
+        <Tabs persistId="settings">
+            <Tab name="General" active>
+                TODO...
+            </Tab>
+
+            <Tab name="Layout / Theme"></Tab>
+
+            <Tab name="Plugins">
+                <PluginsOverview />
+            </Tab>
+
+            <Tab name="About">
+                <About />
+            </Tab>
+        </Tabs>
     )
 }
 

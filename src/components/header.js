@@ -51,6 +51,8 @@ function Header() {
             <SettingsWindow.content
                 name="Settings"
                 minWidth="400px"
+                width="75%"
+                height="500px"
                 transparent={true}
             >
                 <Settings {...SettingsWindow.props} />

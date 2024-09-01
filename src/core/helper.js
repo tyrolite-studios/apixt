@@ -91,13 +91,12 @@ function isFunction(value) {
     return typeof value === "function"
 }
 
-function isEventInRect(e, rect) {
-    const x = e.clientX
-    const y = e.clientY
+function isInt(value) {
+    return typeof value === "number" && Number.isInteger(value)
+}
 
-    return (
-        x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom
-    )
+function isBool(value) {
+    return typeof value === "boolean"
 }
 
 function extractFullClasses(cls) {
@@ -164,6 +163,21 @@ class ClassNames {
     }
 }
 
+function isEventInRect(e, rect) {
+    const x = e.clientX
+    const y = e.clientY
+
+    return (
+        x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom
+    )
+}
+
+function isInRange(value, min, max) {
+    if (min !== undefined && value < min) return false
+    if (max !== undefined && value > max) return false
+    return true
+}
+
 const isValidJson = (str) => {
     try {
         JSON.parse(str)
@@ -175,10 +189,13 @@ const isValidJson = (str) => {
 
 export {
     d,
+    isNull,
+    isBool,
     isString,
     isArray,
-    isNull,
     isObject,
+    isInt,
+    isInRange,
     isValidJson,
     isEventInRect,
     extractFullClasses,
