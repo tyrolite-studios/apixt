@@ -67,7 +67,7 @@ function About() {
 
 function Settings({}) {
     return (
-        <Tabs>
+        <Tabs persistId="settings">
             <Tab name="General" active>
                 TODO...
             </Tab>

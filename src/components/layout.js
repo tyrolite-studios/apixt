@@ -6,8 +6,8 @@ import React, {
     useEffect
 } from "react"
 import { ClassNames, d } from "core/helper"
-import { useExtractDimProps } from "./common"
 import { ButtonGroup, Button } from "./form"
+import { AppContext } from "./context"
 
 const getLayoutProps = ({ className, zIndex, cursor, tab, ...props }) => {
     const cls = []
@@ -65,9 +65,13 @@ const Div = React.forwardRef(({ children, ...props }, ref) => {
     )
 })
 
-function Icon({ name, className }) {
+function Icon({ name, className, ...props }) {
     const cls = new ClassNames("material-icons leading-none", className)
-    return <span className={cls.value}>{name}</span>
+    return (
+        <span className={cls.value} {...props}>
+            {name}
+        </span>
+    )
 }
 
 function Centered({ className, children }) {
@@ -81,16 +85,44 @@ function Centered({ className, children }) {
 
 const TabContext = createContext(null)
 
-function Tabs({ className, padded = true, gapped = true, children, ...props }) {
+function Tabs({
+    className,
+    padded = true,
+    gapped = true,
+    persistId = "",
+    children,
+    ...props
+}) {
+    const aCtx = useContext(AppContext)
     const [ready, setReady] = useState(false)
+    const activeRef = useRef(null)
 
     let [active, setActiveRaw] = useState(
         props.active !== undefined ? props.active : null
     )
+
     if (props.setActive) {
         active = props.active
         setActiveRaw = props.setActive
     }
+    activeRef.current = active
+
+    useEffect(() => {
+        return () => {
+            if (!persistId) return
+
+            aCtx.globalStorage.setJson("tab." + persistId, activeRef.current)
+        }
+    }, [])
+    useEffect(() => {
+        if (!ready || !persistId) return
+
+        const persisted = aCtx.globalStorage.getJson("tab." + persistId)
+        if (persisted) {
+            setActiveRaw(persisted)
+        }
+    }, [ready])
+
     const items = useRef([])
     const setActive = (value) => {
         setActiveRaw(value)

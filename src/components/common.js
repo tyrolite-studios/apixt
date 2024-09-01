@@ -27,6 +27,16 @@ function useMounted() {
     return mounted
 }
 
+function useDebugMount(name) {
+    useEffect(() => {
+        if (!name) return
+        d("MOUNTING", name)
+        return () => {
+            d("UNMOUNTING", name)
+        }
+    }, [])
+}
+
 function useExtractDimProps(
     { width, minWidth, maxWidth, height, minHeight, maxHeight },
     style = {}
@@ -326,6 +336,7 @@ const JsonTextarea = ({
 export {
     useComponentUpdate,
     useMounted,
+    useDebugMount,
     useExtractDimProps,
     HighlightMatches,
     splitByMatch,
