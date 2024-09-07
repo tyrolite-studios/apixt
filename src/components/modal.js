@@ -4,16 +4,8 @@ import { AppContext } from "./context"
 import { Div } from "./layout"
 import { Button } from "./form"
 import { extractFullClasses, d } from "core/helper"
-import { useMounted } from "./common"
-
-const isEventInRect = (e, rect) => {
-    return (
-        rect.x <= e.clientX &&
-        rect.x + rect.width >= e.clientX &&
-        rect.y <= e.clientY &&
-        rect.y + rect.height >= e.clientY
-    )
-}
+import { useMounted, useHotKeys } from "./common"
+import { ClassNames } from "../core/helper"
 
 function ModalWindow({
     id,
@@ -38,22 +30,8 @@ function ModalWindow({
     const [left, setLeft] = useState(null)
     const [top, setTop] = useState(null)
     const [dim, setDim] = useState(null)
-    const [shadow, setShadow] = useState(null)
     const mounted = useMounted()
 
-    const enableShadow = () => {
-        setTimeout(() => {
-            if (mounted.current) {
-                setShadow(true)
-            }
-        }, 100)
-    }
-    const cacheRef = useRef(false)
-    if (id && !cacheRef.current) {
-        aContext.pushModalId(id)
-        aContext.loadPageCache(id)
-        cacheRef.current = true
-    }
     useEffect(() => {
         if (!id) return
         return () => {
@@ -66,11 +44,10 @@ function ModalWindow({
         if (!focusElem) {
             return
         }
-        /*
         focusElem.top = trapRef.current
-        const elems = trapRef.current.querySelectorAll(".tabbed")
-        focusElem.start = elems ? elems[0] : null
-        */
+        focusElem.start = trapRef.current.querySelector(".tabbed")
+        if (!focusElem.auto)
+            focusElem.auto = trapRef.current.querySelector(".tabbed.autofocus")
     })
 
     useEffect(() => {
@@ -84,6 +61,9 @@ function ModalWindow({
                 : null
             if (elem) {
                 elem.focus()
+                if (["INPUT", "TEXTAREA"].includes(elem.tagName)) {
+                    elem.select()
+                }
             } else {
                 focusElem.start.focus()
             }
@@ -134,16 +114,6 @@ function ModalWindow({
         }
     }, [])
 
-    useEffect(() => {
-        if (transparent) {
-            const focusElem = aContext.focusStack.elem[zIndex]
-            if (focusElem) {
-                focusElem.setShadow = enableShadow
-            }
-            enableShadow()
-        }
-    }, [])
-
     const onClick = closeable
         ? (e) => {
               let target = e.target
@@ -165,7 +135,7 @@ function ModalWindow({
         hDivCls.push(fullCls.join(" "))
     }
     if (!transparent) {
-        hDivCls.push("overflow-hidden")
+        // hDivCls.push("overflow-hidden")
     }
     if (!maxWidth) {
         maxWidth = "100%"
@@ -198,43 +168,13 @@ function ModalWindow({
         height: "calc(100% - 50px)"
     }
 
-    const vDivCls = [
-        "stack-v overflow-hidden h-full border border-header-border text-app bg-app-bg text-ms divide-y divide-header-border modal-centered"
-    ]
-    if (className) {
-        vDivCls.push(className)
-    }
+    const vDivCls = new ClassNames(
+        // overflow hidden?
+        "stack-v h-full border border-header-border text-app bg-app-bg text-ms divide-y divide-header-border modal-centered",
+        className
+    )
+    vDivCls.addIf(transparent, "shadow-xl")
     const dimAttr = {}
-    if (transparent && shadow !== null) {
-        vDivCls.push(shadow ? "" : /* "fix-") + */ "shadow-xl")
-        const modalLevel = aContext.getModalLevel()
-        dimAttr.onMouseEnter = (e) => setShadow(false)
-        dimAttr.onMouseLeave = (e) => {
-            if (aContext.getModalLevel() !== modalLevel) {
-                setShadow(false)
-                return
-            }
-            const rect = dimRef.current.getBoundingClientRect()
-            if (!isEventInRect(e, rect)) {
-                setShadow(true)
-            } else if (aContext.isInExclusiveMode()) {
-                window.addEventListener(
-                    "mouseup",
-                    (e) => {
-                        if (!isEventInRect(e, rect)) {
-                            setShadow(true)
-                        }
-                    },
-                    { once: true }
-                )
-                setShadow(false)
-            }
-        }
-    }
-    const hotKeys = {}
-    if (closeable) {
-        hotKeys.close = close
-    }
     const overlayCls = ["full fixed left-0 top-0"]
     if (!transparent) {
         overlayCls.push("bg-overlay-bg/50")
@@ -296,19 +236,24 @@ function ModalWindow({
     } else {
         vDivStyle.height = vDivStyle.height ? vDivStyle.height : "min-content"
     }
-    /*
-    useHotKeys(dimRef,         {
-        ...hotKeys,
-        submit: {
-            exec: () => {
-                const submit = wContext.getModalSubmit();
-                if (submit) submit()
-            }
-        }
-    }, 1);
-    */
 
-    //             onLeftClick={(e) => e.stopPropagation()}   aus erstem Block
+    const hotKeys = {}
+    if (closeable) {
+        hotKeys.close = close
+    }
+    useHotKeys(
+        dimRef,
+        {
+            ...hotKeys,
+            submit: {
+                exec: () => {
+                    const submit = aContext.getModalSubmit()
+                    if (submit) submit()
+                }
+            }
+        },
+        1
+    )
 
     return (
         <Div
@@ -323,7 +268,7 @@ function ModalWindow({
                         <div
                             ref={dimRef}
                             {...dimAttr}
-                            className={vDivCls.join(" ")}
+                            className={vDivCls.value}
                             style={vDivStyle}
                         >
                             <Div className="stack-h bg-header-bg text-header-text w-full">

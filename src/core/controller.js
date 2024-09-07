@@ -82,22 +82,38 @@ const controller = {
         if (!app) {
             throw Error(`Invalid app id "${id}" given!`)
         }
+        if (!app.config) {
+            app.config = config
+        } else {
+            config = app.config
+        }
         const { create, overwrites = {} } = app
+
+        const callCreateApp = () => {
+            requestAnimationFrame(() => {
+                running = id
+                const createApp = () => {
+                    create({ ...config, ...overwrites })
+                }
+                if (document.readyState === "loading") {
+                    addEventListener("DOMContentLoaded", createApp, {
+                        once: true
+                    })
+                } else {
+                    createApp()
+                }
+            })
+        }
+
         if (running) {
             const { destroy } = apps[running]
-            if (destroy) destroy()
+            if (destroy) {
+                destroy()
+            }
+            requestAnimationFrame(() => callCreateApp())
+        } else {
+            callCreateApp()
         }
-        requestAnimationFrame(() => {
-            running = id
-            const createApp = () => {
-                create({ ...config, ...overwrites })
-            }
-            if (document.readyState === "loading") {
-                addEventListener("DOMContentLoaded", createApp, { once: true })
-            } else {
-                createApp()
-            }
-        })
     }
 }
 window.controller = controller

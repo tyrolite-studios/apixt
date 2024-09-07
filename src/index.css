@@ -41,8 +41,8 @@
         --input-border: 60 60 60;
 
         /* signal colors */
-        --active-text: 50 50 50;
-        --active-bg: 150 150 150;
+        --active-text: 60 20 50;
+        --active-bg: 255 250 205;
         --active-border: 80 70 45;
         --ok-text: 50 150 60;
         --ok-bg: 210 250 210;
@@ -111,6 +111,11 @@ html, body {
 .fix-shadow,
 .shadow:hover {
     box-shadow: 5px 5px 5px #00000088;
+}
+
+.checkerboard-bg {
+    background-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAIAAAACUFjqAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAB3RJTUUH3ggRDQENU0dyawAAACZJREFUGNNjPHXqDAMSMDY2ROYyMeAFNJVm/Pv3LzL/7Nnzg8VpAKebCGpIIxHBAAAAAElFTkSuQmCC');
+    background-repeat: repeat
 }
 
 button.invalid {

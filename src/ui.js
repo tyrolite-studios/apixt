@@ -13,6 +13,9 @@ import {
     Select,
     Radio,
     FormGrid,
+    Picker,
+    Color,
+    Slider,
     CustomCells,
     SectionCells,
     CheckboxCells,
@@ -20,7 +23,9 @@ import {
     NumberCells,
     TextareaCells,
     SelectCells,
-    RadioCells
+    RadioCells,
+    ColorCells,
+    SliderCells
 } from "./components/form"
 import { Icon, Tab, Tabs } from "./components/layout"
 import { ClassNames } from "core/helper"
@@ -33,7 +38,7 @@ function Section({ name, samples }) {
     for (const { name, code, elem, info } of samples) {
         if (info) {
             elems.push(
-                <div key="info" className="pt-2  border-t  col-span-2">
+                <div key="info" className="pt-2  border-t col-span-2">
                     <div className="text-sm bg-warning-bg text-warning-text p-2">
                         {info}
                     </div>
@@ -60,7 +65,7 @@ function Sample({ name, code, children }) {
             <div className="text-xs col-span-2 border-t pt-2 mt-1">{name}:</div>
             <div>{children}</div>
             <div>
-                <pre className="border text-block-text/70 bg-block-bg border-block-border text-sm px-2">
+                <pre className="border break-all text-wrap text-block-text/70 bg-block-bg border-block-border text-sm px-2">
                     {code}
                 </pre>
             </div>
@@ -112,6 +117,26 @@ function GetRadio({ value, ...props }) {
 function GetCheckbox({ value = true, ...props }) {
     const [rawValue, setValue] = useState(value)
     return <Checkbox value={rawValue} set={setValue} {...props} />
+}
+
+function GetSlider({ value = 50, ...props }) {
+    const [rawValue, setValue] = useState(value)
+    return <Slider value={rawValue} set={setValue} {...props} />
+}
+
+function GetNumberSlider({ value = 50, vertical, ...props }) {
+    const [rawValue, setValue] = useState(value)
+    return (
+        <>
+            <Slider
+                value={rawValue}
+                vertical={vertical}
+                set={setValue}
+                {...props}
+            />
+            <Number value={rawValue} set={setValue} {...props} />
+        </>
+    )
 }
 
 function GetModal({ children, ...props }) {
@@ -876,6 +901,449 @@ function Content({}) {
                     ]}
                 />
                 <Section
+                    name="Picker"
+                    samples={[
+                        {
+                            name: "default string picker",
+                            code: '<Picker options={["a", "b", ...]} pick={item => doSomething()} />',
+                            elem: (
+                                <Picker
+                                    pick={(option) => d("PICKED", option)}
+                                    options={[
+                                        "First String",
+                                        "Second String",
+                                        "Third String"
+                                    ]}
+                                />
+                            )
+                        },
+                        {
+                            name: "default object picker",
+                            code: '<Picker options={[{name: "a", ...}, ...]} pick={item => doSomething()}  />',
+                            elem: (
+                                <Picker
+                                    maxHeight="100px"
+                                    pick={(option) => d("PICKED", option)}
+                                    options={[
+                                        { name: "First object" },
+                                        { name: "Second object" },
+                                        { name: "Third object" }
+                                    ]}
+                                />
+                            )
+                        },
+                        {
+                            name: "default picker & custom rendererd options",
+                            code: "<Picker options={...} pick={item => doSomething()} renderer={item => render(item)} />",
+                            elem: (
+                                <Picker
+                                    pick={(option) => d("PICKED", option)}
+                                    renderer={(option) => (
+                                        <div className="stack-v">
+                                            <div>{option.name}</div>
+                                            <div className="opacity-50">
+                                                {option.desc}
+                                            </div>
+                                        </div>
+                                    )}
+                                    options={[
+                                        {
+                                            name: "First option",
+                                            desc: "More information here"
+                                        },
+                                        {
+                                            name: "Second opion",
+                                            desc: "Second option description"
+                                        },
+                                        { name: "Third option" }
+                                    ]}
+                                />
+                            )
+                        },
+                        {
+                            name: "default picker & max height",
+                            code: '<Picker options={...} pick={item => doSomething()} maxHeight="..." />',
+                            elem: (
+                                <Picker
+                                    pick={(option) => d("PICKED", option)}
+                                    maxHeight="100px"
+                                    options={[
+                                        "First String",
+                                        "Second String",
+                                        "Third String",
+                                        "Fourth String",
+                                        "Fifth String",
+                                        "Sixth String"
+                                    ]}
+                                />
+                            )
+                        },
+                        {
+                            name: "default picker & min width + custom width",
+                            code: '<Picker options={...} pick={item => doSomething()} minWidth="..." width="..." />',
+                            elem: (
+                                <Picker
+                                    pick={(option) => d("PICKED", option)}
+                                    minWidth="200px"
+                                    width="50%"
+                                    options={[
+                                        "First very long string",
+                                        "Second String",
+                                        "Third String"
+                                    ]}
+                                />
+                            )
+                        },
+                        {
+                            name: "default picker & max width + wrap",
+                            code: '<Picker options={...} pick={item => doSomething()} maxWidth="..." />',
+                            elem: (
+                                <Picker
+                                    pick={(option) => d("PICKED", option)}
+                                    maxWidth="200px"
+                                    options={[
+                                        "First very long string",
+                                        "Second String",
+                                        "Third String"
+                                    ]}
+                                />
+                            )
+                        },
+                        {
+                            name: "default picker & no wrap",
+                            code: "<Picker options={...} pick={item => doSomething()} wrap={false} />",
+                            elem: (
+                                <DashedRect width="200px">
+                                    <Picker
+                                        pick={(option) => d("PICKED", option)}
+                                        wrap={false}
+                                        options={[
+                                            "First very long string",
+                                            "Second String",
+                                            "Third String"
+                                        ]}
+                                    />
+                                </DashedRect>
+                            )
+                        },
+                        customWarning,
+                        {
+                            name: "unbordered picker",
+                            code: "<Picker options={...} pick={item => doSomething() bordered={false}} />",
+                            elem: (
+                                <Picker
+                                    pick={(option) => d("PICKED", option)}
+                                    bordered={false}
+                                    options={[
+                                        "First String",
+                                        "Second String",
+                                        "Third String"
+                                    ]}
+                                />
+                            )
+                        },
+                        {
+                            name: "custom-bordered picker",
+                            code: '<Picker options={...} pick={item => doSomething() bordered={false} className="..."} />',
+                            elem: (
+                                <Picker
+                                    pick={(option) => d("PICKED", option)}
+                                    bordered={false}
+                                    className="border-4 border-dotted border-warning-text"
+                                    options={[
+                                        "First String",
+                                        "Second String",
+                                        "Third String"
+                                    ]}
+                                />
+                            )
+                        },
+                        {
+                            name: "undivided picker",
+                            code: "<Picker options={...} pick={item => doSomething() divided={false}} />",
+                            elem: (
+                                <Picker
+                                    pick={(option) => d("PICKED", option)}
+                                    divided={false}
+                                    options={[
+                                        "First String",
+                                        "Second String",
+                                        "Third String"
+                                    ]}
+                                />
+                            )
+                        },
+                        {
+                            name: "custom-divided picker",
+                            code: '<Picker options={...} pick={item => doSomething() bordered={false} className="..."} />',
+                            elem: (
+                                <Picker
+                                    pick={(option) => d("PICKED", option)}
+                                    divided={false}
+                                    className="divide-y-4 divide-input-border/25"
+                                    options={[
+                                        "First String",
+                                        "Second String",
+                                        "Third String"
+                                    ]}
+                                />
+                            )
+                        },
+                        {
+                            name: "unsized font picker",
+                            code: "<Picker options={...} pick={item => doSomething() sized={false}} />",
+                            elem: (
+                                <Picker
+                                    pick={(option) => d("PICKED", option)}
+                                    sized={false}
+                                    options={[
+                                        "First String",
+                                        "Second String",
+                                        "Third String"
+                                    ]}
+                                />
+                            )
+                        },
+                        {
+                            name: "custom-sized picker",
+                            code: '<Picker options={...} pick={item => doSomething() bordered={false} className="..."} />',
+                            elem: (
+                                <Picker
+                                    pick={(option) => d("PICKED", option)}
+                                    sized={false}
+                                    className="text-2xl"
+                                    options={[
+                                        "First String",
+                                        "Second String",
+                                        "Third String"
+                                    ]}
+                                />
+                            )
+                        },
+                        {
+                            name: "unpadded picker",
+                            code: "<Picker options={...} pick={item => doSomething() padded={false}} />",
+                            elem: (
+                                <Picker
+                                    pick={(option) => d("PICKED", option)}
+                                    padded={false}
+                                    options={[
+                                        "First String",
+                                        "Second String",
+                                        "Third String"
+                                    ]}
+                                />
+                            )
+                        },
+                        {
+                            name: "custom-padded picker",
+                            code: '<Picker options={...} pick={item => doSomething() padded={false} itemClassName="..."} />',
+                            elem: (
+                                <Picker
+                                    pick={(option) => d("PICKED", option)}
+                                    padded={false}
+                                    itemClassName="px-8 py-2"
+                                    options={[
+                                        "First String",
+                                        "Second String",
+                                        "Third String"
+                                    ]}
+                                />
+                            )
+                        },
+                        {
+                            name: "uncolored picker",
+                            code: "<Picker options={...} pick={item => doSomething() colored={false}} />",
+                            elem: (
+                                <Picker
+                                    pick={(option) => d("PICKED", option)}
+                                    colored={false}
+                                    options={[
+                                        "First String",
+                                        "Second String",
+                                        "Third String"
+                                    ]}
+                                />
+                            )
+                        },
+                        {
+                            name: "custom-colored picker",
+                            code: '<Picker options={...} pick={item => doSomething() colored={false} className="..."} />',
+                            elem: (
+                                <Picker
+                                    pick={(option) => d("PICKED", option)}
+                                    colored={false}
+                                    className="text-warning-text bg-warning-bg border-warning-text divide-warning-text"
+                                    options={[
+                                        "First String",
+                                        "Second String",
+                                        "Third String"
+                                    ]}
+                                />
+                            )
+                        },
+                        {
+                            name: "unstyled picker",
+                            code: "<Picker options={...} pick={item => doSomething() styled={false}} />",
+                            elem: (
+                                <Picker
+                                    pick={(option) => d("PICKED", option)}
+                                    styled={false}
+                                    options={[
+                                        "First String",
+                                        "Second String",
+                                        "Third String"
+                                    ]}
+                                />
+                            )
+                        },
+                        {
+                            name: "custom-styled picker",
+                            code: '<Picker options={...} pick={item => doSomething() styled={false} className="..." itemClassName="..."} />',
+                            elem: (
+                                <Picker
+                                    pick={(option) => d("PICKED", option)}
+                                    styled={false}
+                                    itemClassName="px-8 py-2"
+                                    className="text-ok-text bg-ok-bg border-ok-text divide-ok-text divide-y-4 border-dashed border-4"
+                                    options={[
+                                        "First String",
+                                        "Second String",
+                                        "Third String"
+                                    ]}
+                                />
+                            )
+                        }
+                    ]}
+                />
+                <Section
+                    name="Colors"
+                    samples={[
+                        {
+                            name: "default color",
+                            code: "<Color value={...} set={...} />",
+                            elem: <Color value="#FFFFD0" />
+                        },
+                        {
+                            name: "readOnly color",
+                            code: "<Color value={...} set={...} readOnly />",
+                            elem: <Color value="#FFFFD0" readOnly />
+                        },
+                        {
+                            name: "disabled color",
+                            code: "<Color value={...} set={...} disabled />",
+                            elem: <Color value="#FFFFD0" disabled />
+                        },
+                        {
+                            name: "invalid value color",
+                            code: "<Color value={...} set={...} disabled />",
+                            elem: <Color value={true} />
+                        },
+                        customWarning,
+                        {
+                            name: "unpadded color",
+                            code: "<Color value={...} set={...} padded={false} />",
+                            elem: <Color value="#FFFFD0" padded={false} />
+                        },
+                        {
+                            name: "custom-padded color",
+                            code: '<Color value={...} set={...} padded={false} className="..." />',
+                            elem: (
+                                <Color
+                                    value="#FFFFD0"
+                                    padded={false}
+                                    className="px-4 py-2"
+                                />
+                            )
+                        },
+                        {
+                            name: "unbordered color",
+                            code: "<Color value={...} set={...} bordered={false} />",
+                            elem: <Color value="#FFFFD0" bordered={false} />
+                        },
+                        {
+                            name: "custom-bordered color",
+                            code: '<Color value={...} set={...} bordered={false} className="..." />',
+                            elem: (
+                                <Color
+                                    value="#FFFFD0"
+                                    bordered={false}
+                                    className="border-4 border-dotted"
+                                />
+                            )
+                        },
+                        {
+                            name: "uncolored color",
+                            code: "<Color value={...} set={...} colored={false} />",
+                            elem: <Color value="#FFFFD0" colored={false} />
+                        },
+                        {
+                            name: "custom-colored color",
+                            code: '<Color value={...} set={...} colored={false} className="..." innerClassName="..." />',
+                            elem: (
+                                <Color
+                                    value="#FFFFD0"
+                                    colored={false}
+                                    className="bg-ok-bg border-ok-text"
+                                    innerClassName="bg-ok-bg border-ok-text"
+                                />
+                            )
+                        },
+                        {
+                            name: "unstyled color",
+                            code: "<Color value={...} set={...} styled={false} />",
+                            elem: <Color value="#FFFFD0" styled={false} />
+                        },
+                        {
+                            name: "custom-styled color",
+                            code: '<Color value={...} set={...} styled={false} className="..." innerClassName="..." />',
+                            elem: (
+                                <Color
+                                    value="#FFFFD0"
+                                    styled={false}
+                                    className="bg-warning-bg border-warning-text border-2 p-4"
+                                    innerClassName="bg-ok-bg border-ok-text"
+                                />
+                            )
+                        }
+                    ]}
+                />
+                <Section
+                    name="Sliders"
+                    samples={[
+                        {
+                            name: "default slider",
+                            code: "<Slider value={...} set={...} max={...} />",
+                            elem: <GetSlider max={100} />
+                        },
+                        {
+                            name: "default vertical slider",
+                            code: "<Slider value={...} set={...} max={...} vertical />",
+                            elem: <GetSlider max={100} vertical />
+                        },
+                        {
+                            name: "default slider & min + max",
+                            code: "<Slider value={...} set={...} min={...} max={...} />",
+                            elem: <GetSlider min={0} max={100} />
+                        },
+                        {
+                            name: "readonly slider",
+                            code: "<Slider value={...}  max={...} readOnly />",
+                            elem: <GetSlider max={100} readOnly />
+                        },
+                        {
+                            name: "disabled slider",
+                            code: "<Slider value={...} max={...} disabled />",
+                            elem: <GetSlider max={100} disabled />
+                        },
+                        {
+                            name: "invalid value slider",
+                            code: "<Slider value={...} set={...} max={...} />",
+                            elem: <GetSlider max={10} value={true} />
+                        }
+                    ]}
+                />
+                <Section
                     name="Buttons"
                     samples={[
                         {
@@ -947,6 +1415,11 @@ function Content({}) {
                             name: "icon button",
                             code: '<Button icon="delete" />',
                             elem: <Button icon="delete" />
+                        },
+                        {
+                            name: "readonly button",
+                            code: '<Button name="Test button" readOnly />',
+                            elem: <Button name="Test button" readOnly />
                         },
                         {
                             name: "disabled button",
@@ -1096,62 +1569,91 @@ function Content({}) {
                     samples={[
                         {
                             name: "button group (auto-size)",
-                            code: "<ButtonGroup>...</ButtonGroup>",
+                            code: "<ButtonGroup buttons={[...]} />",
                             elem: (
-                                <ButtonGroup>
-                                    <Button name="First" />
-                                    <Button name="Second" />
-                                    <Button name="Third" />
-                                </ButtonGroup>
+                                <ButtonGroup
+                                    buttons={[
+                                        { name: "First" },
+                                        { name: "Second" },
+                                        { name: "Third" }
+                                    ]}
+                                />
                             )
                         },
                         {
                             name: "button group (fixed width & wrap)",
-                            code: '<ButtonGroup width="150px">...</ButtonGroup>',
+                            code: '<ButtonGroup buttons={[...]} width="150px" />',
                             elem: (
                                 <DashedRect width="min-content" resizeX>
-                                    <ButtonGroup width="150px">
-                                        <Button name="First" />
-                                        <Button name="Second" />
-                                        <Button name="Third one" />
-                                    </ButtonGroup>
+                                    <ButtonGroup
+                                        width="150px"
+                                        buttons={[
+                                            { name: "First" },
+                                            { name: "Second" },
+                                            { name: "Third" }
+                                        ]}
+                                    />
                                 </DashedRect>
                             )
                         },
                         {
                             name: "button group (max-width & no wrap)",
-                            code: '<ButtonGroup maxWidth="150px" wrap={false}>...</ButtonGroup>',
+                            code: '<ButtonGroup buttons={[...]} maxWidth="150px" wrap={false} />',
                             elem: (
-                                <DashedRect width="min-content">
-                                    <ButtonGroup width="150px" wrap={false}>
-                                        <Button name="First" />
-                                        <Button name="Second" />
-                                        <Button name="Third one" />
-                                    </ButtonGroup>
+                                <DashedRect width="min-content" resizeX>
+                                    <ButtonGroup
+                                        maxWidth="150px"
+                                        wrap={false}
+                                        buttons={[
+                                            { name: "First" },
+                                            { name: "Second" },
+                                            { name: "Third" }
+                                        ]}
+                                    />
                                 </DashedRect>
+                            )
+                        },
+                        {
+                            name: "button group with disabled button",
+                            code: "<ButtonGroup buttons={[...]} />",
+                            elem: (
+                                <ButtonGroup
+                                    buttons={[
+                                        { name: "First", disabled: true },
+                                        { name: "Second" },
+                                        { name: "Third" }
+                                    ]}
+                                />
                             )
                         },
                         customWarning,
                         {
                             name: "ungapped button group",
-                            code: "<ButtonGroup gapped={false}>...</ButtonGroup>",
+                            code: "<ButtonGroup buttons={[...]} gapped={false} />",
                             elem: (
-                                <ButtonGroup gapped={false}>
-                                    <Button name="First" />
-                                    <Button name="Second" />
-                                    <Button name="Third" />
-                                </ButtonGroup>
+                                <ButtonGroup
+                                    gapped={false}
+                                    buttons={[
+                                        { name: "First" },
+                                        { name: "Second" },
+                                        { name: "Third" }
+                                    ]}
+                                />
                             )
                         },
                         {
                             name: "custom-gapped button group",
-                            code: '<ButtonGroup gapped={false} className="...">...</ButtonGroup>',
+                            code: '<ButtonGroup buttons={[...]} gapped={false} className="..." />',
                             elem: (
-                                <ButtonGroup gapped={false} className="gap-4">
-                                    <Button name="First" />
-                                    <Button name="Second" />
-                                    <Button name="Third" />
-                                </ButtonGroup>
+                                <ButtonGroup
+                                    gapped={false}
+                                    className="gap-4"
+                                    buttons={[
+                                        { name: "First" },
+                                        { name: "Second" },
+                                        { name: "Third" }
+                                    ]}
+                                />
                             )
                         }
                     ]}
@@ -1225,6 +1727,8 @@ function Content({}) {
                                 '    <TextareaCells name="..." ...props />\n' +
                                 '    <SelectCells name="..." ...props />\n' +
                                 '    <RadioCells name="..." ...props />\n' +
+                                '    <ColorCells name="..." ...props />\n' +
+                                '    <SliderCells name="..." ...props />\n' +
                                 '    <CustomCells name="...">...</CustomCells>\n' +
                                 "</FormGrid>",
                             elem: (
@@ -1270,8 +1774,19 @@ function Content({}) {
                                         ]}
                                         value={1}
                                     />
+                                    <ColorCells
+                                        name="My color"
+                                        readOnly
+                                        value="#000000"
+                                    />
+                                    <SliderCells
+                                        name="My slider"
+                                        readOnly
+                                        value={33}
+                                        max={100}
+                                    />
                                     <CustomCells name="My custom cells">
-                                        <div class="text-2xl p-4 text-warning-text bg-warning-bg border-warning-text border-2">
+                                        <div className="text-2xl p-4 text-warning-text bg-warning-bg border-warning-text border-2">
                                             Here is a custom cell
                                         </div>
                                     </CustomCells>
@@ -1280,8 +1795,6 @@ function Content({}) {
                         }
                     ]}
                 />
-                <Section name="Sliders" samples={[]} />
-                <Section name="Selectors" samples={[]} />
             </div>
         </div>
     )

@@ -30,15 +30,127 @@ function Plugins() {
     return <>{elems}</>
 }
 
+const HotKeySingleKeys = ["Escape", "Enter"]
+const HotKeySkipValues = ["Meta", "Control", "Alt", "Shift"]
+
+function MainInner() {
+    const aCtx = useContext(AppContext)
+
+    const onFocus = (e) => {
+        aCtx.register("lastTarget", e.target)
+        const zIndex = aCtx.focusStack.zIndex
+        if (!zIndex) {
+            return
+        }
+        const focusElem = aCtx.focusStack.elem[zIndex]
+        if (!focusElem || !focusElem.top) {
+            return
+        }
+        if (focusElem.top.contains(document.activeElement)) {
+            return
+        }
+        if (focusElem.auto) {
+            focusElem.auto.focus()
+        } else {
+            focusElem.start.focus()
+        }
+    }
+
+    useEffect(() => {
+        const hotkeyListener = (e) => {
+            if (aCtx.isInExclusiveMode()) {
+                // TODO allow certain hotkeys?
+                return
+            }
+            let hotKey = ""
+            let actionKey = ""
+            if (e.metaKey) {
+                hotKey += "m"
+            } else if (e.ctrlKey) {
+                hotKey += "c"
+            } else if (e.altKey) {
+                hotKey += "a"
+            } else if (HotKeySingleKeys.includes(e.key)) {
+                actionKey = e.key
+            } else if (
+                e.key >= "0" &&
+                e.key <= "9" &&
+                !(
+                    document.activeElement &&
+                    ["INPUT", "TEXTAREA"].includes(
+                        document.activeElement.tagName
+                    )
+                )
+            ) {
+                if (aCtx.focusHotKeyArea(e.key)) {
+                    e.stopPropagation()
+                    e.preventDefault()
+                    return
+                }
+            }
+            if (hotKey.length > 0 && e.shiftKey) {
+                hotKey += "i"
+            }
+            if (hotKey !== "") {
+                actionKey = hotKey
+                if (!HotKeySkipValues.includes(e.key)) {
+                    actionKey += " " + e.key
+                }
+            }
+            if (!actionKey) {
+                return
+            }
+            const elem =
+                document.activeElement === document.body
+                    ? aCtx.getLastTarget()
+                    : document.activeElement
+            const handler = aCtx.getHandlerForActionKey(actionKey, elem)
+            if (handler) {
+                if (!e.repeat) {
+                    if (typeof handler === "object") {
+                        if (!handler.can || handler.can()) {
+                            handler.exec()
+                        }
+                    } else {
+                        handler()
+                    }
+                }
+                e.stopPropagation()
+                e.preventDefault()
+            } else if (handler === null && actionKey === "Escape") {
+                e.stopPropagation()
+                e.preventDefault()
+                // TODO: confirm()
+            }
+        }
+        const clickListener = (e) => {
+            aCtx.register("lastTarget", e.target)
+        }
+        window.addEventListener("mousedown", clickListener, {})
+        window.addEventListener("keydown", hotkeyListener, {})
+        return () => {
+            window.removeEventListener("mousedown", clickListener, {})
+            window.removeEventListener("keydown", hotkeyListener, {})
+        }
+    })
+
+    return (
+        <div
+            onFocus={onFocus}
+            className="flex flex-col w-full h-full bg-app-bg text-app-text"
+        >
+            <Header />
+            <Content />
+            <Footer />
+            <Plugins />
+        </div>
+    )
+}
+
 function MainLayout({ config }) {
     return (
         <AppCtx config={config}>
-            <div className="flex flex-col w-full h-full bg-app-bg text-app-text">
-                <Header />
-                <Content />
-                <Footer />
-                <Plugins />
-            </div>
+            <MainInner />
         </AppCtx>
     )
 }

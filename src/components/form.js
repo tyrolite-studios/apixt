@@ -1,17 +1,1314 @@
-import { useContext, useState, useMemo, useEffect, useRef } from "react"
+import {
+    useContext,
+    createContext,
+    useState,
+    useMemo,
+    useEffect,
+    useRef
+} from "react"
 import { AppContext } from "./context"
-import { Icon, Div } from "./layout"
+import {
+    Icon,
+    Div,
+    Stack,
+    Overlays,
+    Overlay,
+    AvailContext,
+    AvailContextProvider
+} from "./layout"
 import {
     ClassNames,
     isEventInRect,
     isInt,
     d,
+    clamp,
+    round,
     isString,
     isNull,
     isBool,
+    isNumber,
     isInRange
 } from "core/helper"
-import { HighlightMatches, useMounted, useExtractDimProps } from "./common"
+import {
+    HighlightMatches,
+    useMounted,
+    useExtractDimProps,
+    useGetAttrWithDimProps,
+    useGetTabIndex,
+    useFocusManager,
+    useCallAfterwards
+} from "./common"
+
+function useFocusKeyBindings({ keyHandlers = [], disabled = false, direct }) {
+    const [hasFocus, setHasFocus] = useState(false)
+
+    const attr = {}
+
+    if (!disabled) {
+        attr.onFocus = () => {
+            setHasFocus(true)
+        }
+        attr.onBlur = () => {
+            setHasFocus(false)
+        }
+        if (hasFocus) {
+            attr.onKeyDown = (e) => {
+                for (let item of keyHandlers) {
+                    if (item.keys && item.keys.includes(e.key)) {
+                        item.handler(e)
+                        break
+                    }
+                }
+            }
+        }
+        if (direct) {
+            attr.tab = true
+        }
+    }
+    return attr
+}
+
+function useMarkInvalid(cls, invalid) {
+    const fContext = useContext(FormContext)
+    const callAfterwards = useCallAfterwards()
+
+    cls.addIf(invalid, "invalid")
+    if (invalid && fContext) {
+        callAfterwards(fContext.markInvalid)
+    }
+}
+
+function Checkbox({
+    value,
+    set,
+    disabled,
+    autoFocus,
+    tab = true,
+    sized = true,
+    bordered = true,
+    colored = true,
+    styled = true,
+    readOnly,
+    className
+}) {
+    const [clicked, setClicked] = useState(false)
+
+    let tmpValue = value
+    if (isString(value)) {
+        if (["true", "false"].includes(value.toLowerCase())) {
+            tmpValue = value.toLowerCase() === "true"
+        } else if (["0", "1"].includes(value)) {
+            tmpValue = value === "1"
+        }
+    }
+    const invalid = !isBool(tmpValue)
+    const interactive = !(readOnly || disabled)
+    const aCtx = useContext(AppContext)
+    const cls = new ClassNames(
+        "select-none focus:ring focus:ring-offset-0 focus:ring-focus-border",
+        className
+    )
+    cls.addIf(styled && sized, "text-xs")
+    cls.addIf(styled && bordered, "border")
+    cls.addIf(
+        clicked,
+        styled && colored ? "text-active-text bg-active-bg" : "",
+        styled && colored ? "text-input-text bg-input-bg" : ""
+    )
+    cls.addIf(styled && colored && bordered, "border-input-border")
+    cls.addIf(styled && interactive, "hover:brightness-110 focus:outline-none")
+    cls.addIf(disabled, "opacity-50")
+    useMarkInvalid(cls, invalid)
+    cls.addIf(autoFocus, "autofocus")
+
+    const handleClick = (upEvent) => {
+        aCtx.startExclusiveMode("toggle-bool", "pointer")
+        aCtx.addEventListener(
+            upEvent,
+            () => {
+                aCtx.endExclusiveMode("toggle-bool")
+                setClicked(false)
+            },
+            { once: true }
+        )
+        set(invalid ? true : !tmpValue)
+        setClicked(true)
+    }
+    const iconCls = new ClassNames("not_leading-none")
+    iconCls.addIf(value === true, "visible", "invisible")
+    const attr = {}
+    attr.tabIndex = useGetTabIndex({ tab }, cls)
+    return (
+        <Div
+            cursor={interactive ? "pointer" : null}
+            width="min-content"
+            height="min-content"
+            className={cls.value}
+            onMouseDown={
+                !interactive
+                    ? (e) => {
+                          if (!disabled) return
+                          e.preventDefault()
+                      }
+                    : () => handleClick("mouseup")
+            }
+            onKeyDown={(e) => {
+                const isSpace = e.keyCode === 32
+                if (!isSpace) return
+
+                e.preventDefault()
+                if (interactive && !clicked) handleClick("keyup")
+            }}
+            {...attr}
+        >
+            <Icon className={iconCls.value} name="check" />
+        </Div>
+    )
+}
+
+function Input({
+    id,
+    name,
+    set,
+    value,
+    type = "text",
+    readOnly,
+    disabled,
+    full,
+    size,
+    keys,
+    required,
+    minLength,
+    maxLength,
+    autoFocus,
+    onMouseDown,
+    tab = true,
+    isValid = () => true,
+    sized = true,
+    bordered = true,
+    colored = true,
+    padded = true,
+    styled = true,
+    className,
+    ...props
+}) {
+    const interactive = !(readOnly || disabled)
+
+    const checkValidity = (value) => {
+        return !(
+            !isString(value) ||
+            (maxLength && value.length > maxLength) ||
+            (minLength && value.length < minLength) ||
+            (required && value.length === 0) ||
+            !isValid(value)
+        )
+    }
+    const [tmpValue, setTmpValue] = useState(value)
+    const lastValue = useRef(value)
+    if (value !== lastValue.current) {
+        if (value !== tmpValue) {
+            setTmpValue(value)
+        }
+        lastValue.current = value
+    }
+    const invalid = !checkValidity(tmpValue)
+
+    useEffect(() => {
+        if (invalid || tmpValue === value || !isString(value)) return
+
+        setTmpValue(value)
+    }, [value])
+
+    const cls = new ClassNames(
+        "focus:outline-none focus:ring focus:ring-offset-0 focus:ring-focus-border",
+        className
+    )
+    cls.addIf(full, "w-full")
+    cls.addIf(styled && sized, "text-sm")
+    cls.addIf(styled && padded, "px-2")
+    cls.addIf(styled && bordered, "border")
+    cls.addIf(styled && colored, "text-input-text bg-input-bg")
+    useMarkInvalid(cls, invalid)
+
+    cls.addIf(styled && colored && bordered, "border-input-border")
+    cls.addIf(interactive, "hover:brightness-110")
+    cls.addIf(disabled, "opacity-50")
+    cls.addIf(autoFocus, "autofocus")
+
+    const attr = useGetAttrWithDimProps(props)
+    attr.tabIndex = useGetTabIndex({ tab }, cls)
+    if (!interactive) attr.style.cursor = "default"
+
+    let onKeyDown = null
+    if (interactive) {
+        onKeyDown = !keys
+            ? props.onKeyDown
+            : (e) => {
+                  if (props.onKeyDown) props.onKeyDown(e)
+
+                  const key = e.key === "Space" ? " " : e.key
+                  if (key.length === 1 && keys.indexOf(key) === -1) {
+                      e.preventDefault()
+                  }
+              }
+    }
+    return (
+        <input
+            id={id}
+            value={isString(tmpValue) ? tmpValue : ""}
+            onKeyDown={onKeyDown}
+            onMouseDown={
+                !interactive
+                    ? (e) => {
+                          e.preventDefault()
+                      }
+                    : onMouseDown
+            }
+            onChange={
+                !interactive
+                    ? null
+                    : (e) => {
+                          setTmpValue(e.target.value)
+                          if (checkValidity(e.target.value)) {
+                              set(e.target.value)
+                          }
+                      }
+            }
+            onBlur={(e) => {
+                if (invalid) setTmpValue(value)
+            }}
+            name={name}
+            type={type}
+            size={size}
+            required={required}
+            maxLength={maxLength}
+            minLength={minLength}
+            readOnly={!interactive}
+            className={cls.value}
+            {...attr}
+        />
+    )
+}
+
+function Number({ min, max, value, set, size, readOnly, disabled, ...props }) {
+    const interactive = !(readOnly || disabled)
+    const setTmp = (value) => {
+        set(parseInt(value))
+    }
+    const tmpValue = isInt(value) ? "" + value : ""
+    const isValid = (value) => {
+        if (!isString(value)) return false
+
+        if (!/^-?\d+$/.test(value)) return false
+
+        const parsed = parseInt(value)
+        if (isNaN(parsed)) return false
+
+        if (
+            (min !== undefined && parsed < min) ||
+            (max !== undefined && parsed > max)
+        )
+            return false
+
+        return true
+    }
+    let maxLength = 0
+    let keys = "0123456789"
+    let subZero = min === undefined && max === undefined
+    if (min !== undefined) {
+        maxLength = ("" + min).length
+        if (min < 0) subZero = true
+    }
+    if (max !== undefined) {
+        maxLength = Math.max(maxLength, ("" + max).length)
+        if (max < 0) subZero = true
+    }
+    if (subZero) keys += "-"
+    if (maxLength === 0) maxLength = 11
+    return (
+        <Input
+            value={tmpValue}
+            set={setTmp}
+            isValid={isValid}
+            disabled={disabled}
+            readOnly={readOnly}
+            keys={keys}
+            onKeyDown={(e) => {
+                if (interactive && isInt(value)) {
+                    let delta = 0
+                    if (e.key === "ArrowUp") {
+                        delta++
+                    } else if (e.key === "ArrowDown") {
+                        delta--
+                    }
+                    if (delta === 0) return
+
+                    const newValue = value + delta
+                    if (!isInRange(newValue, min, max)) return
+                    setTmp("" + newValue)
+                }
+                if (["ArrowUp", "ArrowDown"].includes(e.key)) {
+                    e.preventDefault()
+                }
+            }}
+            maxLength={maxLength}
+            size={size === undefined ? maxLength : size}
+            {...props}
+        />
+    )
+}
+
+function Textarea({
+    value,
+    set,
+    disabled,
+    readOnly,
+    required,
+    full,
+    minLength,
+    maxLength,
+    cols,
+    rows,
+    autoFocus,
+    onMouseDown,
+    tab = true,
+    isValid = () => true,
+    styled = true,
+    sized = true,
+    padded = true,
+    bordered = true,
+    colored = true,
+    className,
+    ...props
+}) {
+    const interactive = !(readOnly || disabled)
+
+    const checkValidity = (value) => {
+        return !(
+            !isString(value) ||
+            (maxLength && value.length > maxLength) ||
+            (minLength && value.length < minLength) ||
+            (required && value.length === 0) ||
+            !isValid(value)
+        )
+    }
+    const [tmpValue, setTmpValue] = useState(value)
+    const lastValue = useRef(value)
+    if (value !== lastValue.current) {
+        if (value !== tmpValue) {
+            setTmpValue(value)
+        }
+        lastValue.current = value
+    }
+    const invalid = !checkValidity(tmpValue)
+
+    useEffect(() => {
+        if (invalid || tmpValue === value || !isString(value)) return
+
+        setTmpValue(value)
+    }, [value])
+
+    const style = useExtractDimProps(props)
+    const cls = new ClassNames(
+        "resize-none focus:outline-none focus:ring focus:ring-offset-0 focus:ring-focus-border",
+        className
+    )
+    cls.addIf(full, "w-full")
+    cls.addIf(styled && sized, "text-sm")
+    cls.addIf(styled && padded, "px-2")
+    cls.addIf(styled && bordered, "border")
+    cls.addIf(styled && colored, "text-input-text bg-input-bg")
+    useMarkInvalid(cls, invalid)
+    cls.addIf(styled && colored && bordered, "border-input-border")
+    cls.addIf(interactive, "hover:brightness-110")
+    cls.addIf(disabled, "opacity-50 caret-transparent")
+    cls.addIf(autoFocus, "autofocus")
+    const attr = useGetAttrWithDimProps(props)
+    attr.tabIndex = useGetTabIndex({ tab }, cls)
+    if (!interactive) {
+        attr.style.cursor = "default"
+    }
+    return (
+        <textarea
+            className={cls.value}
+            readOnly={readOnly}
+            required={required}
+            style={style}
+            cols={cols}
+            rows={rows}
+            onBlur={(e) => {
+                if (invalid) setTmpValue(value)
+            }}
+            onMouseDown={
+                !interactive
+                    ? (e) => {
+                          e.preventDefault()
+                      }
+                    : onMouseDown
+            }
+            onChange={(e) => {
+                if (!interactive) return
+
+                const newValue = e.target.value
+                setTmpValue(newValue)
+                if (checkValidity(newValue)) {
+                    set(newValue)
+                }
+            }}
+            value={isString(tmpValue) ? tmpValue : ""}
+            {...attr}
+        />
+    )
+}
+
+function Select({
+    value,
+    set,
+    readOnly,
+    disabled,
+    required,
+    full,
+    empty,
+    autoFocus,
+    onMouseDown,
+    onKeyDown,
+    tab = true,
+    styled = true,
+    sized = true,
+    padded = true,
+    bordered = true,
+    colored = true,
+    options = [],
+    className,
+    ...props
+}) {
+    const interactive = !(readOnly || disabled)
+    const ids = options.map((option) => option.id)
+    const isIntValue = ids.length && ids.every((id) => isInt(id))
+    const isEmpty = value === "" || value === null
+    let tmpValue = isEmpty ? null : value
+    if (isIntValue && !(empty && isEmpty)) {
+        tmpValue = parseInt(value)
+    }
+    const attr = useGetAttrWithDimProps(props)
+    const cls = new ClassNames(
+        "resize-none focus:outline-none focus:ring focus:ring-offset-0 focus:ring-focus-border",
+        className
+    )
+    cls.addIf(full, "w-full")
+    cls.addIf(styled && sized, "text-sm")
+    cls.addIf(styled && padded, "px-2")
+    cls.addIf(styled && bordered, "border")
+    cls.addIf(styled && colored, "text-input-text bg-input-bg")
+    cls.addIf(styled && colored && bordered, "border-input-border")
+    cls.addIf(interactive, "hover:brightness-110")
+    cls.addIf(disabled, "opacity-50")
+    cls.addIf(autoFocus, "autofocus")
+    const elems = []
+    let hasFound = false
+
+    for (const { id, name } of options) {
+        const found = id == tmpValue
+        if (found) hasFound = true
+        elems.push(
+            <option key={id} checked={found} value={id}>
+                {name}
+            </option>
+        )
+    }
+    let invalid =
+        options.length > 0 && !(ids.includes(tmpValue) || (empty && isEmpty))
+
+    if (empty) {
+        const found = isNull(tmpValue)
+        if (found) hasFound = true
+        elems.unshift(
+            <option key="" checked={tmpValue === null} value=""></option>
+        )
+    }
+    if (!hasFound) {
+        if (!empty) {
+            elems.unshift(
+                <option key="" checked={true} value={null}>
+                    Please select...
+                </option>
+            )
+        }
+        if (value !== undefined && !empty) invalid = true
+    }
+    useMarkInvalid(cls, invalid)
+
+    attr.tabIndex = useGetTabIndex({ tab }, cls)
+    if (!interactive) {
+        attr.style.cursor = "default"
+    }
+
+    return (
+        <select
+            className={cls.value}
+            required={required}
+            defaultValue={!interactive ? tmpValue : null}
+            onMouseDown={!interactive ? (e) => e.preventDefault() : onMouseDown}
+            onKeyDown={
+                !interactive
+                    ? (e) => {
+                          if (["ArrowDown", "ArrowUp", " "].includes(e.key)) {
+                              e.preventDefault()
+                          }
+                      }
+                    : onKeyDown
+            }
+            onChange={(e) => {
+                let value = e.target.value
+                if (empty && value === "") {
+                    value = null
+                } else if (isInt) {
+                    value = parseInt(e.target.value)
+                }
+                set(value)
+            }}
+            {...attr}
+        >
+            {elems}
+        </select>
+    )
+}
+
+function Radio({
+    value,
+    set,
+    disabled,
+    readOnly,
+    tab = true,
+    buttonProps = {},
+    options = [],
+    autoFocus,
+    ...props
+}) {
+    const interactive = !(readOnly || disabled)
+    const ids = options.map((option) => option.id)
+    const invalid = !ids.includes(value)
+
+    const buttons = []
+    let index = 0
+    let i = 0
+    for (const { id, name } of options) {
+        const found = !invalid && id === value
+        buttons.push({
+            name,
+            tab,
+            invalid,
+            autoFocus: !autoFocus ? null : true,
+            disabled,
+            colored: invalid || found,
+            className:
+                invalid || found
+                    ? ""
+                    : "bg-input-bg text-input-text border-input-border",
+            readOnly,
+            onPressed: !interactive ? null : () => set(id),
+            value,
+            activated: id
+        })
+        if (found) index = i
+        i++
+    }
+    return (
+        <ButtonGroup
+            active={invalid ? 0 : index}
+            {...props}
+            buttons={buttons}
+        />
+    )
+}
+
+function Picker({
+    className,
+    itemClassName,
+    options = [],
+    renderer = (item) => (isString(item) ? item : item.name),
+    pick = () => {},
+    wrap = true,
+    bordered = true,
+    divided = true,
+    padded = true,
+    sized = true,
+    colored = true,
+    styled = true,
+    ...props
+}) {
+    const cls = new ClassNames("stack-v overflow-y-auto", className)
+    cls.addIf(styled && colored, "bg-input-bg text-input-text")
+    cls.addIf(styled && bordered, "border")
+    cls.addIf(styled && bordered && colored, "border-input-border")
+    cls.addIf(styled && divided, "divide-y")
+    cls.addIf(styled && divided && colored, "divide-input-border")
+    const stackRef = useRef(null)
+    const setActive = (index) => {
+        const option = options[index]
+        pick(option)
+    }
+    const { focusItem, hasFocus, attr, tabIndex, ...focus } = useFocusManager({
+        setActive,
+        active: 0,
+        divRef: stackRef,
+        count: options.length,
+        handleSpace: true
+    })
+    const divAttr = useGetAttrWithDimProps(props)
+    cls.addIf(!divAttr.style?.width, "max-w-max")
+    cls.addIf(!wrap, "text-nowrap")
+
+    const elems = []
+    let i = 0
+    for (const option of options) {
+        const isFocused = hasFocus && i === tabIndex
+
+        const itemCls = new ClassNames(
+            "hover:brightness-110 focus:outline-none focus:ring focus:ring-inset focus:ring-focus-border focus:border-0",
+            itemClassName
+        )
+        itemCls.addIf(styled && sized, "text-sm")
+        itemCls.addIf(styled && padded, "p-2")
+        itemCls.addIf(!wrap, "truncate")
+        if (styled && colored) {
+            itemCls.addIf(
+                isFocused,
+                "bg-active-bg text-active-text",
+                "bg-input-bg text-input-text"
+            )
+        }
+        const itemAttr = focus.itemAttr(i)
+        itemAttr.style = {
+            cursor: "pointer"
+        }
+        if (isFocused) {
+            itemAttr.style.zIndex = 40
+        }
+        elems.push(
+            <Div key={i} className={itemCls.value} {...itemAttr}>
+                {renderer(option)}
+            </Div>
+        )
+        i++
+    }
+    return (
+        <div ref={stackRef} className={cls.value} {...attr} {...divAttr}>
+            {elems}
+        </div>
+    )
+}
+
+function ColorBox({ color, width, height, className }) {
+    const boxStyle = {
+        width,
+        height
+    }
+    const bgStyle = {
+        backgroundColor: color
+    }
+    const cls = new ClassNames("relative checkerboard-bg", className)
+    return (
+        <div className={cls.value} style={boxStyle}>
+            <div className="absolute full" style={bgStyle} />
+        </div>
+    )
+}
+
+function Color({
+    value,
+    set,
+    readOnly,
+    disabled,
+    alpha,
+    padded = true,
+    bordered = true,
+    colored = true,
+    styled = true,
+    tab = true,
+    className,
+    innerClassName
+}) {
+    const aContext = useContext(AppContext)
+
+    const colorRef = useRef(null)
+    const [clicked, setClicked] = useState(false)
+
+    const interactive = !(readOnly || disabled)
+    // const { openColorPickerModal, ColorPickerModal } = useColorPickerModal()
+    colorRef.current = value
+
+    const cls = new ClassNames(
+        "max-w-max focus:outline-none focus:ring focus:ring-focus-border",
+        className
+    )
+    cls.addIf(styled && padded, "p-1")
+    cls.addIf(styled && bordered, "border border-outset")
+    cls.addIf(styled && colored, "bg-input-bg")
+    cls.addIf(styled && bordered && colored, "border-input-border")
+
+    const invalid =
+        typeof value !== "string" ||
+        !value.match(alpha ? /^#[0-9a-f]{8}$/i : /^#[0-9a-f]{6}$/i)
+    useMarkInvalid(cls, invalid)
+
+    const innerCls = new ClassNames("", innerClassName)
+    innerCls.addIf(styled && bordered, "border border-inset")
+    innerCls.addIf(styled && bordered && colored, "border-input-border")
+    innerCls.addIf(styled && colored, "bg-input-bg")
+    cls.addIf(disabled, "opacity-50")
+    cls.addIf(interactive, "hover:brightness-110")
+    const handleClick = (upEvent) => {
+        if (invalid) {
+            colorRef.current = "#000000" + (alpha ? "00" : "")
+        }
+        aContext.startExclusiveMode("pick-color", "pointer")
+        aContext.addEventListener(
+            upEvent,
+            () => {
+                aContext.endExclusiveMode("pick-color")
+                setClicked(false)
+            },
+            { once: true }
+        )
+        d("TODO open colorpicker with ", value)
+        /*
+        openColorPickerModal({
+            value: colorRef,
+            alpha,
+            set
+        })
+        */
+        setClicked(true)
+        if (invalid && set) set(colorRef.current)
+    }
+    const width = 30
+    const height = 13
+    return (
+        <Div
+            className={cls.value}
+            cursor={!interactive ? false : "pointer"}
+            tab={tab}
+            onMouseDown={
+                !interactive
+                    ? (e) => e.preventDefault()
+                    : () => handleClick("mouseup")
+            }
+            onKeyDown={
+                readOnly
+                    ? null
+                    : (e) => {
+                          if (e.keyCode !== 32 || clicked) {
+                              return
+                          }
+                          e.preventDefault()
+                          if (interactive) handleClick("keyup")
+                      }
+            }
+        >
+            <div className={innerCls.value}>
+                <ColorBox
+                    color={invalid ? "#FFFFFF00" : value}
+                    width={width}
+                    height={height}
+                />
+            </div>
+        </Div>
+    )
+}
+
+// TODO refactor this crap
+function SliderBounds({
+    vertical,
+    min,
+    max,
+    full,
+    end,
+    center,
+    width,
+    height,
+    padded,
+    border,
+    children
+}) {
+    const defaultPaddingPx = 2
+    const boxBorderWidthPx = 1
+    const add = {
+        h: 0,
+        v: 0
+    }
+    if (padded) {
+        if (padded === "1") {
+            add.h += 2
+            add.v += 2
+        } else {
+            if (typeof padded === "number") {
+                if (padded & DIR.LEFT) add.h++
+                if (padded & DIR.RIGHT) add.h++
+                if (padded & DIR.TOP) add.v++
+                if (padded & DIR.BOTTOM) add.v++
+            } else {
+                if (padded !== "v") add.h = 2
+                if (padded !== "h") add.v = 2
+            }
+            add.h *= defaultPaddingPx
+            add.v *= defaultPaddingPx
+        }
+    }
+    if (border) {
+        if (border === "1") {
+            add.h += 2
+            add.v += 2
+        } else if (typeof border === "number") {
+            let h = 0
+            let v = 0
+            if (border & DIR.TOP) v++
+            if (border & DIR.BOTTOM) v++
+            if (border & DIR.LEFT) h++
+            if (border & DIR.RIGHT) h++
+            add.h += h * boxBorderWidthPx
+            add.v += v * boxBorderWidthPx
+        } else {
+            add.h += 2 * boxBorderWidthPx
+            add.v += 2 * boxBorderWidthPx
+        }
+    }
+    if (width) width += add.h
+    if (height) height += add.v
+
+    const dimProps = {}
+    const style = { width, height }
+    const axisDir = vertical ? "v" : "h"
+    full = full && full !== axisDir ? true : axisDir
+    const axisDim = vertical ? "Height" : "Width"
+    if (min) {
+        style["min" + axisDim] = min + add[axisDir]
+    }
+    if (max) {
+        style["max" + axisDim] = max + add[axisDir]
+    }
+    if (end) {
+        dimProps.className = "" //"margin-" + (vertical ? "top" : "left") + "-auto"
+    } else if (true || center) {
+        dimProps.className = "" // "margin-" + (vertical ? "v" : "h") + "-auto"
+    }
+    return (
+        <Div {...dimProps} style={style}>
+            <AvailContextProvider>{children}</AvailContextProvider>
+        </Div>
+    )
+}
+
+function Slider({
+    vertical,
+    center,
+    end,
+    padded,
+    border,
+    size,
+    full,
+    tab = true,
+    sledProps = {},
+    railProps = {},
+    ...props
+}) {
+    const buttonBorderWidthPx = 1
+
+    railProps = {
+        size: 150,
+        radius: true,
+        oppSize: 8,
+        minSize: 80,
+        maxSize: 180,
+        outline: false,
+        center: true,
+        ...railProps
+    }
+    sledProps = {
+        border: true,
+        short: 10,
+        long: 25,
+        margin: 0,
+        radius: true,
+        ...sledProps
+    }
+    if (size) {
+        railProps.size = size
+        railProps.minSize = size
+        railProps.maxSize = size
+    }
+    let borders = 0
+    if (sledProps.border) {
+        borders = sledProps.border === "1" ? 1 : buttonBorderWidthPx
+    }
+    const min =
+        railProps.minSize === null
+            ? false
+            : railProps.minSize + sledProps.short + 2 * buttonBorderWidthPx
+    let max =
+        railProps.maxSize === null
+            ? false
+            : railProps.maxSize + sledProps.short + 2 * buttonBorderWidthPx
+    const attr = {
+        full: vertical ? "v" : "h",
+        [vertical ? "width" : "height"]:
+            sledProps.margin + sledProps.long + 2 * borders
+    }
+    return (
+        <SliderBounds
+            vertical={vertical}
+            padded={padded}
+            end={end}
+            center={center}
+            min={min}
+            max={max}
+            border={border}
+            {...attr}
+        >
+            <SliderInner
+                end={end}
+                center={center}
+                vertical={vertical}
+                tab={tab}
+                {...props}
+                borders={borders}
+                railProps={railProps}
+                sledProps={sledProps}
+            />
+        </SliderBounds>
+    )
+}
+
+function SliderInner({
+    vertical,
+    sledProps,
+    railProps,
+    borders,
+    end,
+    ...props
+}) {
+    const avContext = useContext(AvailContext)
+    const axisDim = vertical ? "height" : "width"
+    railProps.size = clamp(
+        railProps.minSize,
+        avContext[axisDim] - (sledProps.short - 2 * borders),
+        railProps.maxSize
+    )
+    return (
+        <RailAndSled
+            vertical={vertical}
+            sledProps={sledProps}
+            railProps={railProps}
+            borders={borders}
+            {...props}
+        />
+    )
+}
+
+function RailAndSled({
+    value,
+    set,
+    vertical,
+    min = 0,
+    max,
+    tab,
+    readOnly,
+    disabled,
+    decimals = 0,
+    railProps = {},
+    sledProps = {},
+    getIndicator,
+    borders,
+    focusRef,
+    children
+}) {
+    const aContext = useContext(AppContext)
+
+    const [clicked, setClicked] = useState(false)
+
+    const divRef = useRef(null)
+    const sledRef = useRef(null)
+    const propsRef = useRef(null)
+    propsRef.current = { value }
+
+    const interactive = !(readOnly || disabled)
+
+    const {
+        oppSize,
+        size,
+        minSize,
+        maxSize,
+        outline,
+        center,
+        radius: railRadius
+    } = railProps
+    const { border, short, long, margin, radius } = sledProps
+
+    const cls = new ClassNames("overflow")
+    const stackCls = new ClassNames()
+
+    stackCls.addIf(true || outline, "ring-1 ring-input-border")
+    const sledBorders = 2 * borders
+    const sledShort = short + sledBorders
+    const sledLong = long + sledBorders + margin
+
+    const clampedSize = clamp(minSize, size, maxSize)
+    let interval = Math.abs(max - min)
+    let points = interval
+    let i = 0
+    let step = 1
+    while (i < decimals) {
+        step *= 0.1
+        points *= 10
+        i++
+    }
+    points++
+    const pixelSize = interval / clampedSize
+    const pixelPoints = points / clampedSize
+    const pointDist = Math.max(clampedSize / points, 1)
+
+    let valuePos
+    const invalid = !isNumber(value) || !(value >= min && value <= max)
+    if (!invalid) {
+        if (min === max) {
+            valuePos = vertical ? 0 : size
+            // readOnly = true
+        } else {
+            valuePos = -Math.round((value - min) / pixelSize)
+            if (vertical) {
+                valuePos += size
+            } else {
+                valuePos *= -1
+            }
+        }
+    }
+    const axis = vertical ? "Y" : "X"
+    const oppDir = vertical ? "h" : "v"
+    const axisDim = vertical ? "height" : "width"
+    const oppAxisDim = vertical ? "width" : "height"
+    const axisMargin = vertical ? "top" : "left"
+    const oppAxisMargin = vertical ? "left" : "top"
+
+    const overlayAttr = {
+        ["origin" + axis]: sledShort >> 1,
+        [axisDim]: size + (sledShort >> 1),
+        [oppAxisDim]: sledLong
+    }
+    const stackAttr = {
+        [axisDim]: clampedSize,
+        [oppAxisDim]: oppSize
+    }
+    if (interactive) {
+        stackAttr.style = { cursor: "pointer" }
+    }
+    const valueAttr = invalid
+        ? {}
+        : {
+              [axisDim]: vertical ? size - valuePos : valuePos
+          }
+    const sledOverlayAttr = invalid
+        ? {}
+        : {
+              [axisMargin]: -(sledShort >> 1) + valuePos,
+              [oppAxisMargin]: margin
+          }
+    const indicatorAttr = invalid
+        ? {}
+        : {
+              [axisMargin]: -(sledShort >> 1) + valuePos
+          }
+    const handleAttr = {
+        [axisDim]: sledShort - sledBorders,
+        [oppAxisDim]: sledLong - sledBorders - margin
+    }
+    cls.addIf(disabled, "opacity-50")
+    const gripCls = new ClassNames(
+        "focus:outline-none focus:ring focus:ring-focus-border"
+    )
+    gripCls.addIf(clicked, "bg-active-bg", "bg-button-bg")
+    gripCls.addIf(
+        border,
+        "border-button-border border" // + (border === "1" ? "1" : "width")
+    )
+    /*
+    gripCls.addIf(radius, "button-border-radius")
+    stackCls.addIf(railRadius, "input-border-radius")
+    */
+
+    gripCls.addIf(interactive, "hover-change", "no-events")
+    if (invalid) {
+        children = (
+            <Div
+                className="full bg-input-bg invalid focus:outline-none focus:ring focus:ring-focus-border"
+                tab={tab}
+                onKeyDown={(e) => {
+                    if (e.key !== " ") {
+                        return
+                    }
+                    set(min)
+                    e.preventDefault()
+                }}
+            />
+        )
+    } else if (!children) {
+        children = []
+        children.push(
+            <Div
+                key="a"
+                full={oppDir}
+                className="bg-active-bg"
+                {...valueAttr}
+            />
+        )
+        children.push(<Div key="b" className="auto bg-input-bg" />)
+        if (vertical) {
+            children.reverse()
+        }
+    }
+
+    const setSliderPos = !interactive
+        ? (e) => e.preventDefault()
+        : (e) => {
+              const rect = divRef.current.getBoundingClientRect()
+              let dist = e["client" + axis] - rect[axis.toLowerCase()]
+              if (vertical) {
+                  dist = clampedSize - dist
+              }
+              if (pixelPoints < 1) {
+                  dist =
+                      Math.round(
+                          Math.max(dist - pointDist / 2, 0) / pointDist
+                      ) * step
+              } else {
+                  dist *= pixelSize
+              }
+              set(clamp(min, round(min + dist, decimals), max))
+              if (tab) {
+                  requestAnimationFrame(
+                      () => sledRef.current && sledRef.current.focus()
+                  )
+              }
+              startSliding()
+          }
+
+    const startSliding = !interactive
+        ? (e) => e.preventDefault()
+        : () => {
+              const rect = divRef.current.getBoundingClientRect()
+              const start = rect[axis.toLowerCase()]
+              aContext.startExclusiveMode("move-slider", "grabbing")
+              setClicked(true)
+              aContext.addEventListener(
+                  "mouseup",
+                  () => {
+                      aContext.endExclusiveMode("move-slider")
+                      setClicked(false)
+                      if (focusRef && focusRef.current) {
+                          focusRef.current.focus()
+                      }
+                  },
+                  { once: true }
+              )
+              aContext.addEventListener("mousemove", (e) => {
+                  const { value } = propsRef.current
+                  let dist = e["client" + axis] - start
+                  if (vertical) {
+                      dist = clampedSize - dist
+                  }
+                  dist *= pixelSize
+                  const newValue = clamp(min, round(min + dist, decimals), max)
+                  if (value !== newValue) {
+                      set(newValue)
+                  }
+              })
+          }
+
+    const focusAttr = useFocusKeyBindings(
+        {
+            keyHandlers: [
+                {
+                    keys: ["ArrowDown", "ArrowLeft"],
+                    handler: (e) => {
+                        if (!interactive) return
+
+                        const { value } = propsRef.current
+                        const newValue = clamp(
+                            min,
+                            value - (e.shiftKey ? step * 10 : step),
+                            max
+                        )
+                        if (newValue !== value) {
+                            set(newValue)
+                        }
+                    }
+                },
+                {
+                    keys: ["ArrowUp", "ArrowRight"],
+                    handler: (e) => {
+                        if (!interactive) return
+
+                        const { value } = propsRef.current
+                        const newValue = clamp(
+                            min,
+                            value + (e.shiftKey ? step * 10 : step),
+                            max
+                        )
+                        if (newValue !== value) {
+                            set(newValue)
+                        }
+                    }
+                }
+            ]
+        },
+        !interactive
+    )
+    const railCls = new ClassNames("full grid")
+    if (center) {
+        railCls.addIf(vertical, "justify-center", "content-center")
+    }
+    return (
+        <Overlays full={oppDir} className={cls.value} {...overlayAttr}>
+            <Overlay className={vertical ? "w-full" : "full"}>
+                <Div className={railCls.value} ref={divRef}>
+                    <AvailContext.Provider
+                        value={{
+                            [axisDim]: clampedSize,
+                            [oppAxisDim]: railProps.oppSize
+                        }}
+                    >
+                        <Stack
+                            className={stackCls.value}
+                            onMouseDown={setSliderPos}
+                            vertical={vertical}
+                            gapped={false}
+                            {...stackAttr}
+                        >
+                            {children}
+                        </Stack>
+                    </AvailContext.Provider>
+                </Div>
+            </Overlay>
+            {getIndicator && !invalid && (
+                <Overlay className="no-events" {...indicatorAttr}>
+                    {getIndicator()}
+                </Overlay>
+            )}
+            {!invalid && (
+                <Overlay {...sledOverlayAttr}>
+                    <Div
+                        ref={sledRef}
+                        cursor={interactive ? "grab" : false}
+                        tab={tab}
+                        onMouseDown={startSliding}
+                        className={gripCls.value}
+                        {...handleAttr}
+                        {...focusAttr}
+                    />
+                </Overlay>
+            )}
+        </Overlays>
+    )
+}
 
 function Button({
     name,
@@ -24,31 +1321,55 @@ function Button({
     reverse,
     full,
     invalid,
+    readOnly,
+    autoFocus,
+    submit,
+    refocus = null,
     sized = true,
     colored = true,
     padded = true,
     styled = true,
     bordered = true,
+    tab = true,
+    tabControlled,
     className,
     iconClassName,
     ...props
 }) {
     const aContext = useContext(AppContext)
+    const fCtx = useContext(FormContext)
     const mounted = useMounted()
     const [clicked, setClicked] = useState(false)
+    const [focused, setFocused] = useState(false)
 
-    const style = useExtractDimProps(props)
+    const focusRef = useRef(null)
+    const focusedRef = useRef(null)
+    focusedRef.current = focused
 
-    const cls = new ClassNames("", className)
+    const attr = useGetAttrWithDimProps(props)
+    const interactive = !(disabled || readOnly)
+    attr.style.cursor = interactive ? "pointer" : "default"
+    if (focused) {
+        attr.style.zIndex = 19999
+    }
+
+    const cls = new ClassNames(
+        "focus:outline-none focus:ring focus:ring-focus-border",
+        className
+    )
+    cls.addIf(autoFocus, "autofocus")
     cls.addIf(styled && sized, "text-xs")
     cls.addIf(styled && padded, "py-0 px-2")
-    cls.addIf(
-        disabled,
-        "opacity-50",
-        styled
-            ? "hover:brightness-110 focus:outline-none focus:ring focus:ring-focus-border"
-            : ""
-    )
+
+    const cannotSubmit = submit && (disabled || (fCtx && fCtx.invalid))
+    useEffect(() => {
+        if (!submit || !aContext.getModalLevel()) return
+
+        aContext.setModalSubmit(cannotSubmit ? null : onPressed)
+    }, [cannotSubmit])
+    if (cannotSubmit) disabled = true
+    cls.addIf(disabled, "opacity-50")
+    cls.addIf(interactive, "hover:brightness-110")
     const isActive =
         (value === undefined && clicked) ||
         (value !== undefined && value === activated)
@@ -67,9 +1388,22 @@ function Button({
     const innerCls = new ClassNames("gap-1 justify-center")
     innerCls.addIf(reverse, "rstack-h", "stack-h")
     cls.addIf(full, "w-full")
-    cls.addIf(invalid, "invalid")
+    useMarkInvalid(cls, invalid)
 
     const iconCls = new ClassNames("not_leading-none", iconClassName)
+    attr.ref = focusRef
+    attr.onFocus = (e) => {
+        setFocused(true)
+        if (props.onFocus) props.onFocus(e)
+    }
+    attr.onBlur = () => {
+        requestAnimationFrame(() => {
+            if (mounted.current) {
+                setFocused(false)
+            }
+        })
+    }
+    attr.tabIndex = useGetTabIndex({ tab, tabControlled, focused }, cls)
 
     const initPressedHandling = (startEvent, releaseEvent) => {
         aContext.startExclusiveMode("clicked", "pointer")
@@ -100,27 +1434,127 @@ function Button({
 
         btnElem.focus()
 
-        if (onPressed) onPressed(startEvent, { activated })
+        if (onPressed) {
+            onPressed(startEvent, { activated })
+        }
     }
 
     return (
         <button
             className={cls.value}
-            disabled={disabled}
-            style={style}
             onKeyDown={(e) => {
                 if (e.keyCode !== 32 || clicked) {
                     return
                 }
-                initPressedHandling(e, "keyup")
+                if (interactive) initPressedHandling(e, "keyup")
             }}
-            onMouseDown={(e) => initPressedHandling(e, "mouseup")}
+            onMouseDown={(e) => {
+                if (!interactive) {
+                    e.preventDefault()
+                    return
+                }
+                aContext.setButtonRefocus(refocus)
+                if (tab && !tabControlled) {
+                    focusRef.current.focus()
+                    requestAnimationFrame(() => {
+                        if (focusRef.current) {
+                            focusRef.current.focus()
+                        }
+                    })
+                }
+                initPressedHandling(e, "mouseup")
+                aContext.setButtonRefocus(null)
+            }}
+            {...attr}
         >
             <div className={innerCls.value}>
                 {icon && <Icon className={iconCls.value} name={icon} />}
                 {name && <div className="truncate">{name}</div>}
             </div>
         </button>
+    )
+}
+
+function Submit(props) {
+    return <Button type="submit" {...props} />
+}
+
+function ButtonGroup({
+    className,
+    buttons = [],
+    gapped = true,
+    wrap = true,
+    buttonProps = {},
+    active,
+    ...props
+}) {
+    const stackRef = useRef(null)
+    const { focusItem, attr, refocus, ...focus } = useFocusManager({
+        divRef: stackRef,
+        count: buttons.length,
+        active: active !== undefined ? active : 0,
+        setActive: () => {}
+    })
+    const style = useExtractDimProps(props)
+
+    const cls = new ClassNames("stack-h", className)
+    cls.addIf(gapped, "gap-2")
+    cls.addIf(wrap, "flex-wrap", "flex-nowrap overflow-auto")
+
+    const elems = []
+    let i = 0
+
+    for (const button of buttons) {
+        const curr = i
+        const itemAttr = focus.itemAttr(curr)
+
+        const { tab, onMouseDown, onFocus } = itemAttr
+        const elemProps = {
+            ...buttonProps,
+            ...button,
+            tab
+        }
+
+        if (onFocus) {
+            elemProps.onFocus = onFocus
+        }
+        let onPressedNew = null
+        if (!elemProps.readOnly) {
+            const oldHandler = elemProps.onPressed
+            if (oldHandler) {
+                onPressedNew = (e) => {
+                    oldHandler(e)
+                    onMouseDown(e)
+                }
+            } else {
+                onPressedNew = onMouseDown
+            }
+        }
+        elemProps.onPressed = onPressedNew
+        elems.push(
+            <Button
+                key={i}
+                {...elemProps}
+                tabControlled
+                refocus={refocus}
+                onPressedEnd={(outside) => {
+                    if (elemProps.onPressedEnd) {
+                        elemProps.onPressedEnd(outside)
+                    }
+                    refocus()
+                }}
+            />
+        )
+        i++
+    }
+
+    /*
+     */
+
+    return (
+        <Div ref={stackRef} className={cls.value} style={style} {...attr}>
+            {elems}
+        </Div>
     )
 }
 
@@ -354,474 +1788,76 @@ function AutoCompleteInput({ defaultValue = "", suggestions = [], onClose }) {
     )
 }
 
-function ButtonGroup({
-    className,
-    children,
-    gapped = true,
-    wrap = true,
-    ...props
-}) {
-    const style = useExtractDimProps(props)
+const FormContext = createContext()
 
-    const cls = new ClassNames("stack-h", className)
-    cls.addIf(gapped, "gap-2")
-    cls.addIf(wrap, "flex-wrap", "flex-nowrap overflow-auto")
+function Form({ children, submit, onKeyDown, className, ...props }) {
+    const [invalid, setInvalid] = useState(false)
+    const mounted = useMounted()
 
-    return (
-        <div tabIndex={0} className={cls.value} style={style}>
-            {children}
-        </div>
-    )
-}
+    const cls = new ClassNames("form", className)
 
-function Input({
-    id,
-    name,
-    set,
-    value,
-    type = "text",
-    readOnly,
-    disabled,
-    full,
-    size,
-    keys,
-    required,
-    minLength,
-    maxLength,
-    isValid = () => true,
-    sized = true,
-    bordered = true,
-    colored = true,
-    padded = true,
-    styled = true,
-    className,
-    ...props
-}) {
-    const style = useExtractDimProps(props)
-    const interactive = !(readOnly || disabled)
+    const formRef = useRef(null)
+    const invalidRef = useRef(null)
+    invalidRef.current = invalid
 
-    const checkValidity = (value) => {
-        return !(
-            !isString(value) ||
-            (maxLength && value.length > maxLength) ||
-            (minLength && value.length < minLength) ||
-            (required && value.length === 0) ||
-            !isValid(value)
-        )
+    const value = {
+        invalid,
+        markInvalid: () => {
+            if (!invalidRef.current) {
+                setInvalid(true)
+            }
+        }
     }
-    const [tmpValue, setTmpValue] = useState(value)
-    const invalid = !checkValidity(tmpValue)
 
     useEffect(() => {
-        if (invalid || tmpValue === value || !isString(value)) return
+        if (!mounted.current || !formRef.current) {
+            return
+        }
 
-        setTmpValue(value)
-    }, [value])
+        const hasInvalid = () => {
+            return formRef.current.querySelector(".invalid") !== null
+        }
 
-    const cls = new ClassNames("", className)
-    cls.addIf(full, "w-full")
-    cls.addIf(styled && sized, "text-sm")
-    cls.addIf(styled && padded, "px-2")
-    cls.addIf(styled && bordered, "border")
-    cls.addIf(styled && colored, "text-input-text bg-input-bg")
-    cls.addIf(invalid, "invalid")
-    cls.addIf(styled && colored && bordered, "border-input-border")
-    cls.addIf(
-        !disabled,
-        "hover:brightness-110 focus:outline-none focus:ring focus:ring-offset-0 focus:ring-focus-border"
-    )
-    cls.addIf(disabled, "opacity-50")
+        const checkForInvalid = () => {
+            if (!mounted.current) {
+                return
+            }
+            if (invalidRef.current && !hasInvalid()) {
+                setInvalid(false)
+            }
+            requestAnimationFrame(checkForInvalid)
+        }
 
-    let onKeyDown = null
-    if (interactive) {
-        onKeyDown = !keys
-            ? props.onKeyDown
-            : (e) => {
-                  if (props.onKeyDown) props.onKeyDown(e)
+        if (hasInvalid()) {
+            setInvalid(true)
+        }
+        checkForInvalid()
+    }, [])
 
-                  const key = e.key === "Space" ? " " : e.key
-                  if (key.length === 1 && keys.indexOf(key) === -1) {
-                      e.preventDefault()
-                  }
+    const submitOnReturn = !submit
+        ? null
+        : (e) => {
+              if (e.key === "Enter" && !invalidRef.current) {
+                  submit()
+                  e.preventDefault()
+                  e.stopPropagation()
+              } else if (onKeyDown) {
+                  onKeyDown(e)
               }
-    }
-    return (
-        <input
-            id={id}
-            disabled={disabled}
-            value={isString(tmpValue) ? tmpValue : ""}
-            onKeyDown={onKeyDown}
-            onChange={
-                !interactive
-                    ? null
-                    : (e) => {
-                          setTmpValue(e.target.value)
-                          if (checkValidity(e.target.value)) {
-                              set(e.target.value)
-                          }
-                      }
-            }
-            onBlur={(e) => {
-                if (invalid) setTmpValue(value)
-            }}
-            name={name}
-            type={type}
-            size={size}
-            required={required}
-            maxLength={maxLength}
-            minLength={minLength}
-            readOnly={!interactive}
-            className={cls.value}
-            style={style}
-        />
-    )
-}
-
-function Number({ min, max, value, set, size, ...props }) {
-    const setTmp = (value) => {
-        set(parseInt(value))
-    }
-    const tmpValue = isInt(value) ? "" + value : ""
-    const isValid = (value) => {
-        if (!isString(value)) return false
-
-        if (!/^-?\d+$/.test(value)) return false
-
-        const parsed = parseInt(value)
-        if (isNaN(parsed)) return false
-
-        if (
-            (min !== undefined && parsed < min) ||
-            (max !== undefined && parsed > max)
-        )
-            return false
-
-        return true
-    }
-    let maxLength = 0
-    let keys = "0123456789"
-    let subZero = min === undefined && max === undefined
-    if (min !== undefined) {
-        maxLength = ("" + min).length
-        if (min < 0) subZero = true
-    }
-    if (max !== undefined) {
-        maxLength = Math.max(maxLength, ("" + max).length)
-        if (max < 0) subZero = true
-    }
-    if (subZero) keys += "-"
-    if (maxLength === 0) maxLength = 11
-    return (
-        <Input
-            value={tmpValue}
-            set={setTmp}
-            isValid={isValid}
-            keys={keys}
-            onKeyDown={(e) => {
-                if (!isInt(value)) return
-
-                let delta = 0
-                if (e.key === "ArrowUp") {
-                    delta++
-                } else if (e.key === "ArrowDown") {
-                    delta--
-                }
-                if (delta === 0) return
-
-                const newValue = value + delta
-                if (!isInRange(newValue, min, max)) return
-                setTmp("" + newValue)
-                e.preventDefault()
-            }}
-            maxLength={maxLength}
-            size={size === undefined ? maxLength : size}
-            {...props}
-        />
-    )
-}
-
-function Textarea({
-    value,
-    set,
-    disabled,
-    readOnly,
-    required,
-    full,
-    minLength,
-    maxLength,
-    cols,
-    rows,
-    isValid = () => true,
-    styled = true,
-    sized = true,
-    padded = true,
-    bordered = true,
-    colored = true,
-    className,
-    ...props
-}) {
-    const checkValidity = (value) => {
-        return !(
-            !isString(value) ||
-            (maxLength && value.length > maxLength) ||
-            (minLength && value.length < minLength) ||
-            (required && value.length === 0) ||
-            !isValid(value)
-        )
-    }
-    const [tmpValue, setTmpValue] = useState(value)
-    const invalid = !checkValidity(tmpValue)
-
-    useEffect(() => {
-        if (invalid || tmpValue === value || !isString(value)) return
-
-        setTmpValue(value)
-    }, [value])
-
-    const style = useExtractDimProps(props)
-    const cls = new ClassNames("resize-none", className)
-    cls.addIf(full, "w-full")
-    cls.addIf(styled && sized, "text-sm")
-    cls.addIf(styled && padded, "px-2")
-    cls.addIf(styled && bordered, "border")
-    cls.addIf(styled && colored, "text-input-text bg-input-bg")
-    cls.addIf(invalid, "invalid")
-    cls.addIf(styled && colored && bordered, "border-input-border")
-    cls.addIf(
-        !disabled,
-        "hover:brightness-110 focus:outline-none focus:ring focus:ring-offset-0 focus:ring-focus-border"
-    )
-    cls.addIf(disabled, "opacity-50")
+          }
 
     return (
-        <textarea
-            className={cls.value}
-            disabled={disabled}
-            readOnly={readOnly}
-            required={required}
-            style={style}
-            cols={cols}
-            rows={rows}
-            onBlur={(e) => {
-                if (invalid) setTmpValue(value)
-            }}
-            onChange={(e) => {
-                const newValue = e.target.value
-                setTmpValue(newValue)
-                if (checkValidity(newValue)) {
-                    set(newValue)
-                }
-            }}
-            value={isString(tmpValue) ? tmpValue : ""}
-        />
+        <FormContext.Provider value={value}>
+            <form
+                className={cls.value}
+                onKeyDown={submitOnReturn}
+                ref={formRef}
+                {...props}
+            >
+                {children}
+            </form>
+        </FormContext.Provider>
     )
-}
-
-function Select({
-    value,
-    set,
-    readOnly,
-    required,
-    full,
-    empty,
-    styled = true,
-    sized = true,
-    padded = true,
-    bordered = true,
-    colored = true,
-    options = [],
-    disabled = false,
-    className,
-    ...props
-}) {
-    const ids = options.map((option) => option.id)
-    const isIntValue = ids.length && ids.every((id) => isInt(id))
-    const isEmpty = value === "" || value === null
-    let tmpValue = isEmpty ? null : value
-    if (isIntValue && !(empty && isEmpty)) {
-        tmpValue = parseInt(value)
-    }
-    const style = useExtractDimProps(props)
-    const cls = new ClassNames("resize-none", className)
-    cls.addIf(full, "w-full")
-    cls.addIf(styled && sized, "text-sm")
-    cls.addIf(styled && padded, "px-2")
-    cls.addIf(styled && bordered, "border")
-    cls.addIf(styled && colored, "text-input-text bg-input-bg")
-    cls.addIf(styled && colored && bordered, "border-input-border")
-    cls.addIf(
-        !disabled,
-        "hover:brightness-110 focus:outline-none focus:ring focus:ring-offset-0 focus:ring-focus-border"
-    )
-    cls.addIf(disabled, "opacity-50")
-    const elems = []
-    let hasFound = false
-
-    for (const { id, name } of options) {
-        const found = id == tmpValue
-        if (found) hasFound = true
-        elems.push(
-            <option key={id} checked={found} value={id}>
-                {name}
-            </option>
-        )
-    }
-    let invalid =
-        options.length > 0 && !(ids.includes(tmpValue) || (empty && isEmpty))
-
-    if (empty) {
-        const found = isNull(tmpValue)
-        if (found) hasFound = true
-        elems.unshift(
-            <option key="" checked={tmpValue === null} value=""></option>
-        )
-    }
-    if (!hasFound) {
-        if (!empty) {
-            elems.unshift(
-                <option key="" checked={true} value={null}>
-                    Please select...
-                </option>
-            )
-        }
-        if (value !== undefined && !empty) invalid = true
-    }
-    cls.addIf(invalid, "invalid")
-    return (
-        <select
-            className={cls.value}
-            disabled={disabled}
-            required={required}
-            defaultValue={readOnly || disabled ? tmpValue : null}
-            onMouseDown={readOnly ? (e) => e.preventDefault() : null}
-            onChange={(e) => {
-                let value = e.target.value
-                if (empty && value === "") {
-                    value = null
-                } else if (isInt) {
-                    value = parseInt(e.target.value)
-                }
-                set(value)
-            }}
-            style={style}
-        >
-            {elems}
-        </select>
-    )
-}
-
-function Checkbox({
-    value,
-    set,
-    disabled,
-    sized = true,
-    bordered = true,
-    colored = true,
-    styled = true,
-    readOnly,
-    className
-}) {
-    const [clicked, setClicked] = useState(false)
-
-    let tmpValue = value
-    if (isString(value)) {
-        if (["true", "false"].includes(value.toLowerCase())) {
-            tmpValue = value.toLowerCase() === "true"
-        } else if (["0", "1"].includes(value)) {
-            tmpValue = value === "1"
-        }
-    }
-    const invalid = !isBool(tmpValue)
-    const interactive = !(readOnly || disabled)
-    const aCtx = useContext(AppContext)
-    const cls = new ClassNames("select-none", className)
-    cls.addIf(styled && sized, "text-xs")
-    cls.addIf(styled && bordered, "border")
-    cls.addIf(
-        clicked,
-        styled && colored ? "text-active-text bg-active-bg" : "",
-        styled && colored ? "text-input-text bg-input-bg" : ""
-    )
-    cls.addIf(styled && colored && bordered, "border-input-border")
-    cls.addIf(
-        styled && !disabled,
-        "hover:brightness-110 focus:outline-none focus:ring focus:ring-offset-0 focus:ring-focus-border"
-    )
-    cls.addIf(disabled, "opacity-50")
-    cls.addIf(invalid, "invalid")
-
-    const handleClick = (upEvent) => {
-        aCtx.startExclusiveMode("toggle-bool", "pointer")
-        aCtx.addEventListener(
-            upEvent,
-            () => {
-                aCtx.endExclusiveMode("toggle-bool")
-                setClicked(false)
-            },
-            { once: true }
-        )
-        set(invalid ? true : !tmpValue)
-        setClicked(true)
-    }
-    const iconCls = new ClassNames("not_leading-none")
-    iconCls.addIf(value, "visible", "invisible")
-    return (
-        <Div
-            tab={!disabled}
-            cursor={interactive ? "pointer" : null}
-            width="min-content"
-            height="min-content"
-            className={cls.value}
-            onMouseDown={!interactive ? null : () => handleClick("mouseup")}
-            onKeyDown={
-                !interactive
-                    ? null
-                    : (e) => {
-                          const isSpace = e.keyCode === 32
-                          if (!isSpace) return
-
-                          e.preventDefault()
-                          if (!clicked) handleClick("keyup")
-                      }
-            }
-        >
-            <Icon className={iconCls.value} name="check" />
-        </Div>
-    )
-}
-
-function Radio({
-    value,
-    set,
-    disabled,
-    readOnly,
-    buttonProps = {},
-    options = [],
-    ...props
-}) {
-    const ids = options.map((option) => option.id)
-    const invalid = !ids.includes(value)
-
-    const elems = []
-    for (const { id, name } of options) {
-        elems.push(
-            <Button
-                {...buttonProps}
-                key={id}
-                name={name}
-                invalid={invalid}
-                disabled={disabled}
-                onPressed={readOnly ? null : () => set(id)}
-                value={value}
-                activated={id}
-            />
-        )
-    }
-    return <ButtonGroup {...props}>{elems}</ButtonGroup>
-}
-
-function Slider({}) {
-    return <div>Slider</div>
 }
 
 function FormGrid({ className, children, ...props }) {
@@ -839,7 +1875,7 @@ function FormGrid({ className, children, ...props }) {
 
 function SectionCells({ name }) {
     return (
-        <div className="col-span-2 text-sm pt-2 border-b border-app-text">
+        <div className="col-span-2 text-sm pt-2 border-b border-app-text/20">
             {name}
         </div>
     )
@@ -902,7 +1938,62 @@ function RadioCells({ name, ...props }) {
     )
 }
 
+function ColorCells({ name, ...props }) {
+    return (
+        <CustomCells name={name}>
+            <Color {...props} />
+        </CustomCells>
+    )
+}
+
+function SliderCells({ name, ...props }) {
+    return (
+        <CustomCells name={name}>
+            <Slider {...props} />
+        </CustomCells>
+    )
+}
+
+function OkCancelForm({
+    ok = () => {},
+    cancel = () => {},
+    submit,
+    buttons = [],
+    children
+}) {
+    const groupBtns = [
+        {
+            name: "OK",
+            icon: "check",
+            iconClassName: "text-ok-text",
+            autoFocus: true,
+            submit,
+            onPressed: ok
+        },
+        {
+            name: "Cancel",
+            icon: "cancel",
+            iconClassName: "text-warning-text",
+            onPressed: cancel
+        },
+        ...buttons
+    ]
+    const inner = (
+        <div className="stack-v full">
+            <div className="auto">{children}</div>
+            <div className="bg-header-bg/50 p-2 border-t border-header-border">
+                <ButtonGroup buttons={groupBtns} />
+            </div>
+        </div>
+    )
+    if (!submit) return inner
+
+    return <Form className="full">{inner}</Form>
+}
+
 export {
+    Form,
+    Submit,
     Button,
     ButtonGroup,
     Input,
@@ -912,6 +2003,8 @@ export {
     Radio,
     Checkbox,
     Slider,
+    Picker,
+    Color,
     AutoCompleteInput,
     FormGrid,
     SectionCells,
@@ -921,5 +2014,8 @@ export {
     NumberCells,
     TextareaCells,
     SelectCells,
-    RadioCells
+    RadioCells,
+    ColorCells,
+    SliderCells,
+    OkCancelForm
 }

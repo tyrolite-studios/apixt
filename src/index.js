@@ -7,7 +7,7 @@ const baseUrl = url.toString()
 
 let lastFetch = null
 
-const exexLastFetch = () => {
+const execLastFetch = () => {
     return lastFetch().catch((e) => {
         console.error(e)
         openModal()
@@ -18,7 +18,7 @@ const exexLastFetch = () => {
 
 const getFetchPromise = (getFetchPromise) => {
     lastFetch = getFetchPromise
-    exexLastFetch()
+    execLastFetch()
 }
 
 const openModal = () => {
@@ -198,7 +198,7 @@ function LoginApp(config) {
     document.getElementById("login-form").addEventListener("submit", login)
     document.getElementById("retry-btn").addEventListener("click", () => {
         closeModal()
-        exexLastFetch()
+        execLastFetch()
     })
     document.getElementById("cancel-btn").addEventListener("click", closeModal)
 

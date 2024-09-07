@@ -80,6 +80,10 @@ function isObject(obj) {
     return !!obj && typeof obj === "object" && !isArray(obj)
 }
 
+function isNumber(value) {
+    return typeof value === "number" && !isNaN(value)
+}
+
 /**
  * Returns whether the given value is a function or not
  *
@@ -187,17 +191,44 @@ const isValidJson = (str) => {
     }
 }
 
+function clamp(min, curr, max) {
+    const minValue = min === null ? curr : Math.max(min, curr)
+    if (max == null) return minValue
+    return Math.min(minValue, max)
+}
+
+const round = (value, decimals = 0, fill = false) => {
+    const reqDecimals = decimals
+    let factor = 1
+    while (decimals-- > 0) {
+        factor *= 10
+    }
+    let rounded = Math.round(value * factor) / factor
+    if (fill) {
+        const parts = ("" + rounded).split(".")
+        if (parts.length === 1) {
+            parts.push("")
+        }
+        parts[1] = parts[1].padEnd(reqDecimals, "0")
+        rounded = parts.join(".")
+    }
+    return rounded
+}
+
 export {
     d,
     isNull,
     isBool,
     isString,
+    isNumber,
     isArray,
     isObject,
     isInt,
     isInRange,
     isValidJson,
     isEventInRect,
+    clamp,
+    round,
     extractFullClasses,
     ClassNames
 }
