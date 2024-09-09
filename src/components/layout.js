@@ -8,7 +8,7 @@ import React, {
     useMemo
 } from "react"
 import { ClassNames, d } from "core/helper"
-import { ButtonGroup, Button } from "./form"
+import { ButtonGroup, Form } from "./form"
 import { AppContext } from "./context"
 import { useGetAttrWithDimProps, useGetTabIndex } from "./common"
 
@@ -75,9 +75,9 @@ function Icon({ name, className, ...props }) {
 }
 
 function Centered({ className, children }) {
-    const cls = new ClassNames("place-content-center text-center", className)
+    const cls = new ClassNames("text-center", className)
     return (
-        <div className="grid full">
+        <div className="grid full content-center">
             <div className={cls.value}>{children}</div>
         </div>
     )
@@ -193,7 +193,7 @@ function Tab({ name, active, children }) {
     return children
 }
 
-function Stack({ vertical, className, gapped = true, children, ...props }) {
+function Stack({ vertical, className, gapped, children, ...props }) {
     const cls = new ClassNames("stack-" + (vertical ? "v" : "h"), className)
     cls.addIf(gapped, "gap-2")
     const attr = useGetAttrWithDimProps(props)
@@ -354,6 +354,53 @@ function AvailContextProvider({ children }) {
     )
 }
 
+function OkCancelLayout({
+    ok = () => {},
+    cancel = () => {},
+    submit,
+    buttons = [],
+    secondaryButtons = [],
+    children
+}) {
+    const groupBtns = [
+        {
+            name: "OK",
+            icon: "check",
+            iconClassName: "text-ok-text",
+            autoFocus: true,
+            submit,
+            onPressed: ok
+        },
+        {
+            name: "Cancel",
+            icon: "cancel",
+            iconClassName: "text-warning-text",
+            onPressed: cancel
+        },
+        ...buttons
+    ]
+
+    const buttonElems = [<ButtonGroup key="a" buttons={groupBtns} />]
+    if (secondaryButtons.length) {
+        buttonElems.push(
+            <div key="b" className="auto" />,
+            <ButtonGroup key="c" buttons={secondaryButtons} />
+        )
+    }
+
+    const inner = (
+        <div className="stack-v full">
+            <div className="auto">{children}</div>
+            <div className="stack-h w-full bg-header-bg/50 p-2 border-t border-header-border">
+                {buttonElems}
+            </div>
+        </div>
+    )
+    if (!submit) return inner
+
+    return <Form className="full">{inner}</Form>
+}
+
 export {
     Div,
     Centered,
@@ -365,5 +412,6 @@ export {
     Overlay,
     useGetTabIndex,
     AvailContextProvider,
-    AvailContext
+    AvailContext,
+    OkCancelLayout
 }

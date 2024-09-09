@@ -1,8 +1,8 @@
 import { useRef, useState, useEffect, useContext } from "react"
 import { useModalWindow } from "./modal"
 import { ClassNames, isValidJson, clamp, d } from "core/helper"
-import { Button, AutoCompleteInput, OkCancelForm } from "./form"
-import { Div, Icon } from "./layout"
+import { Button, ButtonGroup, AutoCompleteInput } from "./form"
+import { Centered, Div, Stack, Icon, OkCancelLayout } from "./layout"
 import { AppContext } from "./context"
 
 function useComponentUpdate() {
@@ -479,8 +479,8 @@ function useLoadingSpinner() {
 
 function ConfirmDialog({ close, ok, msg }) {
     return (
-        <OkCancelForm cancel={close} ok={() => ok()}>
-            <Div className="p-2 full text-center">
+        <OkCancelLayout cancel={close} ok={() => ok()}>
+            <Div className="p-4 full text-center">
                 <div className="stack-h gap-2 justify-center h-full">
                     <div className="place-self-center">
                         <Icon
@@ -493,7 +493,7 @@ function ConfirmDialog({ close, ok, msg }) {
                     </div>
                 </div>
             </Div>
-        </OkCancelForm>
+        </OkCancelLayout>
     )
 }
 
@@ -622,7 +622,7 @@ const KeyValueEditor = ({ object, sendObjectToParent }) => {
                             )
                         ) : (
                             <span
-                                onPressed={() => setEditingValue(key)}
+                                onClick={() => setEditingValue(key)}
                                 className="cursor-pointer flex items-center"
                             >
                                 {key}
@@ -729,6 +729,192 @@ const JsonTextarea = ({
     )
 }
 
+function ColorBox({ color, width, height, className }) {
+    const boxStyle = {
+        width,
+        height
+    }
+    const bgStyle = {
+        backgroundColor: color
+    }
+    const cls = new ClassNames("relative checkerboard-bg", className)
+    return (
+        <div className={cls.value} style={boxStyle}>
+            <div className="absolute full" style={bgStyle} />
+        </div>
+    )
+}
+
+function EntityList({
+    className,
+    itemClassName,
+    options = [],
+    renderer = (item) => (isString(item) ? item : item.name),
+    pick = () => {},
+    full,
+    selected,
+    setSelected,
+    wrap = true,
+    bordered = true,
+    divided = true,
+    padded = true,
+    sized = true,
+    colored = true,
+    styled = true,
+    emptyMsg = "No items available",
+    ...props
+}) {
+    let [active, setActive] = useState(
+        props.active === undefined || entityIndex.getLength() === 0
+            ? null
+            : props.active
+    )
+    // const entities = entityIndex.getEntityObjects()
+    if (props.setActive !== undefined) {
+        setActive = props.setActive
+        active = props.active
+    }
+
+    const cls = new ClassNames("stack-v overflow-y-auto", className)
+    cls.addIf(styled && colored, "bg-input-bg text-input-text")
+    cls.addIf(styled && bordered, "border")
+    cls.addIf(styled && bordered && colored, "border-input-border")
+    cls.addIf(styled && divided, "divide-y")
+    cls.addIf(styled && divided && colored, "divide-input-border")
+    const stackRef = useRef(null)
+    const { focusItem, hasFocus, attr, tabIndex, ...focus } = useFocusManager({
+        setActive: (index) => {
+            if (!selected.includes(index)) {
+                setSelected([...selected, index])
+            } else {
+                setSelected(selected.filter((item) => index !== item))
+            }
+            setActive(index)
+        },
+        active,
+        deselect: true,
+        divRef: stackRef,
+        count: options.length,
+        handleSpace: true
+    })
+    const divAttr = useGetAttrWithDimProps(props)
+    cls.addIf(!divAttr.style?.width && !full, "max-w-max")
+    cls.addIf(full, "w-full")
+    cls.addIf(!wrap, "text-nowrap")
+
+    const elems = []
+    let i = 0
+
+    for (const option of options) {
+        const isFocused = hasFocus && i === tabIndex
+
+        const itemCls = new ClassNames(
+            "hover:brightness-110 focus:outline-none focus:ring focus:ring-inset focus:ring-focus-border focus:border-0",
+            itemClassName
+        )
+        itemCls.addIf(styled && sized, "text-sm")
+        itemCls.addIf(styled && padded, "p-2")
+        itemCls.addIf(!wrap, "truncate")
+        if (styled && colored) {
+            itemCls.addIf(
+                selected.includes(i),
+                "bg-active-bg text-active-text",
+                "bg-input-bg text-input-text"
+            )
+        }
+        const itemAttr = focus.itemAttr(i)
+        itemAttr.style = {
+            cursor: "pointer"
+        }
+        if (isFocused) {
+            itemAttr.style.zIndex = 40
+        }
+        elems.push(
+            <Div key={i} className={itemCls.value} {...itemAttr}>
+                {renderer(option)}
+            </Div>
+        )
+        i++
+    }
+    return (
+        <div ref={stackRef} className={cls.value} {...attr} {...divAttr}>
+            {elems.length ? (
+                elems
+            ) : (
+                <Centered className="text-xs text-input-text/75 p-2">
+                    {emptyMsg}
+                </Centered>
+            )}
+        </div>
+    )
+}
+
+function EntityStack({
+    items,
+    newItem,
+    editItem,
+    deleteItems,
+    emptyMsg,
+    render = (item) => item.name
+}) {
+    const [selected, setSelected] = useState([])
+    return (
+        <Stack
+            vertical
+            className="border border-header-border/50 divide divide-header-border/25"
+        >
+            <div className="bg-header-bg/25 p-1">
+                <ButtonGroup
+                    buttons={[
+                        { name: "New", icon: "add", onPressed: newItem },
+                        {
+                            name: "Edit",
+                            icon: "edit",
+                            disabled: selected.length !== 1,
+                            onPressed: () => editItem(selected[0])
+                        },
+                        {
+                            name: "Delete",
+                            icon: "delete",
+                            disabled: selected.length === 0,
+                            onPressed: () => {
+                                deleteItems(selected)
+                                setSelected([])
+                            }
+                        }
+                    ]}
+                />
+            </div>
+
+            <Stack vertical className="text-app-text">
+                <EntityList
+                    full
+                    selected={selected}
+                    setSelected={setSelected}
+                    emptyMsg={emptyMsg}
+                    options={items}
+                    renderer={render}
+                />
+            </Stack>
+
+            <div className="bg-header-bg/25 p-1 text-app-text/75 text-xs">
+                <span className="text-app-text/50">Items:</span>{" "}
+                <span>{items.length}</span>
+                {selected.length > 0 && (
+                    <>
+                        {" "}
+                        <span className="text-app-text/50">
+                            {" "}
+                            / Marked:
+                        </span>{" "}
+                        {selected.length}
+                    </>
+                )}
+            </div>
+        </Stack>
+    )
+}
+
 export {
     useComponentUpdate,
     useMounted,
@@ -746,5 +932,8 @@ export {
     DualRing,
     KeyValueEditor,
     HighlightKeys,
-    JsonTextarea
+    JsonTextarea,
+    ColorBox,
+    EntityList,
+    EntityStack
 }

@@ -1,17 +1,26 @@
 import { useEffect } from "react"
 import { useModalWindow } from "components/modal"
-import { Select, Button } from "components/form"
+import { Select, Button, ButtonGroup, Input } from "components/form"
 // import { Button } from "components/commons"
 import { KeyValueEditor, HighlightKeys, JsonTextarea } from "components/common"
 import { useState } from "react"
 import { isValidJson, d } from "core/helper"
 import { PathInput } from "./path-input"
 import { headerContentTypes, requestHeaderOptions } from "./helper"
+import { OkCancelLayout } from "components/layout"
 
 const emptyValue = "<Enter Value>"
 
-const RequestBuilder = () => {
-    const [method, setMethod] = useState("post")
+const httpMethodOptions = [
+    { id: "POST", name: "POST" },
+    { id: "GET", name: "GET" },
+    { id: "DELETE", name: "DELETE" },
+    { id: "PUT", name: "PUT" },
+    { id: "HEAD", name: "HEAD" }
+]
+
+const RequestBuilder = ({ close }) => {
+    const [method, setMethodRaw] = useState("POST")
     const [path, setPath] = useState("")
     const [headers, setHeaders] = useState({
         values: {
@@ -39,8 +48,8 @@ const RequestBuilder = () => {
     const [jsonIsValid, setJsonIsValid] = useState(false)
     const [headersVisible, setHeadersVisible] = useState(false)
 
-    const handleMethodChange = (selectedMethod) => {
-        setMethod(selectedMethod)
+    const setMethod = (selectedMethod) => {
+        setMethodRaw(selectedMethod)
         enableOptions(selectedMethod)
     }
 
@@ -51,14 +60,10 @@ const RequestBuilder = () => {
 
     const enableOptions = (selectedMethod) => {
         removeCurrentOptions()
-        if (selectedMethod === "post") {
+        if (selectedMethod === "POST") {
             setBodyDisabled(false)
         }
         //...
-    }
-
-    const handlePathChange = (path) => {
-        setPath(path)
     }
 
     const handleSubmit = () => {
@@ -95,137 +100,151 @@ const RequestBuilder = () => {
                 })
         }
     }
-    const selectProps = {
-        options: {
-            post: "POST",
-            get: "GET",
-            delete: "DELETE",
-            put: "PUT",
-            head: "HEAD"
-        },
-        defaultValue: "post",
-        onSelect: handleMethodChange
-    }
 
     return (
-        <div className="w-1/2 h-full p-2 flex flex-col gap-4">
-            <div className="text-white flex flex-row justify-normal items-center py-4 gap-4 text-sm">
-                {/* Method selection */}
-                <Select {...selectProps} />
-                {/* Path */}
-                <div className="flex items-center gap-1">
-                    <span className="text-white">Path: </span>
-                    <input
-                        value={path}
-                        onChange={(e) => handlePathChange(e.target.value)}
-                        className="ml-1 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
+        <OkCancelLayout
+            cancel={close}
+            ok={() => d("SUBMIT", { method, headers, body })}
+        >
+            <div className="h-full p-4 flex flex-col gap-y-4">
+                <div className="stack-h w-full text-white flex flex-row justify-normal items-center gap-4 text-sm">
+                    {/* Method selection */}
+                    <Select
+                        options={httpMethodOptions}
+                        value={method}
+                        set={setMethod}
                     />
-                    {/* <PathInput sendPathToParent={handlePathChange} /> */}
-                </div>
-            </div>
-            {/* Header */}
-            <div>
-                <div className="text-white flex justify-between items-center">
-                    <span>Header</span>
-                    <button
-                        className="text-sm text-white p-1"
-                        onClick={() => setHeadersVisible(!headersVisible)}
-                    >
-                        {headersVisible ? "Hide" : "Show"}
-                    </button>
-                </div>
-                {headersVisible ? (
-                    <KeyValueEditor
-                        object={headers}
-                        sendObjectToParent={(newHeaders) =>
-                            setHeaders(newHeaders)
-                        }
-                    />
-                ) : (
-                    <div className="text-white bg-gray-700 p-2 rounded text-sm text-left">
-                        <span className="truncate block overflow-hidden whitespace-nowrap">
-                            <HighlightKeys obj={headers.values} />
-                        </span>
+                    {/* Path */}
+                    <div className="auto stack-h items-center gap-2">
+                        <div className="text-app-text">Path: </div>
+                        <Input
+                            value={path}
+                            set={setPath}
+                            autoFocus
+                            className="auto"
+                        />
+                        {/* <PathInput sendPathToParent={handlePathChange} /> */}
                     </div>
-                )}
-            </div>
-            {/* Body */}
-            {!bodyDisabled ? (
-                <div className="flex flex-col">
-                    <div className="flex justify-between items-center">
-                        <div className="flex">
-                            <Button
-                                name="JSON"
-                                activated={true}
-                                value={isJson}
-                                className="not_py-0 not_px-2 py-2 px-4"
-                                onPressed={() => {
-                                    isJson ? null : setIsJson(true)
-                                    setJsonIsValid(isValidJson(bodyValue))
-                                    setBody(bodyValue)
-                                }}
-                            />
-                            <Button
-                                name="Raw"
-                                activated={false}
-                                value={isJson}
-                                className="not_py-0 not_px-2 py-2 px-4"
-                                onPressed={() => {
-                                    !isJson ? null : setIsJson(false)
-                                    setBody(bodyValue)
-                                }}
-                            />
+                </div>
+                {/* Header */}
+                <div>
+                    <div className="text-app-text flex justify-between items-center">
+                        <span>Header</span>
+                        <button
+                            className="text-sm text-white p-1"
+                            onClick={() => setHeadersVisible(!headersVisible)}
+                        >
+                            {headersVisible ? "Hide" : "Show"}
+                        </button>
+                    </div>
+                    {headersVisible ? (
+                        <KeyValueEditor
+                            object={headers}
+                            sendObjectToParent={(newHeaders) =>
+                                setHeaders(newHeaders)
+                            }
+                        />
+                    ) : (
+                        <div className="text-white bg-gray-700 p-2 rounded text-sm text-left">
+                            <span className="truncate block overflow-hidden whitespace-nowrap">
+                                <HighlightKeys obj={headers.values} />
+                            </span>
                         </div>
-                        {isJson ? (
-                            <div className="text-sm p-1">
-                                {jsonIsValid || body === "" ? (
-                                    <div className="text-green-700">
-                                        Valid Body
-                                    </div>
-                                ) : (
-                                    <div className="text-red-700">
-                                        Invalid Body
-                                    </div>
-                                )}
-                            </div>
-                        ) : null}
-                    </div>
-                    <div>
-                        {isJson ? (
-                            <JsonTextarea
-                                sendJsonValidityToParent={(valid) =>
-                                    setJsonIsValid(valid)
-                                }
-                                sendTextareaValueToParent={(val) => {
-                                    setBody(val)
-                                    setBodyValue(val)
-                                }}
-                                value={bodyValue}
-                            />
-                        ) : (
-                            <textarea
-                                className="block p-2.5 w-full text-sm text-gray-900 bg-gray-50 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
-                                placeholder="Enter text"
-                                onChange={(e) => {
-                                    setBody(e.target.value)
-                                    setBodyValue(e.target.value)
-                                }}
-                                value={bodyValue}
-                            />
-                        )}
-                    </div>
+                    )}
                 </div>
-            ) : null}
-            {/* Submit button */}
-            {method &&
-            path &&
-            Object.keys(headers.values).length !== 0 &&
-            (method === "post" && isJson
-                ? jsonIsValid || body === ""
-                : true) ? (
-                <Button onPressed={handleSubmit} mode="active" label="Submit" />
-            ) : null}
-        </div>
+                {/* Body */}
+                {!bodyDisabled ? (
+                    <div className="flex flex-col">
+                        <div className="flex justify-between items-center">
+                            <div className="flex">
+                                <ButtonGroup
+                                    gapped={false}
+                                    buttons={[
+                                        {
+                                            name: "JSON",
+                                            activated: true,
+                                            value: isJson,
+                                            className:
+                                                "not_py-0 not_px-2 py-2 px-4",
+                                            onPressed: () => {
+                                                isJson ? null : setIsJson(true)
+                                                setJsonIsValid(
+                                                    isValidJson(bodyValue)
+                                                )
+                                                setBody(bodyValue)
+                                            }
+                                        },
+                                        {
+                                            name: "Raw",
+                                            activated: false,
+                                            value: isJson,
+                                            className:
+                                                "not_py-0 not_px-2 py-2 px-4",
+                                            onPressed: () => {
+                                                !isJson
+                                                    ? null
+                                                    : setIsJson(false)
+                                                setBody(bodyValue)
+                                            }
+                                        }
+                                    ]}
+                                />
+                            </div>
+                            {isJson ? (
+                                <div className="text-sm p-1">
+                                    {jsonIsValid || body === "" ? (
+                                        <div className="text-green-700">
+                                            Valid Body
+                                        </div>
+                                    ) : (
+                                        <div className="text-red-700">
+                                            Invalid Body
+                                        </div>
+                                    )}
+                                </div>
+                            ) : null}
+                        </div>
+                        <div>
+                            {isJson ? (
+                                <JsonTextarea
+                                    sendJsonValidityToParent={(valid) =>
+                                        setJsonIsValid(valid)
+                                    }
+                                    sendTextareaValueToParent={(val) => {
+                                        setBody(val)
+                                        setBodyValue(val)
+                                    }}
+                                    value={bodyValue}
+                                />
+                            ) : (
+                                <textarea
+                                    className="block p-2.5 w-full text-sm text-gray-900 bg-gray-50 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
+                                    placeholder="Enter text"
+                                    onChange={(e) => {
+                                        setBody(e.target.value)
+                                        setBodyValue(e.target.value)
+                                    }}
+                                    value={bodyValue}
+                                />
+                            )}
+                        </div>
+                    </div>
+                ) : null}
+                {/* Submit button */}
+                {method &&
+                path &&
+                Object.keys(headers.values).length !== 0 &&
+                (method === "post" && isJson
+                    ? jsonIsValid || body === ""
+                    : true) ? (
+                    <Button
+                        onPressed={handleSubmit}
+                        mode="active"
+                        label="Submit"
+                    />
+                ) : null}
+            </div>
+        </OkCancelLayout>
     )
 }
 
@@ -241,10 +260,10 @@ function RequestBuilderWindow({ plugin }) {
     return (
         <RequestBuilderModal.content
             name="Query Builder"
-            width="70%"
-            height="100%"
+            width="600px"
+            height="500px"
         >
-            <RequestBuilder />
+            <RequestBuilder {...RequestBuilderModal.props} />
         </RequestBuilderModal.content>
     )
 }

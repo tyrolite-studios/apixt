@@ -31,6 +31,7 @@ import {
 } from "core/helper"
 import {
     HighlightMatches,
+    ColorBox,
     useMounted,
     useExtractDimProps,
     useGetAttrWithDimProps,
@@ -562,7 +563,7 @@ function Select({
                 let value = e.target.value
                 if (empty && value === "") {
                     value = null
-                } else if (isInt) {
+                } else if (isIntValue) {
                     value = parseInt(e.target.value)
                 }
                 set(value)
@@ -628,6 +629,7 @@ function Picker({
     options = [],
     renderer = (item) => (isString(item) ? item : item.name),
     pick = () => {},
+    full,
     wrap = true,
     bordered = true,
     divided = true,
@@ -656,7 +658,8 @@ function Picker({
         handleSpace: true
     })
     const divAttr = useGetAttrWithDimProps(props)
-    cls.addIf(!divAttr.style?.width, "max-w-max")
+    cls.addIf(!divAttr.style?.width && !full, "max-w-max")
+    cls.addIf(full, "w-full")
     cls.addIf(!wrap, "text-nowrap")
 
     const elems = []
@@ -695,22 +698,6 @@ function Picker({
     return (
         <div ref={stackRef} className={cls.value} {...attr} {...divAttr}>
             {elems}
-        </div>
-    )
-}
-
-function ColorBox({ color, width, height, className }) {
-    const boxStyle = {
-        width,
-        height
-    }
-    const bgStyle = {
-        backgroundColor: color
-    }
-    const cls = new ClassNames("relative checkerboard-bg", className)
-    return (
-        <div className={cls.value} style={boxStyle}>
-            <div className="absolute full" style={bgStyle} />
         </div>
     )
 }
@@ -892,6 +879,7 @@ function SliderBounds({
     } else if (true || center) {
         dimProps.className = "" // "margin-" + (vertical ? "v" : "h") + "-auto"
     }
+    if (full) dimProps.className = "w-full"
     return (
         <Div {...dimProps} style={style}>
             <AvailContextProvider>{children}</AvailContextProvider>
@@ -1347,8 +1335,6 @@ function Button({
     focusedRef.current = focused
 
     const attr = useGetAttrWithDimProps(props)
-    const interactive = !(disabled || readOnly)
-    attr.style.cursor = interactive ? "pointer" : "default"
     if (focused) {
         attr.style.zIndex = 19999
     }
@@ -1368,6 +1354,9 @@ function Button({
         aContext.setModalSubmit(cannotSubmit ? null : onPressed)
     }, [cannotSubmit])
     if (cannotSubmit) disabled = true
+
+    const interactive = !(disabled || readOnly)
+    attr.style.cursor = interactive ? "pointer" : "default"
     cls.addIf(disabled, "opacity-50")
     cls.addIf(interactive, "hover:brightness-110")
     const isActive =
@@ -1438,7 +1427,6 @@ function Button({
             onPressed(startEvent, { activated })
         }
     }
-
     return (
         <button
             className={cls.value}
@@ -1851,6 +1839,10 @@ function Form({ children, submit, onKeyDown, className, ...props }) {
             <form
                 className={cls.value}
                 onKeyDown={submitOnReturn}
+                onSubmit={(e) => {
+                    e.preventDefault()
+                    return false
+                }}
                 ref={formRef}
                 {...props}
             >
@@ -1862,7 +1854,7 @@ function Form({ children, submit, onKeyDown, className, ...props }) {
 
 function FormGrid({ className, children, ...props }) {
     const cls = new ClassNames(
-        "grid grid-cols-[max-content_auto] gap-2",
+        "grid grid-cols-[max-content_auto] gap-y-2",
         className
     )
 
@@ -1871,6 +1863,11 @@ function FormGrid({ className, children, ...props }) {
             {children}
         </div>
     )
+}
+
+function FullCell({ children, className }) {
+    const cls = new ClassNames("col-span-2", className)
+    return <div className={cls.value}>{children}</div>
 }
 
 function SectionCells({ name }) {
@@ -1954,48 +1951,11 @@ function SliderCells({ name, ...props }) {
     )
 }
 
-function OkCancelForm({
-    ok = () => {},
-    cancel = () => {},
-    submit,
-    buttons = [],
-    children
-}) {
-    const groupBtns = [
-        {
-            name: "OK",
-            icon: "check",
-            iconClassName: "text-ok-text",
-            autoFocus: true,
-            submit,
-            onPressed: ok
-        },
-        {
-            name: "Cancel",
-            icon: "cancel",
-            iconClassName: "text-warning-text",
-            onPressed: cancel
-        },
-        ...buttons
-    ]
-    const inner = (
-        <div className="stack-v full">
-            <div className="auto">{children}</div>
-            <div className="bg-header-bg/50 p-2 border-t border-header-border">
-                <ButtonGroup buttons={groupBtns} />
-            </div>
-        </div>
-    )
-    if (!submit) return inner
-
-    return <Form className="full">{inner}</Form>
-}
-
 export {
-    Form,
-    Submit,
     Button,
+    Submit,
     ButtonGroup,
+    Form,
     Input,
     Number,
     Textarea,
@@ -2007,6 +1967,7 @@ export {
     Color,
     AutoCompleteInput,
     FormGrid,
+    FullCell,
     SectionCells,
     CustomCells,
     CheckboxCells,
@@ -2016,6 +1977,5 @@ export {
     SelectCells,
     RadioCells,
     ColorCells,
-    SliderCells,
-    OkCancelForm
+    SliderCells
 }

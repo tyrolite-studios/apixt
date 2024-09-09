@@ -137,7 +137,7 @@ function MainInner() {
     return (
         <div
             onFocus={onFocus}
-            className="flex flex-col w-full h-full bg-app-bg text-app-text"
+            className="flex flex-col w-full h-full bg-app-bg text-app-text outline outline-app-border app-bounds"
         >
             <Header />
             <Content />

@@ -51,8 +51,20 @@
         --focus-border: 250 250 230;
     
         /* overlay */
-        --overlay-bg: 0 0 0
+        --overlay-bg: 0 0 0;
+
+        --app-max-width: 100%;
+        --app-max-height: 100%
     }
+}
+
+.app-bounds {
+    max-width: var(--app-max-width);
+    max-height: var(--app-max-height);
+    margin-left: auto;
+    margin-right: auto;
+    margin-top: auto;
+    margin-bottom: auto;
 }
 
 .stack-v {
@@ -94,6 +106,7 @@ html, body {
 #app {
     width: 100%;
     height: 100%;
+    background-color: rgb(var(--app-bg));
     font-family: "Lucida Console", Monaco, monospace;}
 
 .colapsed > .colapsible {
