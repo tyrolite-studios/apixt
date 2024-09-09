@@ -41,8 +41,8 @@
         --input-border: 60 60 60;
 
         /* signal colors */
-        --active-text: 50 50 50;
-        --active-bg: 150 150 150;
+        --active-text: 60 20 50;
+        --active-bg: 255 250 205;
         --active-border: 80 70 45;
         --ok-text: 50 150 60;
         --ok-bg: 210 250 210;
@@ -51,8 +51,20 @@
         --focus-border: 250 250 230;
     
         /* overlay */
-        --overlay-bg: 0 0 0
+        --overlay-bg: 0 0 0;
+
+        --app-max-width: 100%;
+        --app-max-height: 100%
     }
+}
+
+.app-bounds {
+    max-width: var(--app-max-width);
+    max-height: var(--app-max-height);
+    margin-left: auto;
+    margin-right: auto;
+    margin-top: auto;
+    margin-bottom: auto;
 }
 
 .stack-v {
@@ -94,6 +106,7 @@ html, body {
 #app {
     width: 100%;
     height: 100%;
+    background-color: rgb(var(--app-bg));
     font-family: "Lucida Console", Monaco, monospace;}
 
 .colapsed > .colapsible {
@@ -111,6 +124,11 @@ html, body {
 .fix-shadow,
 .shadow:hover {
     box-shadow: 5px 5px 5px #00000088;
+}
+
+.checkerboard-bg {
+    background-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAIAAAACUFjqAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAB3RJTUUH3ggRDQENU0dyawAAACZJREFUGNNjPHXqDAMSMDY2ROYyMeAFNJVm/Pv3LzL/7Nnzg8VpAKebCGpIIxHBAAAAAElFTkSuQmCC');
+    background-repeat: repeat
 }
 
 button.invalid {

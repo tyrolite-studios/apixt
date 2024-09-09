@@ -6,13 +6,13 @@ import {
     useContext,
     useEffect
 } from "react"
-import { BrowserStorage } from "core/storage"
 import { treeBuilder } from "core/tree"
 import { getHttpStreamPromise } from "core/http"
 import { useComponentUpdate, useLoadingSpinner } from "./common"
 import { d } from "core/helper"
 import { HOOKS, PluginRegistry } from "../core/plugin"
 
+const controller = window.controller
 const AppContext = createContext(null)
 
 function FixCursorArea() {
@@ -50,14 +50,32 @@ function SpinnerDiv() {
 }
 
 const defaultSettings = {
-    tabSpaces: 4
+    tabSpaces: 4,
+    mapping: {
+        undo: "m z",
+        redo: "m y",
+        save: "m s",
+        export: "m x",
+        new: "c n",
+        select: null,
+        delete: "c d",
+        toggle: "c t",
+        quit: "c q",
+        edit: "m e",
+        all: "c a",
+        pick: "c p",
+        play: "m p",
+        submit: "Enter",
+        close: "Escape"
+    }
 }
 
 function AppCtx({ config, children }) {
     const globalStorage = useMemo(() => {
-        return BrowserStorage(localStorage, "tyrolite.apixt.global")
+        return controller ? controller.localStorage : null
     }, [])
     const [settings, setSettingsRaw] = useState(() => {
+        if (!globalStorage) return
         return globalStorage.getJson("settings", {
             ...defaultSettings,
             plugins: PluginRegistry.getDefaultStates()
@@ -68,12 +86,14 @@ function AppCtx({ config, children }) {
         setSettingsRaw(settings)
     }
     useEffect(() => {
+        if (!globalStorage) return
         PluginRegistry.setStates(settings.plugins)
         requestAnimationFrame(() => PluginRegistry.updateApp())
     }, [])
 
     const update = useComponentUpdate()
     const registryRef = useRef()
+    const setterRef = useRef()
     const registry = (key = null) =>
         key ? registryRef.current[key] : registryRef.current
 
@@ -81,6 +101,20 @@ function AppCtx({ config, children }) {
         const register = (key, value) => {
             registryRef.current[key] = value
         }
+
+        const action2hotKey = defaultSettings.mapping
+        /*
+        storage.getDefaultedJson(
+            "hotkeys",
+            defaultMapping
+        )*/
+        const hotKey2action = {}
+        for (let [action, key] of Object.entries(action2hotKey)) {
+            if (key !== null) {
+                hotKey2action[key] = action
+            }
+        }
+
         const getModalLevel = () => registry("modalStack").length
 
         const isInExclusiveMode = () => registry("mode") !== null
@@ -97,6 +131,18 @@ function AppCtx({ config, children }) {
             }
             register("mode", null)
             setFixCursor(null)
+        }
+
+        const getHotKeyArea = (area) => {
+            const { elemKeyBindings } = registry()
+
+            const currLevel = getModalLevel()
+            for (let item of elemKeyBindings) {
+                if (currLevel === item[3] && item[2] == area) {
+                    return item[0]
+                }
+            }
+            return null
         }
 
         const removeEventListener = (type) => {
@@ -117,12 +163,84 @@ function AppCtx({ config, children }) {
             globalStorage.deleteJson("settings")
         }
 
+        const getHandlerForAction = (
+            action,
+            elem,
+            followLinks = true,
+            passed = false
+        ) => {
+            const { elemKeyBindings } = registry()
+
+            const currLevel = getModalLevel()
+            for (let [node, bindings, area, level, links] of elemKeyBindings) {
+                if (elem === node && level === currLevel) {
+                    passed = true
+                    const binding = bindings[action]
+                    if (binding) {
+                        return binding
+                    }
+                    if (followLinks) {
+                        for (let link of links) {
+                            const node = getHotKeyArea(link)
+                            if (node) {
+                                const binding = getHandlerForAction(
+                                    action,
+                                    node,
+                                    false,
+                                    passed
+                                )
+                                if (binding) {
+                                    return binding
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if (!followLinks || !elem || elem.id === "modals-container") {
+                return passed ? undefined : false
+            }
+            elem = elem.parentNode
+            if (elem) {
+                return getHandlerForAction(action, elem, true, passed)
+            }
+            return passed ? undefined : false
+        }
+
+        const startContentStream = (request) => {
+            PluginRegistry.applyHooks(HOOKS.FETCH_CONTENT, request)
+
+            const { treeBuilder, spinner, config } = registry()
+            treeBuilder.reset()
+
+            register("lastRequest", request)
+            const httpStream = getHttpStreamPromise(config, request)
+            register("streamAbort", httpStream.abort)
+            const promise = treeBuilder
+                .processStream(httpStream)
+                .finally(() => register("streamAbort", null))
+
+            spinner.start(promise, () => {
+                httpStream.abort()
+                treeBuilder.abort()
+            })
+        }
+
+        const restartContentStream = (overwrites = {}) => {
+            const { lastRequest } = registry()
+            if (!lastRequest) return
+
+            const { headers, ...options } = lastRequest
+            let addHeaders = {}
+            if (headers && overwrites.headers) {
+                addHeaders = {
+                    headers: { ...headers, ...overwrites.headers }
+                }
+            }
+            startContentStream({ ...options, ...overwrites, ...addHeaders })
+        }
+
         registryRef.current = {
-            register,
-            update: () => {
-                registryRef.current = { ...registry() }
-                update()
-            },
             updates: 0,
             config,
             treeBuilder,
@@ -130,55 +248,10 @@ function AppCtx({ config, children }) {
             mode: null,
             confirm: null,
             settings,
-            setSettings,
-            clearSettings,
             lastRequest: null,
             dirty: false,
             spinner: null,
             globalStorage,
-            startContentStream: (request) => {
-                PluginRegistry.applyHooks(HOOKS.FETCH_CONTENT, request)
-
-                const { treeBuilder, spinner, config } = registry()
-                treeBuilder.reset()
-
-                register("lastRequest", request)
-                const httpStream = getHttpStreamPromise(config, request)
-                register("streamAbort", httpStream.abort)
-                const promise = treeBuilder
-                    .processStream(httpStream)
-                    .finally(() => register("streamAbort", null))
-
-                spinner.start(promise, () => {
-                    httpStream.abort()
-                    treeBuilder.abort()
-                })
-            },
-            restartContentStream: (overwrites = {}) => {
-                const { lastRequest, startContentStream } = registry()
-                if (!lastRequest) return
-
-                const { headers, ...options } = lastRequest
-                let addHeaders = {}
-                if (headers && overwrites.headers) {
-                    addHeaders = {
-                        headers: { ...headers, ...overwrites.headers }
-                    }
-                }
-                startContentStream({ ...options, ...overwrites, ...addHeaders })
-            },
-            abortContentStream: () => {
-                const { streamAbort } = registry()
-                if (streamAbort) streamAbort()
-            },
-            haltContentStream: (hash) => {
-                const { restartContentStream } = registry()
-                restartContentStream({ headers: { "Tls-Apixt-Halt": hash } })
-            },
-            clearContent: () => {
-                const { treeBuilder } = registry()
-                treeBuilder.reset()
-            },
             lastTarget: null,
             listeners: {},
             buttonRefocus: null,
@@ -188,6 +261,37 @@ function AppCtx({ config, children }) {
             },
             modalStack: [],
             modalIds: [],
+
+            hotKeyActions: {
+                action2hotKey,
+                hotKey2action
+            },
+            elemKeyBindings: []
+        }
+
+        setterRef.current = {
+            config: registry("config"),
+            treeBuilder: registry("treeBuilder"),
+            focusStack: registry("focusStack"),
+            register,
+            update: () => {
+                setterRef.current = { ...setterRef.current }
+                update()
+            },
+            globalStorage: registry("globalStorage"),
+            startContentStream,
+            restartContentStream,
+            abortContentStream: () => {
+                const { streamAbort } = registry()
+                if (streamAbort) streamAbort()
+            },
+            haltContentStream: (hash) => {
+                restartContentStream({ headers: { "Tls-Apixt-Halt": hash } })
+            },
+            clearContent: () => {
+                const { treeBuilder } = registry()
+                treeBuilder.reset()
+            },
             pushModalId: (id) => registry("modalIds").push(id),
             popModalId: () => registry("modalIds").pop(),
             getModalLevel,
@@ -204,6 +308,7 @@ function AppCtx({ config, children }) {
                 focusStack.zIndex = zIndex
                 focusStack.elem[zIndex] = {
                     top: null,
+                    auto: null,
                     start: null,
                     setShadow: null,
                     submit: null,
@@ -276,6 +381,95 @@ function AppCtx({ config, children }) {
                 check()
             },
 
+            addElemKeyBinding: (
+                elem,
+                action2handlers = {},
+                area = null,
+                link = null
+            ) => {
+                if (elem === null) {
+                    return
+                }
+                if (!link) {
+                    link = []
+                } else if (!Array.isArray(link)) {
+                    link = [link]
+                }
+                registry("elemKeyBindings").push([
+                    elem,
+                    action2handlers,
+                    area,
+                    getModalLevel(),
+                    link
+                ])
+            },
+            deleteElemKeyBindings: (elem) => {
+                const { elemKeyBindings } = registry()
+
+                let index = 0
+                for (let item of elemKeyBindings) {
+                    if (item[0] === elem) {
+                        elemKeyBindings.splice(index, 1)
+                        break
+                    }
+                    index++
+                }
+            },
+            getHotKeyArea,
+            focusHotKeyArea: (area) => {
+                let elem = getHotKeyArea(area)
+                if (elem) {
+                    const areaElem = elem
+                    elem = elem.querySelector(".tabbed")
+                    if (elem) {
+                        const { markFocusArea } = registry()
+                        const rectElem =
+                            areaElem.parentNode &&
+                            areaElem.parentNode.classList.contains("parent")
+                                ? areaElem.parentNode
+                                : areaElem
+                        markFocusArea(rectElem.getBoundingClientRect())
+                        elem.focus()
+                        register("lastTarget", elem)
+                        return true
+                    }
+                }
+                return false
+            },
+
+            getHandlerForActionKey: (actionKey, elem) => {
+                const { elemKeyBindings, hotKeyActions } = registry()
+                if (elemKeyBindings.length === 0) {
+                    return null
+                }
+                const action = hotKeyActions.hotKey2action[actionKey]
+                if (!action) {
+                    return null
+                }
+                let handler = getHandlerForAction(action, elem)
+
+                if (handler === false) {
+                    // try hotkey region 1 when no area was found along the node path
+                    const node = getHotKeyArea(1)
+                    if (node) {
+                        handler = getHandlerForAction(action, node)
+                    }
+                }
+
+                return handler ? handler : null
+            },
+
+            hotKeyActions: registry("hotKeyActions"),
+            getLastTarget: () => registry("lastTarget"),
+
+            settings: registry("settings"),
+            setSettings,
+            clearSettings,
+
+            setButtonRefocus: (value) => {
+                register("buttonRefocus", value)
+            },
+
             addEventListener: (type, listener, options = false) => {
                 const { mode, listeners } = registry()
 
@@ -312,7 +506,7 @@ function AppCtx({ config, children }) {
         }
     }
     return (
-        <AppContext.Provider value={registryRef.current}>
+        <AppContext.Provider value={setterRef.current}>
             <>
                 <SpinnerDiv key="sd" />
                 <FixCursorArea key="em" />

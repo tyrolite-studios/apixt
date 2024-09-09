@@ -3,17 +3,16 @@ import React, {
     useState,
     useContext,
     useRef,
-    useEffect
+    useEffect,
+    useLayoutEffect,
+    useMemo
 } from "react"
 import { ClassNames, d } from "core/helper"
-import { ButtonGroup, Button } from "./form"
+import { ButtonGroup, Form } from "./form"
 import { AppContext } from "./context"
+import { useGetAttrWithDimProps, useGetTabIndex } from "./common"
 
-const getLayoutProps = ({ className, zIndex, cursor, tab, ...props }) => {
-    const cls = []
-    if (className) {
-        cls.push(className)
-    }
+const getLayoutProps = ({ zIndex, cursor, tab, ...props }) => {
     const attr = {}
     const style = {}
     for (let prop of [
@@ -38,28 +37,29 @@ const getLayoutProps = ({ className, zIndex, cursor, tab, ...props }) => {
     if (cursor) {
         style.cursor = cursor
     }
-    if (tab) {
-        attr.tabIndex = 0
-        cls.push("tabbed")
-    } else if (tab === false) {
-        attr.tabIndex = -1
-    }
     if (props.onDragStart) {
         attr.draggable = true
     }
     return {
-        cls,
         attr,
         style,
         remProps: props
     }
 }
 
-const Div = React.forwardRef(({ children, ...props }, ref) => {
-    const { cls, attr, style, remProps } = getLayoutProps(props)
-
+const Div = React.forwardRef(({ className, children, ...props }, ref) => {
+    const cls = new ClassNames("", className)
+    const { attr, style, remProps } = getLayoutProps(props)
+    const divRef = useRef(null)
+    if (ref) {
+        attr["ref"] = ref
+    } else {
+        attr["ref"] = divRef
+        ref = divRef
+    }
+    attr.tabIndex = useGetTabIndex(props, cls)
     return (
-        <div className={cls.join(" ")} {...attr} style={style} {...remProps}>
+        <div className={cls.value} {...attr} style={style} {...remProps}>
             {children}
         </div>
     )
@@ -75,9 +75,9 @@ function Icon({ name, className, ...props }) {
 }
 
 function Centered({ className, children }) {
-    const cls = new ClassNames("place-content-center text-center", className)
+    const cls = new ClassNames("text-center", className)
     return (
-        <div className="grid full">
+        <div className="grid full content-center">
             <div className={cls.value}>{children}</div>
         </div>
     )
@@ -161,11 +161,13 @@ function Tabs({
 
     const stackItems = []
     stackItems.push(
-        <ButtonGroup key="a" gapped={gapped} className={buttonGroupCls.value}>
-            {tabElems.map(({ ...props }, i) => (
-                <Button key={i} {...props} />
-            ))}
-        </ButtonGroup>
+        <ButtonGroup
+            key="a"
+            active={currIndex === -1 ? 0 : currIndex}
+            buttons={tabElems}
+            gapped={gapped}
+            className={buttonGroupCls.value}
+        />
     )
     stackItems.push(
         <div className="auto" key="b">
@@ -191,4 +193,225 @@ function Tab({ name, active, children }) {
     return children
 }
 
-export { Div, Centered, Icon, Tabs, Tab }
+function Stack({ vertical, className, gapped, children, ...props }) {
+    const cls = new ClassNames("stack-" + (vertical ? "v" : "h"), className)
+    cls.addIf(gapped, "gap-2")
+    const attr = useGetAttrWithDimProps(props)
+    return (
+        <Div className={cls.value} {...attr}>
+            {children}
+        </Div>
+    )
+}
+
+const OverlayContext = createContext()
+
+function Overlays({
+    width,
+    maxWidth,
+    full,
+    height,
+    cursor,
+    originX = 0,
+    originY = 0,
+    scroll,
+    className,
+    children
+}) {
+    const cls = new ClassNames("relative", className)
+    const style = {
+        width: width + originX,
+        maxWidth,
+        height: height + originY
+    }
+    if (cursor) {
+        style.cursor = cursor
+    }
+    cls.addIf(scroll, "scroll max-v max-h")
+    const originCls = new ClassNames()
+    if (full) {
+        if (full !== "h") {
+            cls.addIf(!style.height, "h-full")
+            originCls.add("h-full")
+        }
+        if (full !== "v") {
+            cls.addIf(!style.width, "w-full")
+            originCls.add("w-full")
+        }
+    }
+    const overlay = {
+        width,
+        height,
+        originX,
+        originY
+    }
+    if (originX !== 0 || originY !== 0) {
+        originCls.add("relative")
+        overlay.width -= originX
+        overlay.height -= originY
+        const originStyle = { marginLeft: originX, marginTop: originY }
+        children = (
+            <div className={originCls.value} style={originStyle}>
+                {children}
+            </div>
+        )
+    }
+    return (
+        <OverlayContext.Provider value={overlay}>
+            <div style={style} className={cls.value}>
+                {children}
+            </div>
+        </OverlayContext.Provider>
+    )
+}
+
+const Overlay = React.forwardRef(
+    (
+        { width, height, top = 0, left = 0, className, children, ...props },
+        forwardRef
+    ) => {
+        const cls = new ClassNames("absolute", className)
+        const style = {
+            width,
+            height,
+            top,
+            left
+        }
+        return (
+            <div
+                ref={forwardRef}
+                style={style}
+                className={cls.value}
+                {...props}
+            >
+                {children}
+            </div>
+        )
+    }
+)
+
+const AvailContext = createContext()
+
+function AvailContextProvider({ children }) {
+    const [width, setWidth] = useState(0)
+    const [height, setHeight] = useState(0)
+    const propsRef = useRef(null)
+    const observerRef = useRef(null)
+    const divRef = useRef(null)
+
+    propsRef.current = { width, height }
+
+    useLayoutEffect(() => {
+        const checkSize = () => {
+            if (!divRef.current) return
+
+            const rect = divRef.current.getBoundingClientRect()
+            if (rect.width !== propsRef.current.width) {
+                setWidth(rect.width)
+            }
+            if (rect.height !== propsRef.current.height) {
+                setHeight(rect.height)
+            }
+        }
+        const observer = new ResizeObserver(checkSize)
+        observerRef.current = observer
+        observer.observe(divRef.current)
+        checkSize()
+        return () => {
+            if (observerRef.current) {
+                observerRef.current.disconnect()
+            }
+        }
+    }, [])
+
+    const value = useMemo(() => {
+        return {
+            width,
+            height
+        }
+    }, [width, height])
+
+    const cls = new ClassNames("bounds overlays")
+    const style = {}
+    if (width === 0) {
+        cls.add("w-full")
+    } else {
+        style.width = width
+    }
+    if (height === 0) {
+        cls.add("h-full")
+    } else {
+        style.height = height
+    }
+    return (
+        <div ref={divRef} className="full overlays">
+            <AvailContext.Provider value={value}>
+                <div className={cls.value} style={style}>
+                    {children}
+                </div>
+            </AvailContext.Provider>
+        </div>
+    )
+}
+
+function OkCancelLayout({
+    ok = () => {},
+    cancel = () => {},
+    submit,
+    buttons = [],
+    secondaryButtons = [],
+    children
+}) {
+    const groupBtns = [
+        {
+            name: "OK",
+            icon: "check",
+            iconClassName: "text-ok-text",
+            autoFocus: true,
+            submit,
+            onPressed: ok
+        },
+        {
+            name: "Cancel",
+            icon: "cancel",
+            iconClassName: "text-warning-text",
+            onPressed: cancel
+        },
+        ...buttons
+    ]
+
+    const buttonElems = [<ButtonGroup key="a" buttons={groupBtns} />]
+    if (secondaryButtons.length) {
+        buttonElems.push(
+            <div key="b" className="auto" />,
+            <ButtonGroup key="c" buttons={secondaryButtons} />
+        )
+    }
+
+    const inner = (
+        <div className="stack-v full">
+            <div className="auto">{children}</div>
+            <div className="stack-h w-full bg-header-bg/50 p-2 border-t border-header-border">
+                {buttonElems}
+            </div>
+        </div>
+    )
+    if (!submit) return inner
+
+    return <Form className="full">{inner}</Form>
+}
+
+export {
+    Div,
+    Centered,
+    Icon,
+    Tabs,
+    Tab,
+    Stack,
+    Overlays,
+    Overlay,
+    useGetTabIndex,
+    AvailContextProvider,
+    AvailContext,
+    OkCancelLayout
+}
