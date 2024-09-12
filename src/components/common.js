@@ -858,35 +858,45 @@ function EntityStack({
     render = (item) => item.name
 }) {
     const [selected, setSelected] = useState([])
+
+    const actionBtns = []
+    if (newItem) {
+        actionBtns.push({
+            name: "New",
+            icon: "add",
+            onPressed: newItem
+        })
+    }
+    if (editItem) {
+        actionBtns.push({
+            name: "Edit",
+            icon: "edit",
+            disabled: selected.length !== 1,
+            onPressed: () => editItem(selected[0])
+        })
+    }
+    if (deleteItems) {
+        actionBtns.push({
+            name: "Delete",
+            icon: "delete",
+            disabled: selected.length === 0,
+            onPressed: () => {
+                deleteItems(selected)
+                setSelected([])
+            }
+        })
+    }
+
     return (
         <Stack
             vertical
             className="border border-header-border/50 divide divide-header-border/25"
         >
             <div className="bg-header-bg/25 p-1">
-                <ButtonGroup
-                    buttons={[
-                        { name: "New", icon: "add", onPressed: newItem },
-                        {
-                            name: "Edit",
-                            icon: "edit",
-                            disabled: selected.length !== 1,
-                            onPressed: () => editItem(selected[0])
-                        },
-                        {
-                            name: "Delete",
-                            icon: "delete",
-                            disabled: selected.length === 0,
-                            onPressed: () => {
-                                deleteItems(selected)
-                                setSelected([])
-                            }
-                        }
-                    ]}
-                />
+                <ButtonGroup buttons={actionBtns} />
             </div>
 
-            <Stack vertical className="text-app-text">
+            <Stack vertical className="text-app-text overflow-auto max-h-max">
                 <EntityList
                     full
                     selected={selected}

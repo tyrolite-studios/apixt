@@ -215,6 +215,21 @@ const round = (value, decimals = 0, fill = false) => {
     return rounded
 }
 
+function cloneDeep(value) {
+    if (value === undefined) return
+    if (value === null) return null
+    if (Array.isArray(value)) {
+        return value.map((item) => cloneDeep(item))
+    } else if (typeof value === "object") {
+        const obj = {}
+        for (let [key, subValue] of Object.entries(value)) {
+            obj[key] = cloneDeep(subValue)
+        }
+        return obj
+    }
+    return value
+}
+
 export {
     d,
     isNull,
@@ -230,5 +245,6 @@ export {
     clamp,
     round,
     extractFullClasses,
-    ClassNames
+    ClassNames,
+    cloneDeep
 }

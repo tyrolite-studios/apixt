@@ -177,6 +177,10 @@ const PluginRegistry = {
         return id2plugin.has(id)
     },
 
+    getPlugin(id) {
+        return id2plugin.get(id)
+    },
+
     getActivePlugin(id) {
         return id2plugin.get(id)
     },
