@@ -104,7 +104,7 @@ function Checkbox({
     }
     const invalid = !isBool(tmpValue)
     const interactive = !(readOnly || disabled)
-    const aCtx = useContext(AppContext)
+    const aContext = useContext(AppContext)
     const cls = new ClassNames(
         "select-none focus:ring focus:ring-offset-0 focus:ring-focus-border",
         className
@@ -123,11 +123,11 @@ function Checkbox({
     cls.addIf(autoFocus, "autofocus")
 
     const handleClick = (upEvent) => {
-        aCtx.startExclusiveMode("toggle-bool", "pointer")
-        aCtx.addEventListener(
+        aContext.startExclusiveMode("toggle-bool", "pointer")
+        aContext.addEventListener(
             upEvent,
             () => {
-                aCtx.endExclusiveMode("toggle-bool")
+                aContext.endExclusiveMode("toggle-bool")
                 setClicked(false)
             },
             { once: true }
@@ -1325,7 +1325,7 @@ function Button({
     ...props
 }) {
     const aContext = useContext(AppContext)
-    const fCtx = useContext(FormContext)
+    const fContext = useContext(FormContext)
     const mounted = useMounted()
     const [clicked, setClicked] = useState(false)
     const [focused, setFocused] = useState(false)
@@ -1347,7 +1347,7 @@ function Button({
     cls.addIf(styled && sized, "text-xs")
     cls.addIf(styled && padded, "py-0 px-2")
 
-    const cannotSubmit = submit && (disabled || (fCtx && fCtx.invalid))
+    const cannotSubmit = submit && (disabled || (fContext && fContext.invalid))
     useEffect(() => {
         if (!submit || !aContext.getModalLevel()) return
 
@@ -1473,6 +1473,7 @@ function ButtonGroup({
     gapped = true,
     wrap = true,
     buttonProps = {},
+    autoFocus,
     active,
     ...props
 }) {
@@ -1500,7 +1501,8 @@ function ButtonGroup({
         const elemProps = {
             ...buttonProps,
             ...button,
-            tab
+            tab,
+            autoFocus
         }
 
         if (onFocus) {

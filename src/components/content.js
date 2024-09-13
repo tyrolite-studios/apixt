@@ -63,35 +63,41 @@ function ContentTree({ root, level = 1 }) {
 }
 
 function ErrorBlock({ msg }) {
-    const aCtx = useContext(AppContext)
+    const aContext = useContext(AppContext)
     return (
         <div className="bg-warning-bg text-warning-text py-1 px-2 border border-header-border">
             <div className="stack-h gap-2 full-h">
                 <div># Error: {msg}</div>
                 <div className="auto" />
-                <Button name="Retry" onPressed={aCtx.restartContentStream} />
-                <Button name="Clear" onPressed={aCtx.clearContent} />
+                <Button
+                    name="Retry"
+                    onPressed={aContext.restartContentStream}
+                />
+                <Button name="Clear" onPressed={aContext.clearContent} />
             </div>
         </div>
     )
 }
 
 function StatusBlock() {
-    const aCtx = useContext(AppContext)
+    const aContext = useContext(AppContext)
     return (
         <div className="bg-header-bg text-header-text py-1 px-2 border border-header-border">
             <div className="stack-h gap-2 full-h">
                 <div># Aborted</div>
                 <div className="auto" />
-                <Button name="Retry" onPressed={aCtx.restartContentStream} />
-                <Button name="Clear" onPressed={aCtx.clearContent} />
+                <Button
+                    name="Retry"
+                    onPressed={aContext.restartContentStream}
+                />
+                <Button name="Clear" onPressed={aContext.clearContent} />
             </div>
         </div>
     )
 }
 
 function HaltBlock({ next }) {
-    const aCtx = useContext(AppContext)
+    const aContext = useContext(AppContext)
     return (
         <div className="bg-block-footer-bg text-block-footer-text py-1 px-2 border border-header-border">
             <div className="stack-h gap-2 full-h">
@@ -99,15 +105,15 @@ function HaltBlock({ next }) {
                 <div className="auto" />
                 <Button
                     name="Continue"
-                    onPressed={() => aCtx.haltContentStream("")}
+                    onPressed={() => aContext.haltContentStream("")}
                 />
                 {next && (
                     <Button
                         name="Stop at next"
-                        onPressed={() => aCtx.haltContentStream(next)}
+                        onPressed={() => aContext.haltContentStream(next)}
                     />
                 )}
-                <Button name="Clear" onPressed={aCtx.clearContent} />
+                <Button name="Clear" onPressed={aContext.clearContent} />
             </div>
         </div>
     )
@@ -220,7 +226,7 @@ function DumpBlock({ name, vars }) {
 
 function CodeBlock(props) {
     const { name, html, hash, footer, isError, mime } = props
-    const aCtx = useContext(AppContext)
+    const aContext = useContext(AppContext)
     const [colapsed, setColapsed] = useState(false)
     const toggle = () => {
         setColapsed(!colapsed)
@@ -247,11 +253,13 @@ function CodeBlock(props) {
     const pipeline = PluginRegistry.getContentPipeline(mime)
     while (pipeline.length) {
         const exec = pipeline.shift()
-        renderHtml = exec(renderHtml, aCtx)
+        renderHtml = exec(renderHtml, aContext)
     }
     renderHtml = `<pre class="full colapsible">${renderHtml}</pre>`
 
-    const buttons = [...PluginRegistry.getBlockButtons({ ...props, ctx: aCtx })]
+    const buttons = [
+        ...PluginRegistry.getBlockButtons({ ...props, ctx: aContext })
+    ]
 
     return (
         <div className="border border-block-border text-block-header-text bg-block-header-bg">

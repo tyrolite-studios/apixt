@@ -134,4 +134,17 @@ const BrowserStorage = (storage, prefix = "") => {
     return api
 }
 
-export { BrowserStorage }
+const TempStorage = () => {
+    const storage = new Map()
+
+    return BrowserStorage({
+        setItem: (key, value) => storage.set(key, value),
+        getItem: (key) => {
+            const value = storage.get(key)
+            return value === undefined ? null : value
+        },
+        hasItem: (key) => storage.has(key)
+    })
+}
+
+export { BrowserStorage, TempStorage }

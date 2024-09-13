@@ -20,11 +20,11 @@ function Footer() {
 }
 
 function Plugins() {
-    const aCtx = useContext(AppContext)
+    const aContext = useContext(AppContext)
     const elems = PluginRegistry.windows
 
     useEffect(() => {
-        PluginRegistry.setContext(aCtx)
+        PluginRegistry.setContext(aContext)
     }, [])
 
     return <>{elems}</>
@@ -34,15 +34,15 @@ const HotKeySingleKeys = ["Escape", "Enter"]
 const HotKeySkipValues = ["Meta", "Control", "Alt", "Shift"]
 
 function MainInner() {
-    const aCtx = useContext(AppContext)
+    const aContext = useContext(AppContext)
 
     const onFocus = (e) => {
-        aCtx.register("lastTarget", e.target)
-        const zIndex = aCtx.focusStack.zIndex
+        aContext.register("lastTarget", e.target)
+        const zIndex = aContext.focusStack.zIndex
         if (!zIndex) {
             return
         }
-        const focusElem = aCtx.focusStack.elem[zIndex]
+        const focusElem = aContext.focusStack.elem[zIndex]
         if (!focusElem || !focusElem.top) {
             return
         }
@@ -58,7 +58,7 @@ function MainInner() {
 
     useEffect(() => {
         const hotkeyListener = (e) => {
-            if (aCtx.isInExclusiveMode()) {
+            if (aContext.isInExclusiveMode()) {
                 // TODO allow certain hotkeys?
                 return
             }
@@ -82,7 +82,7 @@ function MainInner() {
                     )
                 )
             ) {
-                if (aCtx.focusHotKeyArea(e.key)) {
+                if (aContext.focusHotKeyArea(e.key)) {
                     e.stopPropagation()
                     e.preventDefault()
                     return
@@ -102,9 +102,9 @@ function MainInner() {
             }
             const elem =
                 document.activeElement === document.body
-                    ? aCtx.getLastTarget()
+                    ? aContext.getLastTarget()
                     : document.activeElement
-            const handler = aCtx.getHandlerForActionKey(actionKey, elem)
+            const handler = aContext.getHandlerForActionKey(actionKey, elem)
             if (handler) {
                 if (!e.repeat) {
                     if (typeof handler === "object") {
@@ -124,7 +124,7 @@ function MainInner() {
             }
         }
         const clickListener = (e) => {
-            aCtx.register("lastTarget", e.target)
+            aContext.register("lastTarget", e.target)
         }
         window.addEventListener("mousedown", clickListener, {})
         window.addEventListener("keydown", hotkeyListener, {})

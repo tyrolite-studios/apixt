@@ -42,7 +42,9 @@ const useGetTabIndex = ({ tab, tabControlled, focused }, cls) => {
     if (tab && cls) {
         cls.add("tabbed")
     }
-    return (tabControlled && tab) || (!tabControlled && focused) || tab ? 0 : -1
+    if ((tabControlled && tab) || (!tabControlled && focused) || tab) return 0
+
+    return tab === false ? -1 : undefined
 }
 
 function useExtractDimProps(
@@ -112,15 +114,15 @@ function useGetAttrWithDimProps({
 }
 
 function useHotKeys(elemRef, hotKeys, area = null, link = null) {
-    const aCtx = useContext(AppContext)
+    const aContext = useContext(AppContext)
     const isHot = !!(area || (hotKeys && Object.keys(hotKeys).length > 0))
     useEffect(() => {
         if (!isHot) {
             return
         }
-        aCtx.addElemKeyBinding(elemRef.current, hotKeys, area, link)
+        aContext.addElemKeyBinding(elemRef.current, hotKeys, area, link)
         return () => {
-            aCtx.deleteElemKeyBindings(elemRef.current)
+            aContext.deleteElemKeyBindings(elemRef.current)
         }
     })
     return isHot
@@ -159,7 +161,7 @@ function useFocusManager({
     update,
     ...props
 }) {
-    const aCtx = useContext(AppContext)
+    const aContext = useContext(AppContext)
     const callAfterwards = useCallAfterwards()
 
     const doubleRef = useRef({})
@@ -185,7 +187,7 @@ function useFocusManager({
     const mounted = useMounted()
     const levelRef = useRef(null)
     if (levelRef.current === null) {
-        levelRef.current = aCtx.getModalLevel()
+        levelRef.current = aContext.getModalLevel()
     }
     const count = items ? items.length : props.count
     const getItem = items ? (index) => items[index] : (index) => index
@@ -307,7 +309,7 @@ function useFocusManager({
     }
     const onBlur = (e) => {
         setFocused(false)
-        if (aCtx.getModalLevel() !== levelRef.current) return
+        if (aContext.getModalLevel() !== levelRef.current) return
         initCatchRef.current = true
         requestAnimationFrame(() => {
             if (!mounted.current) return

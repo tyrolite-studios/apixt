@@ -40,10 +40,10 @@ function FixCursorArea() {
 }
 
 function SpinnerDiv() {
-    const aCtx = useContext(AppContext)
+    const aContext = useContext(AppContext)
     const LoadingSpinner = useLoadingSpinner()
     useEffect(() => {
-        aCtx.register("spinner", LoadingSpinner)
+        aContext.register("spinner", LoadingSpinner)
     }, [])
 
     return <>{LoadingSpinner.Modal}</>
@@ -72,7 +72,13 @@ const defaultSettings = {
 
 function AppCtx({ config, children }) {
     const globalStorage = useMemo(() => {
-        return controller ? controller.localStorage : null
+        return controller ? controller.globalStorage : null
+    }, [])
+    const apiStorage = useMemo(() => {
+        return controller ? controller.apiStorage : null
+    }, [])
+    const tempStorage = useMemo(() => {
+        return controller ? controller.tempStorage : null
     }, [])
     const [settings, setSettingsRaw] = useState(() => {
         if (!globalStorage) return
@@ -252,6 +258,8 @@ function AppCtx({ config, children }) {
             dirty: false,
             spinner: null,
             globalStorage,
+            apiStorage,
+            tempStorage,
             lastTarget: null,
             listeners: {},
             buttonRefocus: null,
@@ -279,6 +287,8 @@ function AppCtx({ config, children }) {
                 update()
             },
             globalStorage: registry("globalStorage"),
+            apiStorage: registry("apiStorage"),
+            tempStorage: registry("tempStorage"),
             startContentStream,
             restartContentStream,
             abortContentStream: () => {

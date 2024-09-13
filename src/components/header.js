@@ -10,7 +10,7 @@ import { Icon } from "./layout"
 const controller = window.controller
 
 function Header() {
-    const aCtx = useContext(AppContext)
+    const aContext = useContext(AppContext)
     const SettingsWindow = useModalWindow()
 
     const logout = () => {
@@ -27,7 +27,7 @@ function Header() {
 
                 <div className="stack-h text-header-text text-xs gap-1">
                     <Icon name="person" className="text-xl" />
-                    <div className="">{aCtx.config.username}</div>
+                    <div className="">{aContext.config.username}</div>
                 </div>
                 <ButtonGroup
                     buttons={[

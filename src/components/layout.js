@@ -90,10 +90,11 @@ function Tabs({
     padded = true,
     gapped = true,
     persistId = "",
+    autoFocus,
     children,
     ...props
 }) {
-    const aCtx = useContext(AppContext)
+    const aContext = useContext(AppContext)
     const [ready, setReady] = useState(false)
     const activeRef = useRef(null)
 
@@ -111,13 +112,13 @@ function Tabs({
         return () => {
             if (!persistId) return
 
-            aCtx.globalStorage.setJson("tab." + persistId, activeRef.current)
+            aContext.tempStorage.setJson("tab." + persistId, activeRef.current)
         }
     }, [])
     useEffect(() => {
         if (!ready || !persistId) return
 
-        const persisted = aCtx.globalStorage.getJson("tab." + persistId)
+        const persisted = aContext.tempStorage.getJson("tab." + persistId)
         if (persisted) {
             setActiveRaw(persisted)
         }
@@ -163,6 +164,7 @@ function Tabs({
     stackItems.push(
         <ButtonGroup
             key="a"
+            autoFocus={autoFocus}
             active={currIndex === -1 ? 0 : currIndex}
             buttons={tabElems}
             gapped={gapped}

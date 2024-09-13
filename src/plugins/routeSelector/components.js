@@ -6,11 +6,11 @@ import { Button, Input } from "components/form"
 import { d } from "core/helper"
 
 function RouteSelector({ close, plugin }) {
-    const aCtx = useContext(AppContext)
-    const routes = aCtx.config.routes
+    const aContext = useContext(AppContext)
+    const routes = aContext.config.routes
     const openRoute = (path) => {
         close()
-        aCtx.startContentStream({ path, method: "GET" })
+        aContext.startContentStream({ path, method: "GET" })
     }
     return (
         <div className="stack-v p-4 divide-y">

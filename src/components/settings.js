@@ -500,7 +500,7 @@ function Settings({ close }) {
                     { name: "Reset to defaults", onPressed: resetToDefaults }
                 ]}
             >
-                <Tabs persistId="settings">
+                <Tabs persistId="settings" autoFocus>
                     <Tab name="General" active>
                         <General general={general} setGeneral={setGeneral} />
                     </Tab>

@@ -1,4 +1,4 @@
-import { BrowserStorage } from "core/storage"
+import { BrowserStorage, TempStorage } from "core/storage"
 
 const apps = {}
 let storages = null
@@ -14,10 +14,12 @@ const controller = {
         if (!storages) {
             if (storePrefix === null) throw Error(`No store prefix was set`)
 
-            const prefix = `${storePrefix}${apiId}.`
+            const apiPrefix = `${storePrefix}${apiId}.`
             storages = {
-                local: BrowserStorage(localStorage, prefix),
-                session: BrowserStorage(sessionStorage, prefix)
+                global: BrowserStorage(localStorage, `${storePrefix}global.`),
+                api: BrowserStorage(localStorage, apiPrefix),
+                session: BrowserStorage(sessionStorage, apiPrefix),
+                temp: TempStorage()
             }
         }
         return storages
@@ -54,14 +56,20 @@ const controller = {
     set fixJwt(value) {
         fixJwt = value
     },
-    get localStorage() {
-        return controller.getStorages().local
+    get globalStorage() {
+        return controller.getStorages().global
+    },
+    get apiStorage() {
+        return controller.getStorages().api
     },
     get sessionStorage() {
         return controller.getStorages().session
     },
+    get tempStorage() {
+        return controller.getStorages().temp
+    },
     get tokenStorage() {
-        return controller[permanent ? "localStorage" : "sessionStorage"]
+        return controller[permanent ? "apiStorage" : "sessionStorage"]
     },
     registerApp: (id, create, destroy) => {
         apps[id] = { create, destroy }
