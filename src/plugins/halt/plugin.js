@@ -1,6 +1,5 @@
 import { AbstractPlugin, PluginRegistry } from "core/plugin"
 import { d } from "core/helper"
-import { Button } from "../../components/form"
 
 class Plugin extends AbstractPlugin {
     get id() {

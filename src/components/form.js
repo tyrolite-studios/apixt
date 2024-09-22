@@ -1856,7 +1856,7 @@ function Form({ children, submit, onKeyDown, className, ...props }) {
 
 function FormGrid({ className, children, ...props }) {
     const cls = new ClassNames(
-        "grid grid-cols-[max-content_auto] gap-y-2",
+        "grid grid-cols-[max-content_auto] gap-y-2 pt-0 px-4 py-4",
         className
     )
 

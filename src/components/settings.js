@@ -317,7 +317,7 @@ function KeyBindings({}) {
     })
 
     return (
-        <FormGrid className="px-4">
+        <FormGrid xclassName="px-4">
             <SectionCells name="Key Bindings" />
             <FullCell>
                 <Picker
@@ -474,6 +474,7 @@ function Settings({ close }) {
         <>
             <OkCancelLayout
                 submit
+                scroll={false}
                 cancel={() => {
                     applySettings(beforeSettings)
                     close()

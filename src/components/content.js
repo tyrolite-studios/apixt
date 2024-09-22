@@ -225,7 +225,7 @@ function DumpBlock({ name, vars }) {
 }
 
 function CodeBlock(props) {
-    const { name, html, hash, footer, isError, mime } = props
+    const { name, html, footer, isError, mime } = props
     const aContext = useContext(AppContext)
     const [colapsed, setColapsed] = useState(false)
     const toggle = () => {
@@ -265,7 +265,7 @@ function CodeBlock(props) {
         <div className="border border-block-border text-block-header-text bg-block-header-bg">
             <div className="stack-h px-2 py-1">
                 <div className="title auto text-left">{name}</div>
-                {buttons.length > 0 && <ButtonGroup>{buttons}</ButtonGroup>}
+                {buttons.length > 0 && <ButtonGroup buttons={buttons} />}
             </div>
 
             <div className="stack-h bg-block-bg text-block-text">

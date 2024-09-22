@@ -109,6 +109,60 @@ function extractFullClasses(cls) {
     return cls.match(regex) || []
 }
 
+const Attributes = (props) => {
+    const cls = new AttriutesCls(props)
+    return new Proxy(cls, {
+        set: (target, prop, value) => {
+            cls.add(prop, value)
+            return true
+        }
+    })
+}
+
+class AttriutesCls {
+    constructor(props = {}) {
+        this._props = {}
+
+        this.add(props)
+    }
+
+    get style() {
+        let style = this._props.style
+        if (!style) {
+            style = {}
+            this._props.style = style
+        }
+        return style
+    }
+
+    get props() {
+        return this._props
+    }
+
+    setStyle(name, value) {
+        this.style[name] = value
+        return this
+    }
+
+    setStyles(obj) {
+        for (const [name, value] of Object.entries(obj)) {
+            this.setStyle(name, value)
+        }
+        return this
+    }
+
+    add(name, value) {
+        if (isObject(name)) {
+            for (const [prop, propValue] of Object.entries(name)) {
+                this._props[prop] = propValue
+            }
+            return this
+        }
+        this._props[name] = value
+        return this
+    }
+}
+
 class ClassNames {
     constructor(cls = "", overwrites = "") {
         this.cls = []
@@ -246,5 +300,6 @@ export {
     round,
     extractFullClasses,
     ClassNames,
+    Attributes,
     cloneDeep
 }

@@ -172,7 +172,7 @@ function Tabs({
         />
     )
     stackItems.push(
-        <div className="auto" key="b">
+        <div className="auto overflow-auto" key="b">
             <TabContext.Provider value={ctx}>{children}</TabContext.Provider>
         </div>
     )
@@ -362,6 +362,7 @@ function OkCancelLayout({
     submit,
     buttons = [],
     secondaryButtons = [],
+    scroll = true,
     children
 }) {
     const groupBtns = [
@@ -390,9 +391,12 @@ function OkCancelLayout({
         )
     }
 
+    const contentCls = new ClassNames("auto")
+    contentCls.addIf(scroll, "overflow-auto", "overflow-hidden")
+
     const inner = (
         <div className="stack-v full">
-            <div className="auto">{children}</div>
+            <div className={contentCls.value}>{children}</div>
             <div className="stack-h w-full bg-header-bg/50 p-2 border-t border-header-border">
                 {buttonElems}
             </div>

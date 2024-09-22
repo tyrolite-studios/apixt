@@ -74,18 +74,15 @@ class AbstractPlugin {
         for (const { id, name, isActive } of this._blockButtons) {
             if (!isActive(props)) continue
 
-            buttons.push(
-                <Button
-                    key={id}
-                    name={name}
-                    onPressed={() => {
-                        const handler = this._buttonHandler[id]
-                        if (!handler) return
+            buttons.push({
+                name,
+                onPressed: () => {
+                    const handler = this._buttonHandler[id]
+                    if (!handler) return
 
-                        handler({ plugin: this, ...props })
-                    }}
-                />
-            )
+                    handler({ plugin: this, ...props })
+                }
+            })
         }
         return buttons
     }

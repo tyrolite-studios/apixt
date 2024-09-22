@@ -3,7 +3,7 @@ import { useContext, useRef, useState, useEffect } from "react"
 import { AppContext } from "./context"
 import { Div } from "./layout"
 import { Button } from "./form"
-import { extractFullClasses, d } from "core/helper"
+import { d, Attributes } from "core/helper"
 import { useMounted, useHotKeys } from "./common"
 import { ClassNames } from "../core/helper"
 
@@ -50,24 +50,26 @@ function ModalWindow({
             focusElem.auto = trapRef.current.querySelector(".tabbed.autofocus")
     })
 
-    useEffect(() => {
+    const doAutoFocus = () => {
         const focusElem = aContext.focusStack.elem[zIndex]
         if (!focusElem || !focusElem.start) {
             return
         }
-        requestAnimationFrame(() => {
-            const elem = trapRef.current
-                ? trapRef.current.querySelector(".tabbed.autofocus")
-                : null
-            if (elem) {
-                elem.focus()
-                if (["INPUT", "TEXTAREA"].includes(elem.tagName)) {
-                    elem.select()
-                }
-            } else {
-                focusElem.start.focus()
+        const elem = trapRef.current
+            ? trapRef.current.querySelector(".tabbed.autofocus")
+            : null
+        if (elem) {
+            elem.focus()
+            if (["INPUT", "TEXTAREA"].includes(elem.tagName)) {
+                elem.select()
             }
-        })
+        } else {
+            focusElem.start.focus()
+        }
+    }
+
+    useEffect(() => {
+        requestAnimationFrame(doAutoFocus)
     }, [])
 
     useEffect(() => {
@@ -102,12 +104,13 @@ function ModalWindow({
                 }
             })
             observer.observe(document.body)
-            requestAnimationFrame(() => {
+            setTimeout(() => {
                 const rect = dimRef.current.getBoundingClientRect()
                 setDim(rect)
                 setLeft(rect.left)
                 setTop(rect.top)
-            })
+                requestAnimationFrame(doAutoFocus)
+            }, 100)
             return () => {
                 observer.disconnect()
             }
@@ -129,14 +132,6 @@ function ModalWindow({
           }
         : null
 
-    const hDivCls = ["place-self-center"]
-    const fullCls = extractFullClasses(className)
-    if (fullCls.length) {
-        hDivCls.push(fullCls.join(" "))
-    }
-    if (!transparent) {
-        // hDivCls.push("overflow-hidden")
-    }
     if (!maxWidth) {
         maxWidth = "100%"
     } else {
@@ -145,11 +140,12 @@ function ModalWindow({
         }
         maxWidth = "min(" + maxWidth + ", 100%)"
     }
-    const hDivStyle = {
+    const widthAttr = Attributes()
+    widthAttr.setStyles({
         maxWidth,
         minWidth,
         width
-    }
+    })
     if (!maxHeight) {
         maxHeight = "100%"
     } else {
@@ -158,29 +154,23 @@ function ModalWindow({
         }
         maxHeight = "min(" + maxHeight + ", 100%)"
     }
-    const vDivStyle = {
+    const heightAttr = Attributes()
+    heightAttr.setStyles({
         maxHeight,
         height,
         zIndex
-    }
-    const parentDivStyle = {
-        width: "calc(100% - 50px)",
-        height: "calc(100% - 50px)"
-    }
+    })
 
-    const vDivCls = new ClassNames(
-        // overflow hidden?
-        "stack-v h-full border border-header-border text-app bg-app-bg text-ms divide-y divide-header-border modal-centered",
+    const modalCls = new ClassNames(
+        "stack-v overflow-hidden border border-header-border text-app-text bg-app-bg text-ms modal-centered divide-y divide-header-border",
         className
     )
-    vDivCls.addIf(transparent, "shadow-xl")
-    const dimAttr = {}
-    const overlayCls = ["full fixed left-0 top-0"]
-    if (!transparent) {
-        overlayCls.push("bg-overlay-bg/50")
-    }
+    modalCls.addIf(transparent, "shadow-xl")
 
-    const nameAttr = {}
+    const overlayCls = new ClassNames("full fixed left-0 top-0")
+    overlayCls.addIf(!transparent, "bg-overlay-bg/50")
+
+    const nameAttr = Attributes()
     if (drag) {
         nameAttr.cursor = "grab"
         nameAttr.onMouseDown = (e) => {
@@ -224,17 +214,15 @@ function ModalWindow({
     }
 
     if (dim !== null) {
-        vDivStyle.left = left
-        vDivStyle.top = top
-        vDivStyle.position = "fixed"
-        vDivStyle.width = dim.width
-        vDivStyle.maxWidth = null
-        vDivStyle.minWidth = null
-        vDivStyle.height = dim.height
-        vDivStyle.maxHeight = null
-        vDivStyle.minHeight = null
-    } else {
-        vDivStyle.height = vDivStyle.height ? vDivStyle.height : "min-content"
+        widthAttr.setStyles({
+            left,
+            top,
+            position: "fixed",
+            width: dim.width,
+            height: dim.height,
+            minWidth: null,
+            maxWidth: null
+        })
     }
 
     const hotKeys = {}
@@ -254,43 +242,63 @@ function ModalWindow({
         },
         1
     )
-
+    const airbagSize = "50px"
     return (
         <Div
             ref={trapRef}
-            className={overlayCls.join(" ")}
+            className={overlayCls.value}
             onClick={onClick}
             zIndex={zIndex - 1}
         >
-            <div className="grid h-full w-full editor-bounds">
-                <div className="place-self-center grid" style={parentDivStyle}>
-                    <div className={hDivCls.join(" ")} style={hDivStyle}>
-                        <div
-                            ref={dimRef}
-                            {...dimAttr}
-                            className={vDivCls.value}
-                            style={vDivStyle}
-                        >
-                            <Div className="stack-h bg-header-bg text-header-text w-full">
-                                <Div
-                                    className="w-full px-2 text-ellipsis"
-                                    {...nameAttr}
-                                >
-                                    {name}
+            <div className="stack-v h-full overflow-hidden editor-bounds">
+                <Div className="shrink" height={airbagSize}></Div>
+
+                <Div className="auto overflow-hidden" {...heightAttr.props}>
+                    <Div className="stack-h full py-2 overflow-hidden">
+                        <Div className="shrink" width={airbagSize}></Div>
+
+                        <div className="stack-v h-full auto px-2 justify-center items-center overflow-y-hidden min-w-min">
+                            <Div
+                                className={modalCls.value}
+                                {...widthAttr.props}
+                                ref={dimRef}
+                            >
+                                <Div className="stack-h bg-header-bg text-header-text w-full">
+                                    <Div
+                                        className="w-full px-2 text-ellipsis"
+                                        {...nameAttr.props}
+                                    >
+                                        {name}
+                                    </Div>
+                                    {closeable ? (
+                                        <Button
+                                            icon="close"
+                                            onPressed={(e) =>
+                                                close("click-button")
+                                            }
+                                        />
+                                    ) : (
+                                        ""
+                                    )}
                                 </Div>
-                                {closeable ? (
-                                    <Button
-                                        icon="close"
-                                        onPressed={(e) => close("click-button")}
-                                    />
-                                ) : (
-                                    ""
-                                )}
+
+                                <div
+                                    className="grid auto overflow-hidden"
+                                    style={{
+                                        gridTemplateColumns: "100%",
+                                        gridTemplateRows: "100%"
+                                    }}
+                                >
+                                    {children}
+                                </div>
                             </Div>
-                            {children}
                         </div>
-                    </div>
-                </div>
+
+                        <Div className="shrink" width={airbagSize}></Div>
+                    </Div>
+                </Div>
+
+                <Div className="shrink" height={airbagSize}></Div>
             </div>
             <Div
                 width={0}

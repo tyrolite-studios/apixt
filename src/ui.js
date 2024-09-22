@@ -27,7 +27,7 @@ import {
     ColorCells,
     SliderCells
 } from "./components/form"
-import { Icon, Tab, Tabs } from "./components/layout"
+import { Div, Icon, Tab, Tabs } from "./components/layout"
 import { ClassNames } from "core/helper"
 import { useModalWindow } from "./components/modal"
 import { useExtractDimProps } from "./components/common"
