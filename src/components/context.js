@@ -1,11 +1,4 @@
-import {
-    createContext,
-    useState,
-    useRef,
-    useMemo,
-    useContext,
-    useEffect
-} from "react"
+import { createContext, useState, useRef, useContext, useEffect } from "react"
 import { treeBuilder } from "core/tree"
 import { getHttpStreamPromise } from "core/http"
 import { useComponentUpdate, useLoadingSpinner } from "./common"
@@ -70,453 +63,493 @@ const defaultSettings = {
     }
 }
 
+function registerModalApi({ registry, register }) {
+    register("buttonRefocus", null)
+    register("focusStack", {
+        elem: {},
+        zIndex: null
+    })
+    register("modalStack", [])
+    register("modalIds", [])
+    register("lastTarget", null)
+
+    const getModalLevel = () => registry("modalStack").length
+    register("getModalLevel", getModalLevel)
+
+    return {
+        focusStack: registry("focusStack"),
+        setButtonRefocus: (value) => {
+            register("buttonRefocus", value)
+        },
+        pushModalId: (id) => registry("modalIds").push(id),
+        popModalId: () => registry("modalIds").pop(),
+        getModalLevel,
+        openModal: () => {
+            const { modalStack, focusStack, lastTarget, buttonRefocus } =
+                registry()
+
+            let zIndex = 10000
+            const len = modalStack.length
+            if (len > 0) {
+                zIndex = modalStack[len - 1] + 10
+            }
+            modalStack.push(zIndex)
+            focusStack.zIndex = zIndex
+            focusStack.elem[zIndex] = {
+                top: null,
+                auto: null,
+                start: null,
+                setShadow: null,
+                submit: null,
+                lastFocus: buttonRefocus
+                    ? buttonRefocus
+                    : document.activeElement,
+                lastTarget
+            }
+            return zIndex
+        },
+        getModalSubmit: () => {
+            const { modalStack, focusStack } = registry()
+            const zIndex = modalStack[modalStack.length - 1]
+            return focusStack.elem[zIndex].submit
+        },
+        setModalSubmit: (submit) => {
+            const { modalStack, focusStack } = registry()
+            const zIndex = modalStack[modalStack.length - 1]
+            focusStack.elem[zIndex].submit = submit
+        },
+        closeModal: (zIndex) => {
+            const { modalStack, focusStack } = registry()
+
+            const index = modalStack.indexOf(zIndex)
+            if (index === -1) {
+                return
+            }
+            modalStack.splice(index, 1)
+            const { lastTarget, lastFocus } = focusStack.elem[zIndex]
+            register("lastTarget", lastTarget)
+            if (lastFocus) {
+                requestAnimationFrame(() => {
+                    if (typeof lastFocus === "function") {
+                        lastFocus()
+                    } else {
+                        lastFocus.focus()
+                    }
+                })
+            }
+            delete focusStack.elem[zIndex]
+            focusStack.zIndex = modalStack.length
+                ? modalStack[modalStack.length - 1]
+                : null
+            if (focusStack.zIndex) {
+                const old = focusStack.elem[focusStack.zIndex]
+                if (old && old.setShadow) {
+                    old.setShadow()
+                }
+            }
+        },
+        getLastTarget: () => registry("lastTarget")
+    }
+}
+
+function registerHotkeyApi({ registry, register }) {
+    const action2hotKey = defaultSettings.mapping
+
+    const hotKey2action = {}
+    for (let [action, key] of Object.entries(action2hotKey)) {
+        if (key !== null) {
+            hotKey2action[key] = action
+        }
+    }
+    register("hotKeyActions", {
+        action2hotKey,
+        hotKey2action
+    })
+    register("elemKeyBindings", [])
+
+    const getHotKeyArea = (area) => {
+        const { elemKeyBindings, getModalLevel } = registry()
+
+        const currLevel = getModalLevel()
+        for (let item of elemKeyBindings) {
+            if (currLevel === item[3] && item[2] == area) {
+                return item[0]
+            }
+        }
+        return null
+    }
+
+    const getHandlerForAction = (
+        action,
+        elem,
+        followLinks = true,
+        passed = false
+    ) => {
+        const { elemKeyBindings, getModalLevel } = registry()
+
+        const currLevel = getModalLevel()
+        for (let [node, bindings, area, level, links] of elemKeyBindings) {
+            if (elem === node && level === currLevel) {
+                passed = true
+                const binding = bindings[action]
+                if (binding) {
+                    return binding
+                }
+                if (followLinks) {
+                    for (let link of links) {
+                        const node = getHotKeyArea(link)
+                        if (node) {
+                            const binding = getHandlerForAction(
+                                action,
+                                node,
+                                false,
+                                passed
+                            )
+                            if (binding) {
+                                return binding
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if (!followLinks || !elem || elem.id === "modals-container") {
+            return passed ? undefined : false
+        }
+        elem = elem.parentNode
+        if (elem) {
+            return getHandlerForAction(action, elem, true, passed)
+        }
+        return passed ? undefined : false
+    }
+
+    return {
+        addElemKeyBinding: (
+            elem,
+            action2handlers = {},
+            area = null,
+            link = null
+        ) => {
+            const { getModalLevel } = registry()
+            if (elem === null) {
+                return
+            }
+            if (!link) {
+                link = []
+            } else if (!Array.isArray(link)) {
+                link = [link]
+            }
+            registry("elemKeyBindings").push([
+                elem,
+                action2handlers,
+                area,
+                getModalLevel(),
+                link
+            ])
+        },
+        deleteElemKeyBindings: (elem) => {
+            const { elemKeyBindings } = registry()
+
+            let index = 0
+            for (let item of elemKeyBindings) {
+                if (item[0] === elem) {
+                    elemKeyBindings.splice(index, 1)
+                    break
+                }
+                index++
+            }
+        },
+        getHotKeyArea,
+        focusHotKeyArea: (area) => {
+            let elem = getHotKeyArea(area)
+            if (elem) {
+                const areaElem = elem
+                elem = elem.querySelector(".tabbed")
+                if (elem) {
+                    const { markFocusArea } = registry()
+                    const rectElem =
+                        areaElem.parentNode &&
+                        areaElem.parentNode.classList.contains("parent")
+                            ? areaElem.parentNode
+                            : areaElem
+                    markFocusArea(rectElem.getBoundingClientRect())
+                    elem.focus()
+                    register("lastTarget", elem)
+                    return true
+                }
+            }
+            return false
+        },
+
+        getHandlerForActionKey: (actionKey, elem) => {
+            const { elemKeyBindings, hotKeyActions } = registry()
+            if (elemKeyBindings.length === 0) {
+                return null
+            }
+            const action = hotKeyActions.hotKey2action[actionKey]
+            if (!action) {
+                return null
+            }
+            let handler = getHandlerForAction(action, elem)
+
+            if (handler === false) {
+                // try hotkey region 1 when no area was found along the node path
+                const node = getHotKeyArea(1)
+                if (node) {
+                    handler = getHandlerForAction(action, node)
+                }
+            }
+
+            return handler ? handler : null
+        },
+
+        hotKeyActions: registry("hotKeyActions")
+    }
+}
+
+function registerSettingsApi({ registry, register }, settings, setSettings) {
+    register("settings", settings)
+    register("globalStorage", controller.globalStorage)
+    register("apiStorage", controller.apiStorage)
+    register("tempStorage", controller.tempStorage)
+
+    const clearSettings = () => {
+        const { globalStorage } = registry()
+        globalStorage.deleteJson("settings")
+    }
+
+    return {
+        globalStorage: registry("globalStorage"),
+        apiStorage: registry("apiStorage"),
+        tempStorage: registry("tempStorage"),
+        settings: registry("settings"),
+        setSettings,
+        clearSettings
+    }
+}
+
+/**
+ *
+ */
+function registerContentApi({ registry, register }) {
+    register("treeBuilder", treeBuilder)
+
+    const startContentStream = (request) => {
+        PluginRegistry.applyHooks(HOOKS.FETCH_CONTENT, request)
+
+        const { treeBuilder, spinner, config } = registry()
+        treeBuilder.reset()
+
+        register("lastRequest", request)
+        const httpStream = getHttpStreamPromise(config, request)
+        register("streamAbort", httpStream.abort)
+        const promise = treeBuilder
+            .processStream(httpStream)
+            .finally(() => register("streamAbort", null))
+
+        spinner.start(promise, () => {
+            httpStream.abort()
+            treeBuilder.abort()
+        })
+    }
+
+    const restartContentStream = (overwrites = {}) => {
+        const { lastRequest } = registry()
+        if (!lastRequest) return
+
+        const { headers, ...options } = lastRequest
+        let addHeaders = {}
+        if (headers && overwrites.headers) {
+            addHeaders = {
+                headers: { ...headers, ...overwrites.headers }
+            }
+        }
+        startContentStream({ ...options, ...overwrites, ...addHeaders })
+    }
+
+    return {
+        treeBuilder: registry("treeBuilder"),
+        startContentStream,
+        restartContentStream,
+        abortContentStream: () => {
+            const { streamAbort } = registry()
+            if (streamAbort) streamAbort()
+        },
+        haltContentStream: (hash) => {
+            restartContentStream({ headers: { "Tls-Apixt-Halt": hash } })
+        },
+        clearContent: () => {
+            const { treeBuilder } = registry()
+            treeBuilder.reset()
+        }
+    }
+}
+
+/**
+ *
+ */
+function registerEventManagementApi({ registry, register }) {
+    register("listeners", [])
+    register("mode", null)
+
+    const removeEventListener = (type) => {
+        const { listeners } = registry()
+
+        const handlers = listeners[type]
+        if (!handlers || handlers.length === 0) {
+            return
+        }
+        const last = handlers.pop()
+        window.removeEventListener(type, last.handler, last.options)
+        if (last.options.cleanUp) {
+            last.options.cleanUp()
+        }
+    }
+
+    const isInExclusiveMode = () => registry("mode") !== null
+
+    const endExclusiveMode = (id) => {
+        const { mode, listeners, setFixCursor } = registry()
+        if (!id || mode !== id) {
+            return
+        }
+        if (listeners) {
+            for (let type of Object.keys(listeners)) {
+                removeEventListener(type)
+            }
+        }
+        register("mode", null)
+        if (id.startsWith("mouse:")) {
+            setFixCursor(null)
+        }
+    }
+
+    return {
+        startExclusiveMode: (id, cursor = "auto") => {
+            const { mode, setFixCursor } = registry()
+            if (mode !== null) {
+                endExclusiveMode(mode)
+            }
+            register("mode", id)
+            if (id.startsWith("mouse:")) {
+                setFixCursor(cursor)
+            }
+        },
+        isInExclusiveMode,
+        endExclusiveMode,
+        onExclusiveModeEnd: (callback) => {
+            const check = () => {
+                if (!isInExclusiveMode()) {
+                    callback()
+                } else {
+                    requestAnimationFrame(check)
+                }
+            }
+            check()
+        },
+        addEventListener: (type, listener, options = false) => {
+            const { mode, listeners } = registry()
+
+            if (!mode)
+                throw Error(
+                    `No call of start exclusive mode before addEventListener`
+                )
+
+            const handler = (event, ...params) => {
+                let result = false
+                try {
+                    result = listener(event, ...params)
+                } catch (e) {
+                    console.error(
+                        `An error occured in the event handler "${type}": ${e}`
+                    )
+                    endExclusiveMode(mode) // problems? get from registry
+                }
+                if (options.once) {
+                    removeEventListener(type)
+                }
+                if (!options.propagate) {
+                    event.stopPropagation()
+                }
+                return result
+            }
+            window.addEventListener(type, handler, options)
+            if (!listeners[type]) {
+                listeners[type] = []
+            }
+            listeners[type].push({ handler, options })
+        },
+        removeEventListener
+    }
+}
+
 function AppCtx({ config, children }) {
-    const globalStorage = useMemo(() => {
-        return controller ? controller.globalStorage : null
-    }, [])
-    const apiStorage = useMemo(() => {
-        return controller ? controller.apiStorage : null
-    }, [])
-    const tempStorage = useMemo(() => {
-        return controller ? controller.tempStorage : null
-    }, [])
+    const registryRef = useRef()
+    const apiRef = useRef()
+    const registry = (key = null) =>
+        key ? registryRef.current[key] : registryRef.current
+
     const [settings, setSettingsRaw] = useState(() => {
+        const globalStorage = controller.globalStorage
         if (!globalStorage) return
+
         return globalStorage.getJson("settings", {
             ...defaultSettings,
             plugins: PluginRegistry.getDefaultStates()
         })
     })
     const setSettings = (settings) => {
+        const { globalStorage } = registry()
         globalStorage.setJson("settings", settings)
         setSettingsRaw(settings)
     }
+
     useEffect(() => {
+        const { globalStorage } = registry()
         if (!globalStorage) return
+
         PluginRegistry.setStates(settings.plugins)
         requestAnimationFrame(() => PluginRegistry.updateApp())
     }, [])
 
     const update = useComponentUpdate()
-    const registryRef = useRef()
-    const setterRef = useRef()
-    const registry = (key = null) =>
-        key ? registryRef.current[key] : registryRef.current
 
     if (!registry()) {
         const register = (key, value) => {
             registryRef.current[key] = value
         }
 
-        const action2hotKey = defaultSettings.mapping
-        /*
-        storage.getDefaultedJson(
-            "hotkeys",
-            defaultMapping
-        )*/
-        const hotKey2action = {}
-        for (let [action, key] of Object.entries(action2hotKey)) {
-            if (key !== null) {
-                hotKey2action[key] = action
-            }
-        }
-
-        const getModalLevel = () => registry("modalStack").length
-
-        const isInExclusiveMode = () => registry("mode") !== null
-
-        const endExclusiveMode = (id) => {
-            const { mode, listeners, setFixCursor } = registry()
-            if (!id || mode !== id) {
-                return
-            }
-            if (listeners) {
-                for (let type of Object.keys(listeners)) {
-                    removeEventListener(type)
-                }
-            }
-            register("mode", null)
-            setFixCursor(null)
-        }
-
-        const getHotKeyArea = (area) => {
-            const { elemKeyBindings } = registry()
-
-            const currLevel = getModalLevel()
-            for (let item of elemKeyBindings) {
-                if (currLevel === item[3] && item[2] == area) {
-                    return item[0]
-                }
-            }
-            return null
-        }
-
-        const removeEventListener = (type) => {
-            const { listeners } = registry()
-
-            const handlers = listeners[type]
-            if (!handlers || handlers.length === 0) {
-                return
-            }
-            const last = handlers.pop()
-            window.removeEventListener(type, last.handler, last.options)
-            if (last.options.cleanUp) {
-                last.options.cleanUp()
-            }
-        }
-
-        const clearSettings = () => {
-            globalStorage.deleteJson("settings")
-        }
-
-        const getHandlerForAction = (
-            action,
-            elem,
-            followLinks = true,
-            passed = false
-        ) => {
-            const { elemKeyBindings } = registry()
-
-            const currLevel = getModalLevel()
-            for (let [node, bindings, area, level, links] of elemKeyBindings) {
-                if (elem === node && level === currLevel) {
-                    passed = true
-                    const binding = bindings[action]
-                    if (binding) {
-                        return binding
-                    }
-                    if (followLinks) {
-                        for (let link of links) {
-                            const node = getHotKeyArea(link)
-                            if (node) {
-                                const binding = getHandlerForAction(
-                                    action,
-                                    node,
-                                    false,
-                                    passed
-                                )
-                                if (binding) {
-                                    return binding
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            if (!followLinks || !elem || elem.id === "modals-container") {
-                return passed ? undefined : false
-            }
-            elem = elem.parentNode
-            if (elem) {
-                return getHandlerForAction(action, elem, true, passed)
-            }
-            return passed ? undefined : false
-        }
-
-        const startContentStream = (request) => {
-            PluginRegistry.applyHooks(HOOKS.FETCH_CONTENT, request)
-
-            const { treeBuilder, spinner, config } = registry()
-            treeBuilder.reset()
-
-            register("lastRequest", request)
-            const httpStream = getHttpStreamPromise(config, request)
-            register("streamAbort", httpStream.abort)
-            const promise = treeBuilder
-                .processStream(httpStream)
-                .finally(() => register("streamAbort", null))
-
-            spinner.start(promise, () => {
-                httpStream.abort()
-                treeBuilder.abort()
-            })
-        }
-
-        const restartContentStream = (overwrites = {}) => {
-            const { lastRequest } = registry()
-            if (!lastRequest) return
-
-            const { headers, ...options } = lastRequest
-            let addHeaders = {}
-            if (headers && overwrites.headers) {
-                addHeaders = {
-                    headers: { ...headers, ...overwrites.headers }
-                }
-            }
-            startContentStream({ ...options, ...overwrites, ...addHeaders })
-        }
-
         registryRef.current = {
             updates: 0,
             config,
-            treeBuilder,
             version: "0.1.0",
             mode: null,
             confirm: null,
-            settings,
             lastRequest: null,
             dirty: false,
-            spinner: null,
-            globalStorage,
-            apiStorage,
-            tempStorage,
-            lastTarget: null,
-            listeners: {},
-            buttonRefocus: null,
-            focusStack: {
-                elem: {},
-                zIndex: null
-            },
-            modalStack: [],
-            modalIds: [],
-
-            hotKeyActions: {
-                action2hotKey,
-                hotKey2action
-            },
-            elemKeyBindings: []
+            spinner: null
         }
 
-        setterRef.current = {
+        const registration = { register, registry }
+
+        apiRef.current = {
+            ...registerSettingsApi(registration, settings, setSettings),
+            ...registerEventManagementApi(registration),
+            ...registerContentApi(registration),
+            ...registerModalApi(registration),
+            ...registerHotkeyApi(registration),
+
             config: registry("config"),
-            treeBuilder: registry("treeBuilder"),
-            focusStack: registry("focusStack"),
+            version: registry("version"),
             register,
             update: () => {
-                setterRef.current = { ...setterRef.current }
+                apiRef.current = { ...apiRef.current }
                 update()
-            },
-            globalStorage: registry("globalStorage"),
-            apiStorage: registry("apiStorage"),
-            tempStorage: registry("tempStorage"),
-            startContentStream,
-            restartContentStream,
-            abortContentStream: () => {
-                const { streamAbort } = registry()
-                if (streamAbort) streamAbort()
-            },
-            haltContentStream: (hash) => {
-                restartContentStream({ headers: { "Tls-Apixt-Halt": hash } })
-            },
-            clearContent: () => {
-                const { treeBuilder } = registry()
-                treeBuilder.reset()
-            },
-            pushModalId: (id) => registry("modalIds").push(id),
-            popModalId: () => registry("modalIds").pop(),
-            getModalLevel,
-            openModal: () => {
-                const { modalStack, focusStack, lastTarget, buttonRefocus } =
-                    registry()
-
-                let zIndex = 10000
-                const len = modalStack.length
-                if (len > 0) {
-                    zIndex = modalStack[len - 1] + 10
-                }
-                modalStack.push(zIndex)
-                focusStack.zIndex = zIndex
-                focusStack.elem[zIndex] = {
-                    top: null,
-                    auto: null,
-                    start: null,
-                    setShadow: null,
-                    submit: null,
-                    lastFocus: buttonRefocus
-                        ? buttonRefocus
-                        : document.activeElement,
-                    lastTarget
-                }
-                return zIndex
-            },
-            getModalSubmit: () => {
-                const { modalStack, focusStack } = registry()
-                const zIndex = modalStack[modalStack.length - 1]
-                return focusStack.elem[zIndex].submit
-            },
-            setModalSubmit: (submit) => {
-                const { modalStack, focusStack } = registry()
-                const zIndex = modalStack[modalStack.length - 1]
-                focusStack.elem[zIndex].submit = submit
-            },
-            closeModal: (zIndex) => {
-                const { modalStack, focusStack } = registry()
-
-                const index = modalStack.indexOf(zIndex)
-                if (index === -1) {
-                    return
-                }
-                modalStack.splice(index, 1)
-                const { lastTarget, lastFocus } = focusStack.elem[zIndex]
-                register("lastTarget", lastTarget)
-                if (lastFocus) {
-                    requestAnimationFrame(() => {
-                        if (typeof lastFocus === "function") {
-                            lastFocus()
-                        } else {
-                            lastFocus.focus()
-                        }
-                    })
-                }
-                delete focusStack.elem[zIndex]
-                focusStack.zIndex = modalStack.length
-                    ? modalStack[modalStack.length - 1]
-                    : null
-                if (focusStack.zIndex) {
-                    const old = focusStack.elem[focusStack.zIndex]
-                    if (old && old.setShadow) {
-                        old.setShadow()
-                    }
-                }
-            },
-
-            startExclusiveMode: (id, cursor = "auto") => {
-                const { mode, setFixCursor } = registry()
-                if (mode !== null) {
-                    endExclusiveMode(mode)
-                }
-                register("mode", id)
-                setFixCursor(cursor)
-            },
-            isInExclusiveMode,
-            endExclusiveMode,
-            onExclusiveModeEnd: (callback) => {
-                const check = () => {
-                    if (!isInExclusiveMode()) {
-                        callback()
-                    } else {
-                        requestAnimationFrame(check)
-                    }
-                }
-                check()
-            },
-
-            addElemKeyBinding: (
-                elem,
-                action2handlers = {},
-                area = null,
-                link = null
-            ) => {
-                if (elem === null) {
-                    return
-                }
-                if (!link) {
-                    link = []
-                } else if (!Array.isArray(link)) {
-                    link = [link]
-                }
-                registry("elemKeyBindings").push([
-                    elem,
-                    action2handlers,
-                    area,
-                    getModalLevel(),
-                    link
-                ])
-            },
-            deleteElemKeyBindings: (elem) => {
-                const { elemKeyBindings } = registry()
-
-                let index = 0
-                for (let item of elemKeyBindings) {
-                    if (item[0] === elem) {
-                        elemKeyBindings.splice(index, 1)
-                        break
-                    }
-                    index++
-                }
-            },
-            getHotKeyArea,
-            focusHotKeyArea: (area) => {
-                let elem = getHotKeyArea(area)
-                if (elem) {
-                    const areaElem = elem
-                    elem = elem.querySelector(".tabbed")
-                    if (elem) {
-                        const { markFocusArea } = registry()
-                        const rectElem =
-                            areaElem.parentNode &&
-                            areaElem.parentNode.classList.contains("parent")
-                                ? areaElem.parentNode
-                                : areaElem
-                        markFocusArea(rectElem.getBoundingClientRect())
-                        elem.focus()
-                        register("lastTarget", elem)
-                        return true
-                    }
-                }
-                return false
-            },
-
-            getHandlerForActionKey: (actionKey, elem) => {
-                const { elemKeyBindings, hotKeyActions } = registry()
-                if (elemKeyBindings.length === 0) {
-                    return null
-                }
-                const action = hotKeyActions.hotKey2action[actionKey]
-                if (!action) {
-                    return null
-                }
-                let handler = getHandlerForAction(action, elem)
-
-                if (handler === false) {
-                    // try hotkey region 1 when no area was found along the node path
-                    const node = getHotKeyArea(1)
-                    if (node) {
-                        handler = getHandlerForAction(action, node)
-                    }
-                }
-
-                return handler ? handler : null
-            },
-
-            hotKeyActions: registry("hotKeyActions"),
-            getLastTarget: () => registry("lastTarget"),
-
-            settings: registry("settings"),
-            setSettings,
-            clearSettings,
-
-            setButtonRefocus: (value) => {
-                register("buttonRefocus", value)
-            },
-
-            addEventListener: (type, listener, options = false) => {
-                const { mode, listeners } = registry()
-
-                if (!mode)
-                    throw Error(
-                        `No call of start exclusive mode before addEventListener`
-                    )
-
-                const handler = (event, ...params) => {
-                    let result = false
-                    try {
-                        result = listener(event, ...params)
-                    } catch (e) {
-                        console.error(
-                            `An error occured in the event handler "${type}": ${e}`
-                        )
-                        endExclusiveMode(mode) // problems? get from registry
-                    }
-                    if (options.once) {
-                        removeEventListener(type)
-                    }
-                    if (!options.propagate) {
-                        event.stopPropagation()
-                    }
-                    return result
-                }
-                window.addEventListener(type, handler, options)
-                if (!listeners[type]) {
-                    listeners[type] = []
-                }
-                listeners[type].push({ handler, options })
-            },
-            removeEventListener
+            }
         }
     }
     return (
-        <AppContext.Provider value={setterRef.current}>
+        <AppContext.Provider value={apiRef.current}>
             <>
                 <SpinnerDiv key="sd" />
                 <FixCursorArea key="em" />

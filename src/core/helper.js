@@ -109,7 +109,7 @@ function extractFullClasses(cls) {
     return cls.match(regex) || []
 }
 
-const Attributes = (props) => {
+function Attributes(props) {
     const cls = new AttriutesCls(props)
     return new Proxy(cls, {
         set: (target, prop, value) => {
@@ -163,7 +163,11 @@ class AttriutesCls {
     }
 }
 
-class ClassNames {
+function ClassNames(cls = "", overwrites = "") {
+    return new ClassNamesCls(cls, overwrites)
+}
+
+class ClassNamesCls {
     constructor(cls = "", overwrites = "") {
         this.cls = []
         this.add(cls)

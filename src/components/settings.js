@@ -13,7 +13,8 @@ import {
     Slider,
     Number,
     Picker,
-    ColorCells
+    ColorCells,
+    SliderCells
 } from "./form"
 import { useConfirmation, EntityStack } from "./common"
 import { AppContext } from "./context"
@@ -59,6 +60,9 @@ function PluginsOverview({ plugins, setPlugins }) {
 }
 
 function About() {
+    const aContext = useContext(AppContext)
+    const { language, apixt, platform } = aContext.config.hostingApi
+
     return (
         <Centered>
             <div className="stack-v gap-2 p-2">
@@ -71,9 +75,15 @@ function About() {
                     </span>
                     <br />
                     <br />
-                    Hosting API Language: NodeJS
+                    API Language: {language.name + " " + language.version}
                     <br />
-                    API Extender Backend v0.0.1
+                    Operating System: {platform.name + " " + platform.version}
+                    <br />
+                    API Extender Backend: {apixt.name + " " + apixt.version}
+                    <br />
+                    <span className="opacity-50 text-xs">
+                        <a href="">{apixt.link}</a>
+                    </span>
                     <br />
                     <br />
                     <span className="text-xs opacity-50">
@@ -299,6 +309,20 @@ function Layout({ layout, setLayout }) {
                 setUnlimited={getLayoutSetter("hMax")}
             />
             <SectionCells name="Theme" />
+            <SliderCells
+                name="Button padding x:"
+                min={0}
+                max={20}
+                value={layout.buttonPaddingX}
+                set={getLayoutSetter("buttonPaddingX")}
+            />
+            <SliderCells
+                name="Button padding y:"
+                min={0}
+                max={10}
+                value={layout.buttonPaddingY}
+                set={getLayoutSetter("buttonPaddingY")}
+            />
             <ColorCells name="Header color:" value="#4d5c82" />
         </FormGrid>
     )
@@ -317,7 +341,7 @@ function KeyBindings({}) {
     })
 
     return (
-        <FormGrid xclassName="px-4">
+        <FormGrid>
             <SectionCells name="Key Bindings" />
             <FullCell>
                 <Picker
@@ -399,6 +423,8 @@ const defaultSettings = {
     layout: {
         width: 800,
         height: 800,
+        buttonPaddingX: 6,
+        buttonPaddingY: 3,
         wMax: true,
         hMax: true,
         sidebar: false
@@ -410,12 +436,22 @@ function Settings({ close }) {
     const [layout, setLayoutRaw] = useState(() => {
         return { ...defaultSettings.layout }
     })
-    const applyLayout = ({ width, height, wMax, hMax, sidebar }) => {
+    const applyLayout = ({
+        width,
+        height,
+        wMax,
+        hMax,
+        sidebar,
+        buttonPaddingX,
+        buttonPaddingY
+    }) => {
         root.style.setProperty("--app-max-width", wMax ? "100%" : width + "px")
         root.style.setProperty(
             "--app-max-height",
             hMax ? "100%" : height + "px"
         )
+        root.style.setProperty("--def-button-padding-x", buttonPaddingX + "px")
+        root.style.setProperty("--def-button-padding-y", buttonPaddingY + "px")
     }
     const setLayout = (newLayout) => {
         applyLayout(newLayout)

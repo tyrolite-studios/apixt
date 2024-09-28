@@ -122,12 +122,12 @@ function Checkbox({
     useMarkInvalid(cls, invalid)
     cls.addIf(autoFocus, "autofocus")
 
-    const handleClick = (upEvent) => {
-        aContext.startExclusiveMode("toggle-bool", "pointer")
+    const handleClick = (source, upEvent) => {
+        aContext.startExclusiveMode(`${source}:toggle-bool`, "pointer")
         aContext.addEventListener(
             upEvent,
             () => {
-                aContext.endExclusiveMode("toggle-bool")
+                aContext.endExclusiveMode(`${source}:toggle-bool`)
                 setClicked(false)
             },
             { once: true }
@@ -151,14 +151,14 @@ function Checkbox({
                           if (!disabled) return
                           e.preventDefault()
                       }
-                    : () => handleClick("mouseup")
+                    : () => handleClick("mouse", "mouseup")
             }
             onKeyDown={(e) => {
                 const isSpace = e.keyCode === 32
                 if (!isSpace) return
 
                 e.preventDefault()
-                if (interactive && !clicked) handleClick("keyup")
+                if (interactive && !clicked) handleClick("key", "keyup")
             }}
             {...attr}
         >
@@ -193,6 +193,7 @@ function Input({
     className,
     ...props
 }) {
+    const aContext = useContext(AppContext)
     const interactive = !(readOnly || disabled)
 
     const checkValidity = (value) => {
@@ -226,7 +227,7 @@ function Input({
     )
     cls.addIf(full, "w-full")
     cls.addIf(styled && sized, "text-sm")
-    cls.addIf(styled && padded, "px-2")
+    cls.addIf(styled && padded, "px-dix py-diy")
     cls.addIf(styled && bordered, "border")
     cls.addIf(styled && colored, "text-input-text bg-input-bg")
     useMarkInvalid(cls, invalid)
@@ -242,16 +243,20 @@ function Input({
 
     let onKeyDown = null
     if (interactive) {
-        onKeyDown = !keys
-            ? props.onKeyDown
-            : (e) => {
-                  if (props.onKeyDown) props.onKeyDown(e)
+        onKeyDown = (e) => {
+            if (aContext.isInExclusiveMode()) {
+                e.preventDefault()
+                return
+            }
+            if (props.onKeyDown) props.onKeyDown(e)
 
-                  const key = e.key === "Space" ? " " : e.key
-                  if (key.length === 1 && keys.indexOf(key) === -1) {
-                      e.preventDefault()
-                  }
-              }
+            if (!keys) return
+
+            const key = e.key === "Space" ? " " : e.key
+            if (key.length === 1 && keys.indexOf(key) === -1) {
+                e.preventDefault()
+            }
+        }
     }
     return (
         <input
@@ -745,15 +750,16 @@ function Color({
     innerCls.addIf(styled && colored, "bg-input-bg")
     cls.addIf(disabled, "opacity-50")
     cls.addIf(interactive, "hover:brightness-110")
-    const handleClick = (upEvent) => {
+    const handleClick = (source, upEvent) => {
         if (invalid) {
             colorRef.current = "#000000" + (alpha ? "00" : "")
         }
-        aContext.startExclusiveMode("pick-color", "pointer")
+        const mode = `${source}:pick-color`
+        aContext.startExclusiveMode(mode, "pointer")
         aContext.addEventListener(
             upEvent,
             () => {
-                aContext.endExclusiveMode("pick-color")
+                aContext.endExclusiveMode(mode)
                 setClicked(false)
             },
             { once: true }
@@ -779,7 +785,7 @@ function Color({
             onMouseDown={
                 !interactive
                     ? (e) => e.preventDefault()
-                    : () => handleClick("mouseup")
+                    : () => handleClick("mouse", "mouseup")
             }
             onKeyDown={
                 readOnly
@@ -789,7 +795,7 @@ function Color({
                               return
                           }
                           e.preventDefault()
-                          if (interactive) handleClick("keyup")
+                          if (interactive) handleClick("key", "keyup")
                       }
             }
         >
@@ -1184,12 +1190,12 @@ function RailAndSled({
         : () => {
               const rect = divRef.current.getBoundingClientRect()
               const start = rect[axis.toLowerCase()]
-              aContext.startExclusiveMode("move-slider", "grabbing")
+              aContext.startExclusiveMode("mouse:move-slider", "grabbing")
               setClicked(true)
               aContext.addEventListener(
                   "mouseup",
                   () => {
-                      aContext.endExclusiveMode("move-slider")
+                      aContext.endExclusiveMode("mouse:move-slider")
                       setClicked(false)
                       if (focusRef && focusRef.current) {
                           focusRef.current.focus()
@@ -1345,7 +1351,7 @@ function Button({
     )
     cls.addIf(autoFocus, "autofocus")
     cls.addIf(styled && sized, "text-xs")
-    cls.addIf(styled && padded, "py-0 px-2")
+    cls.addIf(styled && padded, "px-dbx py-dby")
 
     const cannotSubmit = submit && (disabled || (fContext && fContext.invalid))
     useEffect(() => {
@@ -1394,8 +1400,9 @@ function Button({
     }
     attr.tabIndex = useGetTabIndex({ tab, tabControlled, focused }, cls)
 
-    const initPressedHandling = (startEvent, releaseEvent) => {
-        aContext.startExclusiveMode("clicked", "pointer")
+    const initPressedHandling = (startEvent, source, releaseEvent) => {
+        const mode = `${source}:pressed`
+        aContext.startExclusiveMode(mode, "pointer")
 
         let btnElem = startEvent.target
         while (btnElem.nodeName !== "BUTTON") btnElem = btnElem.parentNode
@@ -1403,7 +1410,7 @@ function Button({
         aContext.addEventListener(
             releaseEvent,
             (e) => {
-                aContext.endExclusiveMode("clicked")
+                aContext.endExclusiveMode(mode)
                 if (!mounted.current) return
 
                 setClicked(false)
@@ -1431,10 +1438,11 @@ function Button({
         <button
             className={cls.value}
             onKeyDown={(e) => {
-                if (e.keyCode !== 32 || clicked) {
+                if (e.repeat || e.keyCode !== 32 || clicked) {
+                    if (e.repeat) e.preventDefault()
                     return
                 }
-                if (interactive) initPressedHandling(e, "keyup")
+                if (interactive) initPressedHandling(e, "key", "keyup")
             }}
             onMouseDown={(e) => {
                 if (!interactive) {
@@ -1450,7 +1458,7 @@ function Button({
                         }
                     })
                 }
-                initPressedHandling(e, "mouseup")
+                initPressedHandling(e, "mouse", "mouseup")
                 aContext.setButtonRefocus(null)
             }}
             {...attr}

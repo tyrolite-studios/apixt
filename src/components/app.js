@@ -156,16 +156,10 @@ function MainLayout({ config }) {
 }
 
 function ApiExtenderApp({ config }) {
-    const defaultedConfig = {
-        baseUrl: "http://localhost:8082",
-        routes: ["/", "/test-route"],
-        ...config
-    }
-
-    console.log("Starting API extender with config", defaultedConfig)
+    console.log("Starting API extender with config", config)
     return (
         <>
-            <MainLayout config={defaultedConfig} />
+            <MainLayout config={config} />
             <div id="modals" />
         </>
     )
