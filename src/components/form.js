@@ -27,7 +27,8 @@ import {
     isNull,
     isBool,
     isNumber,
-    isInRange
+    isInRange,
+    rgb2hex
 } from "core/helper"
 import {
     HighlightMatches,
@@ -739,9 +740,8 @@ function Color({
     cls.addIf(styled && colored, "bg-input-bg")
     cls.addIf(styled && bordered && colored, "border-input-border")
 
-    const invalid =
-        typeof value !== "string" ||
-        !value.match(alpha ? /^#[0-9a-f]{8}$/i : /^#[0-9a-f]{6}$/i)
+    const invalid = typeof value !== "string" //||
+    //!value.match(alpha ? /^#[0-9a-f]{8}$/i : /^#[0-9a-f]{6}$/i)
     useMarkInvalid(cls, invalid)
 
     const innerCls = new ClassNames("", innerClassName)
@@ -801,7 +801,7 @@ function Color({
         >
             <div className={innerCls.value}>
                 <ColorBox
-                    color={invalid ? "#FFFFFF00" : value}
+                    color={invalid ? "#FFFFFF00" : rgb2hex(value)}
                     width={width}
                     height={height}
                 />

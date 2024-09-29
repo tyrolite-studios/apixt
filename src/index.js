@@ -1,5 +1,6 @@
 import "./index.css"
 import controller from "core/controller"
+import theme from "core/theme"
 
 const url = new URL(window.location.href)
 url.search = ""
@@ -180,12 +181,12 @@ function LoginApp(config) {
         "</div>" +
         '<div class="grid gap-1 py-1 grid-cols-[min-content_auto] p-3">' +
         '<div class="text-xs">Username:</div>' +
-        '<input id="username" name="username" type="text" autocomplete="username" required class="invalid:bg-warning-bg invalid:text-warning-text px-2 bg-input-bg text-input-text border-input-border" />' +
+        '<input id="username" name="username" type="text" autocomplete="username" required class="invalid:bg-warning-bg invalid:text-warning-text px-dix py-diy bg-input-bg text-input-text border-input-border" />' +
         '<div class="text-xs">Password:</div>' +
-        '<input id="password" type="password" name="password" autocomplete="current-password" required class="invalid:bg-warning-bg invalid:text-warning-text px-2 bg-input-bg text-input-text border-input-border" />' +
+        '<input id="password" type="password" name="password" autocomplete="current-password" required class="invalid:bg-warning-bg invalid:text-warning-text px-dix py-diy bg-input-bg text-input-text border-input-border" />' +
         "</div>" +
         '<div class="pb-2">' +
-        '<button type="submit" class="bg-button-bg text-button-text border border-button-border text-xs px-2">' +
+        '<button type="submit" class="bg-button-bg text-button-text border border-button-border text-xs px-dbx py-dby">' +
         "Submit" +
         "</button>" +
         "</div>" +
@@ -202,7 +203,10 @@ function LoginApp(config) {
     })
     document.getElementById("cancel-btn").addEventListener("click", closeModal)
 
-    requestAnimationFrame(() => autoRefresh())
+    requestAnimationFrame(() => {
+        theme.init()
+        autoRefresh()
+    })
 }
 
 controller.registerApp("login", LoginApp)

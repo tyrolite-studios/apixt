@@ -3,10 +3,10 @@ export default {
     theme: {
         extend: {
             spacing: {
-                dbx: "var(--def-button-padding-x)",
-                dby: "var(--def-button-padding-y)",
-                dix: "var(--def-input-padding-x)",
-                diy: "var(--def-input-padding-y)"
+                dbx: "var(--button-padding-x)",
+                dby: "var(--button-padding-y)",
+                dix: "var(--input-padding-x)",
+                diy: "var(--input-padding-y)"
             },
             colors: {
                 "app-text": "rgb(var(--app-text) / <alpha-value>)",

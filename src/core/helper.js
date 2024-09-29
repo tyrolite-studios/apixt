@@ -288,6 +288,17 @@ function cloneDeep(value) {
     return value
 }
 
+function rgb2hex(rgb) {
+    const [r, g, b, a] = rgb.split(" ")
+    return (
+        "#" +
+        parseInt(r).toString(16).padStart(2, "0") +
+        parseInt(g).toString(16).padStart(2, "0") +
+        parseInt(b).toString(16).padStart(2, "0") +
+        (a === undefined ? "" : parseInt(a).toString(16).padStart(2, "0"))
+    )
+}
+
 export {
     d,
     isNull,
@@ -305,5 +316,6 @@ export {
     extractFullClasses,
     ClassNames,
     Attributes,
-    cloneDeep
+    cloneDeep,
+    rgb2hex
 }

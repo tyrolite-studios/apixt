@@ -198,7 +198,8 @@ const getWebpackConfig = (name, entryFiles) => {
             alias: {
                 core: path.resolve(baseDir, "src/core") + "/",
                 components: path.resolve(baseDir, "src/components") + "/",
-                plugins: path.resolve(baseDir, "src/plugins") + "/"
+                plugins: path.resolve(baseDir, "src/plugins") + "/",
+                themes: path.resolve(baseDir, "src/themes") + "/"
             },
             extensions: [".js", ".cjs", ".jsx"]
         },
