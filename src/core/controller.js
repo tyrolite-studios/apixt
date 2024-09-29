@@ -24,6 +24,9 @@ const controller = {
         }
         return storages
     },
+    setStorages: (newStorages) => {
+        storages = newStorages
+    },
     clearJwtCookie() {
         document.cookie = `${cookieKey}=; Max-Age=-9999; path=/`
     },

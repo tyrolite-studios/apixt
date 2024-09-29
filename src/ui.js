@@ -1,8 +1,16 @@
 import "./index.css"
+import { TempStorage } from "core/storage"
+import controller from "core/controller"
+window.controller.setStorages({
+    global: TempStorage(),
+    api: TempStorage(),
+    session: TempStorage(),
+    temp: TempStorage()
+})
+
 import { useState } from "react"
 import { AppCtx } from "components/context"
 import { createRoot } from "react-dom/client"
-import controller from "core/controller"
 import {
     Button,
     ButtonGroup,

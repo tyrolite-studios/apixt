@@ -62,10 +62,9 @@ let storage = null
 const manager = {
     init: () => {
         storage = window.controller.globalStorage
-        if (!storage) throw Error(`No global storage found`)
 
         currentTheme = { ...defaultTheme }
-        const storedTheme = storage.getJson("theme")
+        const storedTheme = storage && storage.getJson("theme")
         if (storedTheme) {
             for (const [key, value] of Object.entries(storedTheme)) {
                 const defaultValue = defaultTheme[key]
