@@ -6,6 +6,7 @@ import { Button } from "./form"
 import { d, Attributes } from "core/helper"
 import { useMounted, useHotKeys } from "./common"
 import { ClassNames } from "../core/helper"
+import themeManager from "core/theme"
 
 function ModalWindow({
     id,
@@ -315,7 +316,7 @@ function ModalWindow({
     )
 }
 
-function Modal({ ...props }) {
+function Modal({ isolated, ...props }) {
     const trapRef = useRef(null)
     const aContext = useContext(AppContext)
     /*
@@ -334,6 +335,13 @@ function Modal({ ...props }) {
         )
     }
     */
+    useEffect(() => {
+        if (!isolated) return
+
+        themeManager.applyBackup(trapRef.current)
+        return () => themeManager.deleteBackup()
+    }, [])
+
     return createPortal(
         <ModalWindow trapRef={trapRef} {...props} />,
         document.getElementById("modals")
@@ -404,6 +412,7 @@ function useModalWindow() {
                         className={className}
                         transparent={transparent}
                         closeable={props.closeable}
+                        isolated={props.isolated}
                         {...dimProps}
                     >
                         {props.children}

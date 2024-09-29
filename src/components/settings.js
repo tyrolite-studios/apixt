@@ -13,13 +13,15 @@ import {
     Slider,
     Number,
     Picker,
-    ColorCells
+    ColorCells,
+    SliderCells
 } from "./form"
 import { useConfirmation, EntityStack } from "./common"
 import { AppContext } from "./context"
 import { Div, Tabs, Tab, Stack, OkCancelLayout, Centered } from "./layout"
 import { d, isString, cloneDeep } from "core/helper"
 import { useModalWindow } from "./modal"
+import themeManager from "core/theme"
 
 function PluginsOverview({ plugins, setPlugins }) {
     const getPluginSetter = (prop) => {
@@ -59,6 +61,9 @@ function PluginsOverview({ plugins, setPlugins }) {
 }
 
 function About() {
+    const aContext = useContext(AppContext)
+    const { language, apixt, platform } = aContext.config.hostingApi
+
     return (
         <Centered>
             <div className="stack-v gap-2 p-2">
@@ -71,9 +76,15 @@ function About() {
                     </span>
                     <br />
                     <br />
-                    Hosting API Language: NodeJS
+                    API Language: {language.name + " " + language.version}
                     <br />
-                    API Extender Backend v0.0.1
+                    Operating System: {platform.name + " " + platform.version}
+                    <br />
+                    API Extender Backend: {apixt.name + " " + apixt.version}
+                    <br />
+                    <span className="opacity-50 text-xs">
+                        <a href="">{apixt.link}</a>
+                    </span>
                     <br />
                     <br />
                     <span className="text-xs opacity-50">
@@ -218,6 +229,57 @@ function General({ general, setGeneral }) {
     )
 }
 
+function Theme({ theme, setTheme }) {
+    const getThemeSetter = (prop) => {
+        return (value) => {
+            const newTheme = { ...theme }
+            newTheme[prop] = value
+            setTheme(newTheme)
+        }
+    }
+    return (
+        <FormGrid className="px-4">
+            <SectionCells name="Buttons" />
+            <SliderCells
+                name="Padding x:"
+                min={0}
+                max={20}
+                value={theme.buttonPaddingX_px}
+                set={getThemeSetter("buttonPaddingX_px")}
+            />
+            <SliderCells
+                name="Padding y:"
+                min={0}
+                max={10}
+                value={theme.buttonPaddingY_px}
+                set={getThemeSetter("buttonPaddingY_px")}
+            />
+            <ColorCells name="Background:" value={theme.buttonBg_rgb} />
+            <ColorCells name="Text:" value={theme.buttonText_rgb} />
+            <ColorCells name="Border:" value={theme.buttonBorder_rgb} />
+
+            <SectionCells name="Inputs" />
+            <SliderCells
+                name="Padding x:"
+                min={0}
+                max={20}
+                value={theme.inputPaddingX_px}
+                set={getThemeSetter("inputPaddingX_px")}
+            />
+            <SliderCells
+                name="Padding y:"
+                min={0}
+                max={10}
+                value={theme.inputPaddingY_px}
+                set={getThemeSetter("inputPaddingY_px")}
+            />
+            <ColorCells name="Background:" value={theme.inputBg_rgb} />
+            <ColorCells name="Text:" value={theme.inputText_rgb} />
+            <ColorCells name="Border:" value={theme.inputBorder_rgb} />
+        </FormGrid>
+    )
+}
+
 function DimInputsCells({
     name,
     min,
@@ -298,8 +360,6 @@ function Layout({ layout, setLayout }) {
                 unlimited={layout.hMax}
                 setUnlimited={getLayoutSetter("hMax")}
             />
-            <SectionCells name="Theme" />
-            <ColorCells name="Header color:" value="#4d5c82" />
         </FormGrid>
     )
 }
@@ -317,7 +377,7 @@ function KeyBindings({}) {
     })
 
     return (
-        <FormGrid xclassName="px-4">
+        <FormGrid>
             <SectionCells name="Key Bindings" />
             <FullCell>
                 <Picker
@@ -421,6 +481,16 @@ function Settings({ close }) {
         applyLayout(newLayout)
         setLayoutRaw(newLayout)
     }
+    const [theme, setThemeRaw] = useState(() => {
+        return { ...themeManager.currentTheme }
+    })
+    const applyTheme = (props) => {
+        themeManager.apply(props)
+    }
+    const setTheme = (newTheme) => {
+        applyTheme(newTheme)
+        setThemeRaw(newTheme)
+    }
     const [general, setGeneral] = useState(() => {
         return cloneDeep(defaultSettings.general)
     })
@@ -450,6 +520,7 @@ function Settings({ close }) {
             confirmed: () => {
                 setGeneral(defaultSettings.general)
                 setLayout(defaultSettings.layout)
+                setTheme(themeManager.defaultTheme)
                 setPlugins(PluginRegistry.getDefaultStates())
             }
         })
@@ -459,15 +530,17 @@ function Settings({ close }) {
         return {
             layout: { ...layout },
             general: cloneDeep(general),
-            plugins: { ...plugins }
+            plugins: { ...plugins },
+            theme: { ...theme }
         }
     }
 
     const beforeSettings = useMemo(() => getSnapshot(), [])
 
-    const applySettings = ({ layout, plugins }) => {
+    const applySettings = ({ layout, theme, plugins }) => {
         applyLayout(layout)
         applyPlugins(plugins)
+        applyTheme(theme)
     }
 
     return (
@@ -479,7 +552,10 @@ function Settings({ close }) {
                     applySettings(beforeSettings)
                     close()
                 }}
-                ok={() => close()}
+                ok={() => {
+                    themeManager.store()
+                    close()
+                }}
                 buttons={[
                     {
                         name: "Before",
@@ -488,11 +564,13 @@ function Settings({ close }) {
                             backedUpSettings.current = getSnapshot()
                             setGeneral(beforeSettings.general)
                             setLayout(beforeSettings.layout)
+                            setTheme(beforeSettings.theme)
                             setPlugins(beforeSettings.plugins)
                         },
                         onPressedEnd: () => {
                             setGeneral(backedUpSettings.current.general)
                             setLayout(backedUpSettings.current.layout)
+                            setTheme(backedUpSettings.current.theme)
                             setPlugins(backedUpSettings.current.plugins)
                         }
                     }
@@ -513,8 +591,12 @@ function Settings({ close }) {
                         />
                     </Tab>
 
-                    <Tab name="Layout / Theme">
+                    <Tab name="Layout">
                         <Layout layout={layout} setLayout={setLayout} />
+                    </Tab>
+
+                    <Tab name="Theme">
+                        <Theme theme={theme} setTheme={setTheme} />
                     </Tab>
 
                     <Tab name="Key bindings">

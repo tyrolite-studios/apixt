@@ -52,6 +52,7 @@ function Header() {
                 width="75%"
                 height="500px"
                 transparent={true}
+                isolated={true}
                 drag
             >
                 <Settings {...SettingsWindow.props} />

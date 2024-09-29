@@ -109,7 +109,7 @@ function extractFullClasses(cls) {
     return cls.match(regex) || []
 }
 
-const Attributes = (props) => {
+function Attributes(props) {
     const cls = new AttriutesCls(props)
     return new Proxy(cls, {
         set: (target, prop, value) => {
@@ -163,7 +163,11 @@ class AttriutesCls {
     }
 }
 
-class ClassNames {
+function ClassNames(cls = "", overwrites = "") {
+    return new ClassNamesCls(cls, overwrites)
+}
+
+class ClassNamesCls {
     constructor(cls = "", overwrites = "") {
         this.cls = []
         this.add(cls)
@@ -284,6 +288,17 @@ function cloneDeep(value) {
     return value
 }
 
+function rgb2hex(rgb) {
+    const [r, g, b, a] = rgb.split(" ")
+    return (
+        "#" +
+        parseInt(r).toString(16).padStart(2, "0") +
+        parseInt(g).toString(16).padStart(2, "0") +
+        parseInt(b).toString(16).padStart(2, "0") +
+        (a === undefined ? "" : parseInt(a).toString(16).padStart(2, "0"))
+    )
+}
+
 export {
     d,
     isNull,
@@ -301,5 +316,6 @@ export {
     extractFullClasses,
     ClassNames,
     Attributes,
-    cloneDeep
+    cloneDeep,
+    rgb2hex
 }

@@ -2,6 +2,12 @@ export default {
     content: ["./src/**/*.{html,js}"],
     theme: {
         extend: {
+            spacing: {
+                dbx: "var(--button-padding-x)",
+                dby: "var(--button-padding-y)",
+                dix: "var(--input-padding-x)",
+                diy: "var(--input-padding-y)"
+            },
             colors: {
                 "app-text": "rgb(var(--app-text) / <alpha-value>)",
                 "app-bg": "rgb(var(--app-bg) / <alpha-value>)",

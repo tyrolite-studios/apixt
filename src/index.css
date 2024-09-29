@@ -4,6 +4,8 @@
 
 @layer base {
     :root {
+        /* default paddings */
+
         /* application & window background */
         --app-bg: 157 180 204;
         --app-text: 0 0 0;
@@ -34,11 +36,15 @@
         --button-text: 101 95 95;
         --button-bg: 224 224 224;
         --button-border: 165 152 152;
+        --button-padding-x: 6px;
+        --button-padding-y: 3px;
 
         /* form input elements */
         --input-text: 240 240 240;
         --input-bg: 120 150 150;
         --input-border: 60 60 60;
+        --input-padding-x: 6px;
+        --input-padding-y: 3px;
 
         /* signal colors */
         --active-text: 60 20 50;
