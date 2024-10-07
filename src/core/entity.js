@@ -511,7 +511,6 @@ class SimpleMappingIndex extends MappingIndex {
     }
 
     setModelValue(index, prop, value) {
-        d("ST", index, prop, value)
         this.model[this.getEntityValue(index)] = value
         this.notify()
     }
