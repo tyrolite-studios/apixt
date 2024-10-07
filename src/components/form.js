@@ -1862,11 +1862,12 @@ function Form({ children, submit, onKeyDown, className, ...props }) {
     )
 }
 
-function FormGrid({ className, children, ...props }) {
+function FormGrid({ className, children, padded = true, ...props }) {
     const cls = new ClassNames(
-        "grid grid-cols-[max-content_auto] gap-y-2 pt-0 px-4 py-4",
+        "grid grid-cols-[max-content_auto] gap-y-2",
         className
     )
+    cls.addIf(padded, "px-4 py-2")
 
     return (
         <div className={cls.value} {...props}>

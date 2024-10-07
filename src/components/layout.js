@@ -11,10 +11,19 @@ import { ClassNames, d } from "core/helper"
 import { ButtonGroup, Form } from "./form"
 import { AppContext } from "./context"
 import { useGetAttrWithDimProps, useGetTabIndex } from "./common"
+import { Attributes } from "../core/helper"
 
-const getLayoutProps = ({ zIndex, cursor, tab, ...props }) => {
-    const attr = {}
-    const style = {}
+const getLayoutProps = ({ zIndex, cursor, ...props }) => {
+    const attr = new Attributes()
+    const {
+        width,
+        height,
+        minWidth,
+        maxWidth,
+        minHeight,
+        maxHeight,
+        ...remProps
+    } = props
     for (let prop of [
         "width",
         "minWidth",
@@ -24,42 +33,44 @@ const getLayoutProps = ({ zIndex, cursor, tab, ...props }) => {
         "maxHeight"
     ]) {
         let value = props[prop]
-        if (!value) continue
+        if (value === undefined) continue
 
         if (typeof value === "string" && value.match(/^\d+$/)) {
             value = parseInt(value, 10)
         }
-        style[prop] = value
+        attr.setStyle(prop, value)
     }
     if (zIndex !== undefined) {
-        style.zIndex = zIndex
+        attr.setStyle("zIndex", zIndex)
     }
     if (cursor) {
-        style.cursor = cursor
+        attr.setStyle("cursor", cursor)
     }
     if (props.onDragStart) {
-        attr.draggable = true
+        attr.add("draggable", true)
     }
+
     return {
         attr,
-        style,
-        remProps: props
+        remProps
     }
 }
 
 const Div = React.forwardRef(({ className, children, ...props }, ref) => {
     const cls = new ClassNames("", className)
-    const { attr, style, remProps } = getLayoutProps(props)
+    const { attr, remProps } = getLayoutProps(props)
+
     const divRef = useRef(null)
     if (ref) {
-        attr["ref"] = ref
+        attr.add("ref", ref)
     } else {
-        attr["ref"] = divRef
+        attr.add("ref", divRef)
         ref = divRef
     }
-    attr.tabIndex = useGetTabIndex(props, cls)
+    attr.add("tabIndex", useGetTabIndex(props, cls))
+    const { tab, ...divProps } = remProps
     return (
-        <div className={cls.value} {...attr} style={style} {...remProps}>
+        <div className={cls.value} {...attr.props} {...divProps}>
             {children}
         </div>
     )
@@ -139,7 +150,7 @@ function Tabs({
         },
         ready
     }
-    const cls = new ClassNames("stack-v gap-2 full", className)
+    const cls = new ClassNames("stack-v full", className)
     const tabElems = []
 
     const currIndex = items.current.indexOf(active)

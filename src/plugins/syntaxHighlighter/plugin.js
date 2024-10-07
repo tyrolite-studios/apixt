@@ -26,7 +26,10 @@ class Plugin extends AbstractPlugin {
             exec: (input, ctx) => {
                 try {
                     const parsed = JSON.parse(input)
-                    return getStringifiedJSON(parsed, ctx.settings.tabSpaces)
+                    return getStringifiedJSON(
+                        parsed,
+                        ctx.globalSettings.tabWidth
+                    )
                 } catch (e) {
                     return "Error parsing JSON: " + e.message
                 }

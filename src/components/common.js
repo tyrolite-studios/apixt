@@ -750,9 +750,9 @@ function ColorBox({ color, width, height, className }) {
 function EntityList({
     className,
     itemClassName,
-    options = [],
-    renderer = (item) => (isString(item) ? item : item.name),
+    render = (item) => item.value,
     pick = () => {},
+    entityIndex,
     full,
     selected,
     setSelected,
@@ -771,11 +771,12 @@ function EntityList({
             ? null
             : props.active
     )
-    // const entities = entityIndex.getEntityObjects()
+    const entities = entityIndex.getEntityObjects()
     if (props.setActive !== undefined) {
         setActive = props.setActive
         active = props.active
     }
+    const update = useUpdateOnEntityIndexChanges(entityIndex)
 
     const cls = new ClassNames("stack-v overflow-y-auto", className)
     cls.addIf(styled && colored, "bg-input-bg text-input-text")
@@ -793,10 +794,11 @@ function EntityList({
             }
             setActive(index)
         },
+        update,
         active,
         deselect: true,
         divRef: stackRef,
-        count: options.length,
+        count: entityIndex.length,
         handleSpace: true
     })
     const divAttr = useGetAttrWithDimProps(props)
@@ -807,7 +809,7 @@ function EntityList({
     const elems = []
     let i = 0
 
-    for (const option of options) {
+    for (const option of entities) {
         const isFocused = hasFocus && i === tabIndex
 
         const itemCls = new ClassNames(
@@ -833,7 +835,7 @@ function EntityList({
         }
         elems.push(
             <Div key={i} className={itemCls.value} {...itemAttr}>
-                {renderer(option)}
+                {render(option)}
             </Div>
         )
         i++
@@ -851,17 +853,56 @@ function EntityList({
     )
 }
 
+function useUpdateOnEntityIndexChanges(entityIndex, callback) {
+    const update = useComponentUpdate()
+
+    useEffect(() => {
+        const callbackAndUpdate = !callback
+            ? () => {
+                  update()
+              }
+            : (values) => {
+                  callback(values)
+                  update()
+              }
+        entityIndex.addListener(callbackAndUpdate)
+        return () => {
+            entityIndex.removeListener(callbackAndUpdate)
+        }
+    }, [entityIndex])
+    return update
+}
+
+const action2name = {
+    add: "New"
+}
+const action2icon = {
+    add: "add"
+}
+
 function EntityStack({
+    entityIndex,
     items,
     newItem,
     editItem,
     deleteItems,
     emptyMsg,
+    actions = {},
     render = (item) => item.name
 }) {
     const [selected, setSelected] = useState([])
 
+    const update = useUpdateOnEntityIndexChanges(entityIndex)
+
     const actionBtns = []
+    for (const [name, op] of Object.entries(actions)) {
+        actionBtns.push({
+            name: action2name[name] ?? name,
+            icon: action2icon[name],
+            onPressed: () => op(selected)
+        })
+    }
+
     if (newItem) {
         actionBtns.push({
             name: "New",
@@ -901,17 +942,18 @@ function EntityStack({
             <Stack vertical className="text-app-text overflow-auto max-h-max">
                 <EntityList
                     full
+                    entityIndex={entityIndex}
                     selected={selected}
                     setSelected={setSelected}
                     emptyMsg={emptyMsg}
                     options={items}
-                    renderer={render}
+                    render={render}
                 />
             </Stack>
 
             <div className="bg-header-bg/25 p-1 text-app-text/75 text-xs">
                 <span className="text-app-text/50">Items:</span>{" "}
-                <span>{items.length}</span>
+                <span>{entityIndex.length}</span>
                 {selected.length > 0 && (
                     <>
                         {" "}
@@ -938,6 +980,7 @@ export {
     useFocusManager,
     useExtractDimProps,
     useConfirmation,
+    useUpdateOnEntityIndexChanges,
     HighlightMatches,
     splitByMatch,
     useLoadingSpinner,

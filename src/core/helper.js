@@ -288,6 +288,12 @@ function cloneDeep(value) {
     return value
 }
 
+function apply(source, target) {
+    for (const [key, value] of Object.entries(source)) {
+        target[key] = value
+    }
+}
+
 function rgb2hex(rgb) {
     const [r, g, b, a] = rgb.split(" ")
     return (
@@ -307,6 +313,7 @@ export {
     isNumber,
     isArray,
     isObject,
+    isFunction,
     isInt,
     isInRange,
     isValidJson,
@@ -317,5 +324,6 @@ export {
     ClassNames,
     Attributes,
     cloneDeep,
+    apply,
     rgb2hex
 }

@@ -1,7 +1,9 @@
+import { d, isFunction, cloneDeep } from "./helper"
+
 class EntityIndex {
     constructor() {
         this.updates = []
-        this.allIndices = null
+        this._allIndices = null
         this.suspendNotifications = false
         this.valueIndexing = false
         this.valueTemplate = ""
@@ -27,7 +29,7 @@ class EntityIndex {
         if (this.suspendNotifications) {
             return
         }
-        this.allIndices = null
+        this._allIndices = null
         if (!this.listeners) {
             return
         }
@@ -50,7 +52,7 @@ class EntityIndex {
     }
 
     hasIndex(index) {
-        return index >= 0 && index < this.getLength()
+        return index >= 0 && index < this.length
     }
 
     hasUniqueValues() {
@@ -58,7 +60,7 @@ class EntityIndex {
     }
 
     hasPropValueMatch(prop, matchFunction) {
-        const indices = this.getAllIndices()
+        const indices = this.allIndices
         for (let index of indices) {
             const value = this.getEntityPropValue(index, prop)
             if (value !== undefined && matchFunction(value)) {
@@ -96,21 +98,21 @@ class EntityIndex {
         return { x: this.getSizeX(), y: this.getSizeY() }
     }
 
-    getLength() {
+    get length() {
         return this.items.length
     }
 
-    getAllIndices() {
-        if (this.allIndices === null) {
+    get allIndices() {
+        if (this._allIndices === null) {
             const indices = []
             let i = 0
-            let iMax = this.getLength()
+            let iMax = this.length
             while (i < iMax) {
                 indices.push(i++)
             }
-            this.allIndices = indices
+            this._allIndices = indices
         }
-        return this.allIndices
+        return this._allIndices
     }
 
     getAutoProps() {
@@ -144,7 +146,7 @@ class EntityIndex {
 
     getEntityByPropValue(prop, value) {
         let i = 0
-        const iMax = this.getLength()
+        const iMax = this.length
         while (i < iMax) {
             if (this.getEntityPropValue(i, prop) === value) {
                 return i
@@ -164,7 +166,7 @@ class EntityIndex {
 
     getPropValues(prop) {
         const values = []
-        const indices = this.getAllIndices()
+        const indices = this.allIndices
         for (let index of indices) {
             values.push(this.getEntityPropValue(index, prop))
         }
@@ -174,7 +176,7 @@ class EntityIndex {
     getEntityObjects(indices = null) {
         const result = []
         if (indices === null) {
-            indices = this.getAllIndices()
+            indices = this.allIndices
         }
         for (let index of indices) {
             result.push(this.getEntityObject(index))
@@ -182,26 +184,22 @@ class EntityIndex {
         return result
     }
 
-    getMatchingEntities(indices, match) {
-        return indices
+    getMatchingEntities(match, indices = this.allIndices) {
+        if (!match || !isFunction(match)) return indices
+
+        return indices.filter(match)
     }
 
-    getView(start, length = null, match = null, sort = null) {
-        let indices = this.getAllIndices()
-        if (Array.isArray(match)) {
-            if (match.length == 2 && typeof match[1] === "function") {
-                indices = indices.filter(match[1])
-            }
-            match = match.length ? match[0] : null
-        }
-        const items = this.getMatchingEntities(indices, match)
-
-        // TODO sorting here
+    getView({ start = 0, length, page, match, sort } = {}) {
+        const items = this.getMatchingEntities(match)
+        if (sort) items.sort(sort)
 
         const matches = []
         const count = items.length
-        if (length === null) {
+        if (length === undefined) {
             length = count
+        } else if (page !== undefined) {
+            start = length * (page - 1)
         }
         const max = Math.min(count, start + length)
         let i = start
@@ -211,7 +209,11 @@ class EntityIndex {
         }
         return {
             matches,
-            count
+            count,
+            pages:
+                length !== undefined && count > 0
+                    ? Math.max(1, Math.ceil(count / length))
+                    : 1
         }
     }
 
@@ -249,7 +251,7 @@ class EntityIndex {
         const result = []
         let changeIndex = []
         let i = 0
-        const iMax = this.getLength()
+        const iMax = this.length
         while (i < iMax) {
             changeIndex.push({
                 newValue: this.getEntityValue(i),
@@ -358,7 +360,7 @@ class EntityIndex {
     deleteEntities(indices) {
         this.suspendNotifications = true
         const newItems = []
-        const length = this.getLength()
+        const length = this.length
         let i = 0
         while (i < length) {
             if (!indices.includes(i)) {
@@ -428,13 +430,95 @@ class EntityIndex {
     }
 }
 
-class SimpleIndex extends EntityIndex {
-    constructor(model, key = "items") {
+class MappingIndex extends EntityIndex {
+    constructor(model, props = []) {
         super()
+        this.props = props
+        this.setModel(cloneDeep(model), false)
+    }
+
+    setModel(model, notify = true) {
         this.model = model
-        this.key = key
-        this.items = model[this.key]
+        this.items = [...Object.keys(model)]
+        if (notify) this.notify()
+    }
+
+    getEntityProps() {
+        return [...super.getEntityProps(), ...this.props]
+    }
+
+    getModelValue(index, prop) {
+        return this.model[this.getEntityValue(index)][prop]
+    }
+
+    getEntityPropValue(index, prop) {
+        if (this.props.includes(prop)) {
+            return this.getModelValue(index, prop)
+        }
+        return super.getEntityPropValue(index, prop)
+    }
+
+    setEntityPropValue(index, prop, value) {
+        if (this.props.includes(prop)) {
+            this.setModelValue(index, prop, value)
+            this.notify()
+            return
+        }
+        return super.setEntityPropValue(index, prop, value)
+    }
+
+    setModelValue(index, prop, value) {
+        this.model[this.getEntityValue(index)][prop] = value
+    }
+
+    getNewModelValue() {
+        return {}
+    }
+
+    setEntityValue(index, value) {
+        const oldValue = this.getEntityValue(index)
+        if (this.model[oldValue] === undefined) {
+            this.model[oldValue] = this.getNewModelValue()
+        }
+        if (oldValue !== value) {
+            this.handleEntityValueReplace(oldValue, value)
+        }
+        this.items[index] = value
+        this.notify()
+    }
+
+    deleteEntities(indices) {
+        for (const index of indices) {
+            delete this.model[this.getEntityValue(index)]
+        }
+        super.deleteEntities(indices)
+    }
+
+    handleEntityValueReplace(oldValue, newValue) {
+        this.model[newValue] = this.model[oldValue]
+        delete this.model[oldValue]
     }
 }
 
-export { EntityIndex, SimpleIndex }
+class SimpleMappingIndex extends MappingIndex {
+    constructor(model, keyValueProp = "keyval") {
+        super(model, [keyValueProp])
+        this.keyValueProp = keyValueProp
+    }
+
+    getModelValue(index, prop) {
+        return this.model[this.getEntityValue(index)]
+    }
+
+    setModelValue(index, prop, value) {
+        d("ST", index, prop, value)
+        this.model[this.getEntityValue(index)] = value
+        this.notify()
+    }
+
+    getNewModelValue() {
+        return undefined
+    }
+}
+
+export { EntityIndex, MappingIndex, SimpleMappingIndex }

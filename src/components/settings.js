@@ -22,41 +22,96 @@ import { Div, Tabs, Tab, Stack, OkCancelLayout, Centered } from "./layout"
 import { d, isString, cloneDeep } from "core/helper"
 import { useModalWindow } from "./modal"
 import themeManager from "core/theme"
+import { MappingIndex, SimpleMappingIndex } from "../core/entity"
 
-function PluginsOverview({ plugins, setPlugins }) {
-    const getPluginSetter = (prop) => {
-        return (value) => {
-            setPlugins({ ...plugins, [prop]: value })
-        }
+const root = document.documentElement
+
+const defaultGlobalSettings = {
+    autoScroll: true,
+    animations: true,
+    tabWidth: 4,
+    history: 100,
+    trapFocus: true
+}
+
+const defaultKeyBindings = {
+    undo: "m z",
+    redo: "m y",
+    save: "m s",
+    export: "m x",
+    new: "c n",
+    select: "",
+    delete: "c d",
+    toggle: "c t",
+    quit: "c q",
+    edit: "m e",
+    all: "c a",
+    pick: "c p",
+    play: "m p",
+    submit: "Enter",
+    close: "Escape"
+}
+
+const defaultApiSettings = {
+    apiEnvs: {}
+}
+
+class PluginIndex extends SimpleMappingIndex {
+    constructor(model) {
+        super(model, "active")
     }
-    const allPlugins = PluginRegistry.getAll()
 
+    getEntityProps() {
+        return [...super.getEntityProps(), "name", "description"]
+    }
+
+    getEntityPropValue(index, prop) {
+        if (["name", "description"].includes(prop)) {
+            const id = this.getEntityValue(index)
+            return PluginRegistry.getPlugin(id)[prop]
+        }
+        return super.getEntityPropValue(index, prop)
+    }
+}
+
+function PluginStack({ pluginIndex }) {
     return (
-        <div className="stack-v divide-y divide-app-text/20 w-full px-4 py-2">
-            <div className="pb-1 text-sm">Plugins:</div>
-            <div className="grid gap-1 py-1 px-2 grid-cols-[min-content_auto]">
-                {allPlugins.map((plugin, i) => {
-                    return (
-                        <Fragment key={i}>
-                            <div className="px-2 text-sm">
-                                <Checkbox
-                                    value={plugins[plugin.id]}
-                                    set={getPluginSetter(plugin.id)}
-                                />
-                            </div>
-                            <div className="stack-v">
-                                <div className="text-sm">{plugin.name}</div>
-                                {plugin.description && (
-                                    <div className="text-app-text/50 text-xs">
-                                        {plugin.description}
-                                    </div>
-                                )}
-                            </div>
-                        </Fragment>
-                    )
-                })}
-            </div>
-        </div>
+        <EntityStack
+            emptyMsg={"No plugins available"}
+            entityIndex={pluginIndex}
+            render={({ index, name, value, description, active }) => (
+                <Stack key={value} gapped className="">
+                    <div className="text-sm">
+                        <Checkbox
+                            tab={false}
+                            value={active}
+                            set={(value) => {
+                                pluginIndex.setEntityPropValue(
+                                    index,
+                                    "active",
+                                    value
+                                )
+                            }}
+                        />
+                    </div>
+                    <div className="stack-v">
+                        <div className="text-sm">{name}</div>
+                        <div className="opacity-50 text-xs">{description}</div>
+                    </div>
+                </Stack>
+            )}
+        />
+    )
+}
+
+function PluginsOverview({ pluginIndex }) {
+    return (
+        <FormGrid>
+            <SectionCells name="Available Plugins" />
+            <FullCell>
+                <PluginStack pluginIndex={pluginIndex} />
+            </FullCell>
+        </FormGrid>
     )
 }
 
@@ -98,7 +153,7 @@ function About() {
 }
 
 function NewApiEnv({ close, model, save }) {
-    const [name, setName] = useState(model?.name || "")
+    const [value, setValue] = useState(model?.value || "")
     const [url, setUrl] = useState(model?.url || "")
     const [cors, setCors] = useState(
         model?.cors === undefined ? false : model.cors
@@ -106,14 +161,14 @@ function NewApiEnv({ close, model, save }) {
     return (
         <OkCancelLayout
             cancel={close}
-            ok={() => save({ name, url, cors })}
+            ok={() => save({ value, url, cors })}
             submit
         >
             <FormGrid className="p-4">
                 <InputCells
                     name="Name:"
-                    value={name}
-                    set={setName}
+                    value={value}
+                    set={setValue}
                     autoFocus
                     required
                 />
@@ -124,7 +179,7 @@ function NewApiEnv({ close, model, save }) {
     )
 }
 
-function ApiEnvStack({ apiEnvs, setApiEnvs }) {
+function ApiEnvStack({ entityIndex }) {
     const NewEnvModal = useModalWindow()
 
     return (
@@ -133,42 +188,40 @@ function ApiEnvStack({ apiEnvs, setApiEnvs }) {
                 emptyMsg={
                     "No API environments available. Add one by clicking on the new button above"
                 }
-                render={({ id, name, url }) => (
-                    <Stack vertical key={name} className="">
-                        <div className="text-sm">{name}</div>
+                entityIndex={entityIndex}
+                render={({ value, url }) => (
+                    <Stack vertical key={value} className="">
+                        <div className="text-sm">{value}</div>
                         <div className="text-app-text text-xs">
                             URL: <span className="text-app-text/50">{url}</span>
                         </div>
                     </Stack>
                 )}
-                set={setApiEnvs}
                 newItem={() =>
                     NewEnvModal.open({
                         save: (model) => {
-                            setApiEnvs([...apiEnvs, model])
+                            entityIndex.setEntityObject(model)
                             NewEnvModal.close()
                         }
                     })
                 }
-                editItem={(i) =>
+                editItem={(i) => {
+                    const model = entityIndex.getEntityObject(i)
                     NewEnvModal.open({
-                        model: apiEnvs[i],
-                        save: (model) => {
-                            const newApiEnvs = [...apiEnvs]
-                            newApiEnvs[i] = model
-                            setApiEnvs(newApiEnvs)
+                        model,
+                        save: (newModel) => {
+                            entityIndex.setEntityObject(
+                                {
+                                    ...model,
+                                    ...newModel
+                                },
+                                true
+                            )
                             NewEnvModal.close()
                         }
                     })
-                }
-                deleteItems={(selected) =>
-                    setApiEnvs(
-                        apiEnvs.filter(
-                            (item, index) => !selected.includes(index)
-                        )
-                    )
-                }
-                items={apiEnvs}
+                }}
+                deleteItems={(selected) => entityIndex.deleteEntities(selected)}
             />
 
             <NewEnvModal.content name="New API environment">
@@ -178,7 +231,7 @@ function ApiEnvStack({ apiEnvs, setApiEnvs }) {
     )
 }
 
-function General({ general, setGeneral }) {
+function General({ general, setGeneral, apiEnvIndex }) {
     const getGeneralSetter = (prop) => {
         return (value) => {
             const newGeneral = { ...general }
@@ -190,9 +243,9 @@ function General({ general, setGeneral }) {
         <FormGrid className="px-4">
             <SectionCells name="Behaviour" />
             <NumberCells
-                name="Code Indentation:"
-                value={general.indentation}
-                set={getGeneralSetter("indentation")}
+                name="Tab width:"
+                value={general.tabWidth}
+                set={getGeneralSetter("tabWidth")}
                 min={0}
                 max={9}
             />
@@ -220,10 +273,7 @@ function General({ general, setGeneral }) {
             />
             <SectionCells name="API environments" />
             <FullCell className="px-2">
-                <ApiEnvStack
-                    apiEnvs={general.apiEnvs}
-                    setApiEnvs={getGeneralSetter("apiEnvs")}
-                />
+                <ApiEnvStack entityIndex={apiEnvIndex} />
             </FullCell>
         </FormGrid>
     )
@@ -320,8 +370,6 @@ function DimInputsCells({
     )
 }
 
-const root = document.documentElement
-
 function Layout({ layout, setLayout }) {
     const getLayoutSetter = (prop) => {
         return (value) => {
@@ -364,26 +412,18 @@ function Layout({ layout, setLayout }) {
     )
 }
 
-function KeyBindings({}) {
+function KeyBindings({ keyBindingsIndex }) {
     const aContext = useContext(AppContext)
-    const [bindings, setBindings] = useState(() => {
-        const result = []
-        for (const [action, key] of Object.entries(
-            aContext.hotKeyActions.action2hotKey
-        )) {
-            result.push({ id: action, action, key })
-        }
-        return result
-    })
-
     return (
         <FormGrid>
             <SectionCells name="Key Bindings" />
             <FullCell>
-                <Picker
-                    full
-                    options={bindings}
-                    renderer={({ action, key }) => {
+                <EntityStack
+                    entityIndex={keyBindingsIndex}
+                    editItem={(item) => {
+                        d("TODO", item)
+                    }}
+                    render={({ value, key }) => {
                         const rawKeys = isString(key) ? key.split(" ") : []
                         const keys = []
                         if (rawKeys.length) {
@@ -403,31 +443,32 @@ function KeyBindings({}) {
                             if (rawKeys.length > 0) keys.push(...rawKeys)
                         }
                         return (
-                            <Stack key={action} className="gap-4">
+                            <Stack key={value} className="gap-4">
                                 <div className="stack-h text-app-text text-xs gap-2">
                                     <Div
                                         className="text-sm px-2"
                                         minWidth="68px"
                                     >
-                                        {action}
+                                        {value}
                                     </Div>
-                                    {keys.map((item, i) => (
-                                        <>
-                                            {i > 0 && (
-                                                <div className="py-1 border-1 border-transparent">
-                                                    +
+
+                                    {key &&
+                                        keys.map((item, i) => (
+                                            <Fragment key={i}>
+                                                {i > 0 && (
+                                                    <div className="py-1 border-1 border-transparent">
+                                                        +
+                                                    </div>
+                                                )}
+                                                <div className="bg-input-text/80 px-2 py-1 border border-1 border-app-text/50 rounded-lg">
+                                                    {item}
                                                 </div>
-                                            )}
-                                            <div className="bg-input-text/80 px-2 py-1 border border-1 border-app-text/50 rounded-lg">
-                                                {item}
-                                            </div>
-                                        </>
-                                    ))}
+                                            </Fragment>
+                                        ))}
                                 </div>
                             </Stack>
                         )
                     }}
-                    pick={(i) => d("CHANGE", i)}
                 />
             </FullCell>
         </FormGrid>
@@ -435,27 +476,6 @@ function KeyBindings({}) {
 }
 
 const defaultSettings = {
-    general: {
-        autoScroll: true,
-        animations: true,
-        indentation: 4,
-        history: 100,
-        trapFocus: true,
-        apiEnvs: [
-            {
-                id: 0,
-                name: "Staging",
-                url: "https://staging.myapi.com/",
-                cors: true
-            },
-            {
-                id: 0,
-                name: "Production",
-                url: "https://api.myapi.com/",
-                cors: true
-            }
-        ]
-    },
     layout: {
         width: 800,
         height: 800,
@@ -492,25 +512,21 @@ function Settings({ close }) {
         setThemeRaw(newTheme)
     }
     const [general, setGeneral] = useState(() => {
-        return cloneDeep(defaultSettings.general)
+        const { apiEnvs, ...other } = aContext.globalSettings
+        return cloneDeep(other)
     })
-    const [plugins, setPluginsRaw] = useState(() => {
-        return PluginRegistry.getStates()
-    })
-    const applyPlugins = (newPlugins) => {
-        // PluginRegistry.setStates(newPlugins)
-        /*
-        aContext.setSettings({
-            ...aContext.settings,
-            plugins: newPlugins
-        })
-        */
-    }
-    const setPlugins = (newPlugins) => {
-        const value = { ...newPlugins }
-        applyPlugins(value)
-        setPluginsRaw(value)
-    }
+    const pluginIndex = useMemo(
+        () => new PluginIndex(aContext.plugins),
+        [aContext.plugins]
+    )
+    const apiEnvIndex = useMemo(
+        () => new MappingIndex(aContext.apiSettings.apiEnvs, ["url", "cors"]),
+        [aContext.apiSettings.apiEnvs]
+    )
+    const keyBindingsIndex = useMemo(
+        () => new SimpleMappingIndex(aContext.keyBindings, "key"),
+        [aContext.keyBindings]
+    )
 
     const backedUpSettings = useRef(null)
     const confirm = useConfirmation()
@@ -518,10 +534,12 @@ function Settings({ close }) {
         confirm.open({
             msg: "Do you really want to reset all settings to the default values?",
             confirmed: () => {
-                setGeneral(defaultSettings.general)
+                setGeneral(defaultGlobalSettings)
                 setLayout(defaultSettings.layout)
                 setTheme(themeManager.defaultTheme)
-                setPlugins(PluginRegistry.getDefaultStates())
+                apiEnvIndex.setModel(defaultApiSettings.apiEnvs)
+                pluginIndex.setModel(PluginRegistry.getDefaultStates())
+                keyBindingsIndex.setModel(defaultKeyBindings)
             }
         })
     }
@@ -530,19 +548,26 @@ function Settings({ close }) {
         return {
             layout: { ...layout },
             general: cloneDeep(general),
-            plugins: { ...plugins },
+            apiEnvs: cloneDeep(apiEnvIndex.model),
+            plugins: cloneDeep(pluginIndex.model),
+            keyBindings: cloneDeep(keyBindingsIndex.model),
             theme: { ...theme }
         }
     }
 
     const beforeSettings = useMemo(() => getSnapshot(), [])
 
-    const applySettings = ({ layout, theme, plugins }) => {
+    const applySettings = ({ layout, theme }) => {
         applyLayout(layout)
-        applyPlugins(plugins)
         applyTheme(theme)
     }
-
+    const store = (storage, key, settings, defaultSettings) => {
+        if (JSON.stringify(settings) === JSON.stringify(defaultSettings)) {
+            storage.deleteJson(key)
+        } else {
+            storage.setJson(key, settings)
+        }
+    }
     return (
         <>
             <OkCancelLayout
@@ -554,7 +579,27 @@ function Settings({ close }) {
                 }}
                 ok={() => {
                     themeManager.store()
+                    store(
+                        aContext.globalStorage,
+                        "settings",
+                        general,
+                        defaultGlobalSettings
+                    )
+                    store(
+                        aContext.apiStorage,
+                        "settings",
+                        {
+                            apiEnvs: apiEnvIndex.model
+                        },
+                        defaultApiSettings
+                    )
+                    aContext.apiStorage.setJson("plugins", pluginIndex.model)
+                    aContext.apiStorage.setJson(
+                        "keyBindings",
+                        keyBindingsIndex.model
+                    )
                     close()
+                    aContext.rebuildSettings(true)
                 }}
                 buttons={[
                     {
@@ -565,13 +610,25 @@ function Settings({ close }) {
                             setGeneral(beforeSettings.general)
                             setLayout(beforeSettings.layout)
                             setTheme(beforeSettings.theme)
-                            setPlugins(beforeSettings.plugins)
+                            apiEnvIndex.setModel(beforeSettings.apiEnvs)
+                            pluginIndex.setModel(beforeSettings.plugins)
+                            keyBindingsIndex.setModel(
+                                beforeSettings.keyBindings
+                            )
                         },
                         onPressedEnd: () => {
                             setGeneral(backedUpSettings.current.general)
                             setLayout(backedUpSettings.current.layout)
                             setTheme(backedUpSettings.current.theme)
-                            setPlugins(backedUpSettings.current.plugins)
+                            apiEnvIndex.setModel(
+                                backedUpSettings.current.apiEnvs
+                            )
+                            pluginIndex.setModel(
+                                backedUpSettings.current.plugins
+                            )
+                            keyBindingsIndex.setModel(
+                                backedUpSettings.current.keyBindings
+                            )
                         }
                     }
                 ]}
@@ -581,14 +638,15 @@ function Settings({ close }) {
             >
                 <Tabs persistId="settings" autoFocus>
                     <Tab name="General" active>
-                        <General general={general} setGeneral={setGeneral} />
+                        <General
+                            general={general}
+                            setGeneral={setGeneral}
+                            apiEnvIndex={apiEnvIndex}
+                        />
                     </Tab>
 
                     <Tab name="Plugins">
-                        <PluginsOverview
-                            plugins={plugins}
-                            setPlugins={setPlugins}
-                        />
+                        <PluginsOverview pluginIndex={pluginIndex} />
                     </Tab>
 
                     <Tab name="Layout">
@@ -600,7 +658,7 @@ function Settings({ close }) {
                     </Tab>
 
                     <Tab name="Key bindings">
-                        <KeyBindings />
+                        <KeyBindings keyBindingsIndex={keyBindingsIndex} />
                     </Tab>
 
                     <Tab name="About">
@@ -613,4 +671,9 @@ function Settings({ close }) {
     )
 }
 
-export { Settings }
+export {
+    Settings,
+    defaultApiSettings,
+    defaultGlobalSettings,
+    defaultKeyBindings
+}

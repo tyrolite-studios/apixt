@@ -145,12 +145,12 @@ const tokenTypeToCls = {
  * Returns the stringified JSON with syntax highlighting
  *
  * @param {mixed} input The Object to stringify
- * @param {number} indentation The number of spaces for indentation
+ * @param {number} tabWidth The number of spaces for tabWidth
  *
  * @returns {string} The stringified JSON of the input
  */
-const getStringifiedJSON = (input, indentation) => {
-    const jsonStr = JSON.stringify(input, null, indentation)
+const getStringifiedJSON = (input, tabWidth) => {
+    const jsonStr = JSON.stringify(input, null, tabWidth)
     if (!jsonStr) return undefined
 
     const tokens = TokenizeJsonString(jsonStr)

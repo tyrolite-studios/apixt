@@ -33,6 +33,9 @@ const closeModal = () => {
 }
 
 function LoginApp(config) {
+    if (!config.apiId)
+        throw Error(`Missing required value for confgi  key "apiId"`)
+
     controller.apiId = config.apiId
     controller.permanent = config.permanent
     controller.storePrefix = config.storePrefix

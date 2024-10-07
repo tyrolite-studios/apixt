@@ -4,6 +4,12 @@ import { getHttpStreamPromise } from "core/http"
 import { useComponentUpdate, useLoadingSpinner } from "./common"
 import { d } from "core/helper"
 import { HOOKS, PluginRegistry } from "../core/plugin"
+import {
+    defaultApiSettings,
+    defaultGlobalSettings,
+    defaultKeyBindings
+} from "./settings"
+import { apply } from "../core/helper"
 
 const controller = window.controller
 const AppContext = createContext(null)
@@ -42,27 +48,9 @@ function SpinnerDiv() {
     return <>{LoadingSpinner.Modal}</>
 }
 
-const defaultSettings = {
-    tabSpaces: 4,
-    mapping: {
-        undo: "m z",
-        redo: "m y",
-        save: "m s",
-        export: "m x",
-        new: "c n",
-        select: null,
-        delete: "c d",
-        toggle: "c t",
-        quit: "c q",
-        edit: "m e",
-        all: "c a",
-        pick: "c p",
-        play: "m p",
-        submit: "Enter",
-        close: "Escape"
-    }
-}
-
+/*
+ * The modal API allows to manage modals and windows
+ */
 function registerModalApi({ registry, register }) {
     register("buttonRefocus", null)
     register("focusStack", {
@@ -152,9 +140,11 @@ function registerModalApi({ registry, register }) {
     }
 }
 
+/*
+ * The hotkey API manages action triggered by key bindings
+ */
 function registerHotkeyApi({ registry, register }) {
-    const action2hotKey = defaultSettings.mapping
-
+    const action2hotKey = defaultKeyBindings
     const hotKey2action = {}
     for (let [action, key] of Object.entries(action2hotKey)) {
         if (key !== null) {
@@ -307,29 +297,70 @@ function registerHotkeyApi({ registry, register }) {
     }
 }
 
-function registerSettingsApi({ registry, register }, settings, setSettings) {
-    register("settings", settings)
+/*
+ *
+ */
+function registerSettingsApi({ registry, register, apiRef }) {
     register("globalStorage", controller.globalStorage)
     register("apiStorage", controller.apiStorage)
     register("tempStorage", controller.tempStorage)
+    register("apiSettings", {})
+    register("globalSettings", {})
+    register("plugins", {})
+    register("keyBindings", {})
 
-    const clearSettings = () => {
-        const { globalStorage } = registry()
-        globalStorage.deleteJson("settings")
+    const rebuildSettings = (restart = true) => {
+        const {
+            apiStorage,
+            globalStorage,
+            apiSettings,
+            globalSettings,
+            keyBindings,
+            plugins
+        } = registry()
+        const apiStored = apiStorage.getJson("settings", {})
+        const newApiSettings = { ...defaultApiSettings, ...apiStored }
+        apply(newApiSettings, apiSettings)
+
+        const globalStored = globalStorage.getJson("settings", {})
+        const newGlobalSettings = { ...defaultGlobalSettings, ...globalStored }
+        apply(newGlobalSettings, globalSettings)
+
+        const pluginsStored = apiStorage.getJson("plugins", {})
+        const newPlugins = {
+            ...PluginRegistry.getDefaultStates(),
+            ...pluginsStored
+        }
+        apply(newPlugins, plugins)
+        PluginRegistry.setStates(newPlugins)
+
+        const keyBindingsStored = apiStorage.getJson("keyBindings", {})
+        const newKeyBindings = {
+            ...defaultKeyBindings,
+            ...keyBindingsStored
+        }
+        apply(newKeyBindings, keyBindings)
+        if (!restart) return
+
+        apiRef.current.update()
     }
 
+    rebuildSettings(false)
+
     return {
+        apiSettings: registry("apiSettings"),
+        globalSettings: registry("globalSettings"),
+        plugins: registry("plugins"),
+        keyBindings: registry("keyBindings"),
+        rebuildSettings,
         globalStorage: registry("globalStorage"),
         apiStorage: registry("apiStorage"),
-        tempStorage: registry("tempStorage"),
-        settings: registry("settings"),
-        setSettings,
-        clearSettings
+        tempStorage: registry("tempStorage")
     }
 }
 
-/**
- *
+/*
+ * The content API controlls the content area of the API extender where the content from the API is loaded
  */
 function registerContentApi({ registry, register }) {
     register("treeBuilder", treeBuilder)
@@ -385,8 +416,9 @@ function registerContentApi({ registry, register }) {
     }
 }
 
-/**
- *
+/*
+ * The event API allows to register global listeners and also manages an exclusive mode which makes sure that
+ * there are no side-effects while the mode is active
  */
 function registerEventManagementApi({ registry, register }) {
     register("listeners", [])
@@ -489,29 +521,6 @@ function AppCtx({ config, children }) {
     const registry = (key = null) =>
         key ? registryRef.current[key] : registryRef.current
 
-    const [settings, setSettingsRaw] = useState(() => {
-        const globalStorage = controller.globalStorage
-        if (!globalStorage) return
-
-        return globalStorage.getJson("settings", {
-            ...defaultSettings,
-            plugins: PluginRegistry.getDefaultStates()
-        })
-    })
-    const setSettings = (settings) => {
-        const { globalStorage } = registry()
-        globalStorage.setJson("settings", settings)
-        setSettingsRaw(settings)
-    }
-
-    useEffect(() => {
-        const { globalStorage } = registry()
-        if (!globalStorage) return
-
-        PluginRegistry.setStates(settings.plugins)
-        requestAnimationFrame(() => PluginRegistry.updateApp())
-    }, [])
-
     const update = useComponentUpdate()
 
     if (!registry()) {
@@ -530,10 +539,10 @@ function AppCtx({ config, children }) {
             spinner: null
         }
 
-        const registration = { register, registry }
+        const registration = { register, registry, apiRef }
 
         apiRef.current = {
-            ...registerSettingsApi(registration, settings, setSettings),
+            ...registerSettingsApi(registration),
             ...registerEventManagementApi(registration),
             ...registerContentApi(registration),
             ...registerModalApi(registration),
