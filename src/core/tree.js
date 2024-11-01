@@ -72,7 +72,7 @@ class TreeBuilder {
         this.updateRenderer()
     }
 
-    processStream({ getReaderPromise, isAborted, abort }) {
+    processStream({ fetchPromise, isAborted, abort }) {
         const promise = new Promise(async (resolve, reject) => {
             this.setState(STATE.STREAMING)
 
@@ -85,7 +85,7 @@ class TreeBuilder {
             }
 
             try {
-                const reader = await getReaderPromise
+                const reader = await fetchPromise.then((response) => response)
 
                 const decoder = new TextDecoder()
                 let buffer = ""

@@ -1,8 +1,11 @@
 import { createContext, useState, useRef, useContext, useEffect } from "react"
 import { treeBuilder } from "core/tree"
-import { getHttpStreamPromise } from "core/http"
+import {
+    startAbortableApiRequestStream,
+    startAbortableApiBodyRequest
+} from "core/http"
 import { useComponentUpdate, useLoadingSpinner } from "./common"
-import { d } from "core/helper"
+import { d, getPathInfo, md5 } from "core/helper"
 import { HOOKS, PluginRegistry } from "../core/plugin"
 import {
     defaultApiSettings,
@@ -10,6 +13,7 @@ import {
     defaultKeyBindings
 } from "./settings"
 import { apply } from "../core/helper"
+import { MappingIndex } from "../core/entity"
 
 const controller = window.controller
 const AppContext = createContext(null)
@@ -359,24 +363,58 @@ function registerSettingsApi({ registry, register, apiRef }) {
     }
 }
 
+class HeadersIndex extends MappingIndex {
+    constructor(model) {
+        super(model, ["type", "headerValue"])
+    }
+}
+
 /*
  * The content API controlls the content area of the API extender where the content from the API is loaded
  */
 function registerContentApi({ registry, register }) {
     register("treeBuilder", treeBuilder)
+    register("lastStatus", null)
+    register("streamAbort", null)
 
+    const baseHeaderIndex = new HeadersIndex(
+        registry("apiStorage").getJson("baseHeaders", {})
+    )
+    register("baseHeaderIndex", baseHeaderIndex)
     const startContentStream = (request) => {
         PluginRegistry.applyHooks(HOOKS.FETCH_CONTENT, request)
 
-        const { treeBuilder, spinner, config } = registry()
+        const { treeBuilder, spinner, config, baseHeaderIndex, history } =
+            registry()
+
+        history.push2history(request)
+
         treeBuilder.reset()
 
         register("lastRequest", request)
-        const httpStream = getHttpStreamPromise(config, request)
+        const { headers = {}, ...options } = request
+        for (const {
+            value,
+            headerValue,
+            type
+        } of baseHeaderIndex.getEntityObjects()) {
+            if (value in headers) continue
+
+            if (type === "fix") {
+                headers[value] = headerValue
+            }
+        }
+        headers[config.dumpHeader] = "cmd"
+
+        const httpStream = startAbortableApiRequestStream(config.baseUrl, {
+            headers,
+            ...options
+        })
         register("streamAbort", httpStream.abort)
-        const promise = treeBuilder
-            .processStream(httpStream)
-            .finally(() => register("streamAbort", null))
+        const promise = treeBuilder.processStream(httpStream).finally(() => {
+            register("lastStatus", httpStream.status)
+            register("streamAbort", null)
+        })
 
         spinner.start(promise, () => {
             httpStream.abort()
@@ -409,10 +447,19 @@ function registerContentApi({ registry, register }) {
         haltContentStream: (hash) => {
             restartContentStream({ headers: { "Tls-Apixt-Halt": hash } })
         },
+        getRawContentPromise: (baseUrl) => {
+            const { lastRequest } = registry()
+            return startAbortableApiBodyRequest(baseUrl, {
+                ...lastRequest,
+                expect: () => true
+            })
+        },
         clearContent: () => {
             const { treeBuilder } = registry()
             treeBuilder.reset()
-        }
+        },
+        getLastStatus: () => registry("lastStatus"),
+        getBaseHeaderIndex: () => registry("baseHeaderIndex")
     }
 }
 
@@ -515,6 +562,65 @@ function registerEventManagementApi({ registry, register }) {
     }
 }
 
+function registerHistoryApi({ registry, register }) {
+    const { apiStorage } = registry()
+
+    const history = []
+    //apiStorage.getJson("requestHistory", [])
+
+    const restrictHistory = () => {
+        while (history.length > 10) {
+            history.pop()
+        }
+    }
+
+    const push2history = (request) => {
+        const hash = md5(request)
+        let i = 0
+        while (i < history.length && history[i].hash !== hash) i++
+
+        if (i < history.length) {
+            history.splice(i, 1)
+        }
+        history.unshift({
+            timestamp: Date.now(),
+            request,
+            hash
+        })
+        restrictHistory()
+        // apiStorage.setJson("requestHistory", history)
+    }
+
+    register("history", { push2history })
+
+    const getLastPathParams = (path) => {
+        const pathInfo = getPathInfo(path)
+        if (!pathInfo.varCount) return []
+
+        const matchExpr = new RegExp(pathInfo.regexp)
+
+        for (const { request } of history) {
+            const matches = matchExpr.exec(request.path)
+            if (matches === null) continue
+
+            const result = []
+            let i = 0
+            while (i < pathInfo.varCount) {
+                i++
+                result.push(matches[i])
+            }
+            return result
+        }
+        return []
+    }
+
+    return {
+        history,
+        push2history,
+        getLastPathParams
+    }
+}
+
 function AppCtx({ config, children }) {
     const registryRef = useRef()
     const apiRef = useRef()
@@ -545,6 +651,7 @@ function AppCtx({ config, children }) {
             ...registerSettingsApi(registration),
             ...registerEventManagementApi(registration),
             ...registerContentApi(registration),
+            ...registerHistoryApi(registration),
             ...registerModalApi(registration),
             ...registerHotkeyApi(registration),
 

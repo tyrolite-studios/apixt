@@ -1,10 +1,43 @@
-import { useEffect } from "react"
+import { useEffect, useContext } from "react"
 import { useModalWindow } from "components/modal"
 import { PluginRegistry } from "core/plugin"
 import { Button } from "components/form"
+import { FocusMatrix } from "components/common"
+import { AppContext } from "components/context"
+import { d } from "core/helper"
 
 function HistoryWidget({}) {
+    const aContext = useContext(AppContext)
     const routePlugin = PluginRegistry.getActivePlugin("routeSelector")
+
+    d(aContext.history)
+    const elems = []
+    for (const { request } of aContext.history) {
+        if (elems.length > 10) break
+
+        elems.push(
+            <div key={elems.length} className="py-1 stack-h gap-x-2 w-full">
+                <pre
+                    className="auto cursor-pointer"
+                    onClick={() => aContext.startContentStream(request)}
+                >
+                    {request.method} {request.path}
+                </pre>
+                {routePlugin && (
+                    <div>
+                        <Button
+                            icon="edit"
+                            onPressed={() =>
+                                routePlugin.openEditor({
+                                    route: request.path
+                                })
+                            }
+                        />
+                    </div>
+                )}
+            </div>
+        )
+    }
 
     return (
         <div className="stack-v gap-1 text-left">
@@ -12,36 +45,7 @@ function HistoryWidget({}) {
                 Your last requests:
             </div>
             <div className="divide-y divide-app-text/50 text-app-text/50 px-2">
-                <div className="py-1 stack-h gap-x-2 w-full">
-                    <pre className="auto">GET /music/data/filter</pre>
-                    {routePlugin && (
-                        <div>
-                            <Button
-                                icon="edit"
-                                onPressed={() =>
-                                    routePlugin.openEditor({
-                                        route: "/music/data/filter"
-                                    })
-                                }
-                            />
-                        </div>
-                    )}
-                </div>
-                <div className="py-1 stack-h gap-x-2 w-full">
-                    <pre className="auto">GET /music.it/filter/genre</pre>
-                    {routePlugin && (
-                        <div>
-                            <Button
-                                icon="edit"
-                                onPressed={() =>
-                                    routePlugin.openEditor({
-                                        route: "/music.it/filter/genre"
-                                    })
-                                }
-                            />
-                        </div>
-                    )}
-                </div>
+                {elems}
             </div>
         </div>
     )
@@ -50,7 +54,8 @@ function HistoryWidget({}) {
 function History({ close }) {
     return (
         <div className="stack-v p-4">
-            <div>History entries come here...</div>
+            <FocusMatrix />
+            <Button name="OK" />
         </div>
     )
 }

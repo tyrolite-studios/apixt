@@ -9,6 +9,7 @@ import "plugins/routeSelector/plugin"
 import "plugins/syntaxHighlighter/plugin"
 import "plugins/halt/plugin"
 import "plugins/requestBuilder/plugin"
+import "plugins/jsondiff/plugin"
 
 function Footer() {
     const aContext = useContext(AppContext)

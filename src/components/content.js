@@ -120,7 +120,7 @@ function HaltBlock({ next }) {
 }
 
 function Section({ name, children, primary = false }) {
-    const [colapsed, setColapsed] = useState(false)
+    const [colapsed, setColapsed] = useState(true)
 
     const cls = new ClassNames("px-2 border shadow-xl pt-1 pb-2")
     cls.addIf(
@@ -227,11 +227,11 @@ function DumpBlock({ name, vars }) {
 function CodeBlock(props) {
     const { name, html, footer, isError, mime } = props
     const aContext = useContext(AppContext)
-    const [colapsed, setColapsed] = useState(false)
+    const [colapsed, setColapsed] = useState(name !== "Http Response")
     const toggle = () => {
         setColapsed(!colapsed)
     }
-    const contentCls = new ClassNames("auto p-2")
+    const contentCls = new ClassNames("auto p-2 overflow-auto")
     contentCls.addIf(colapsed, "colapsed")
     const footerElems = []
     if (footer) {
