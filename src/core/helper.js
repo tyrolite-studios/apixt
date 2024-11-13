@@ -326,10 +326,28 @@ function getPathInfo(path) {
     }
     regexp += "$"
     return {
+        path,
         components: pathComponents,
         varCount: varIndex + 1,
         regexp
     }
+}
+
+function getPathParams(pathInfo, path) {
+    if (!pathInfo.varCount) return []
+
+    const matchExpr = new RegExp(pathInfo.regexp)
+
+    const matches = matchExpr.exec(path)
+    if (matches === null) return []
+
+    const result = []
+    let i = 0
+    while (i < pathInfo.varCount) {
+        i++
+        result.push(matches[i])
+    }
+    return result
 }
 
 const replacer = (key, value) =>
@@ -494,6 +512,7 @@ export {
     clamp,
     round,
     getPathInfo,
+    getPathParams,
     extractFullClasses,
     ClassNames,
     Attributes,

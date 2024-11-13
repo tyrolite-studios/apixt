@@ -520,4 +520,22 @@ class SimpleMappingIndex extends MappingIndex {
     }
 }
 
-export { EntityIndex, MappingIndex, SimpleMappingIndex }
+class HeadersIndex extends MappingIndex {
+    constructor(model) {
+        super(model, ["type", "headerValue"])
+    }
+}
+
+class QueryIndex extends MappingIndex {
+    constructor(model) {
+        super(model, ["type", "queryValue"])
+    }
+}
+
+export {
+    EntityIndex,
+    MappingIndex,
+    SimpleMappingIndex,
+    HeadersIndex,
+    QueryIndex
+}

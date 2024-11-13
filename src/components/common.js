@@ -1,7 +1,14 @@
 import { useRef, useState, useEffect, useContext } from "react"
 import { useModalWindow } from "./modal"
 import { ClassNames, isValidJson, clamp, d } from "core/helper"
-import { Button, ButtonGroup, AutoCompleteInput } from "./form"
+import {
+    Button,
+    ButtonGroup,
+    AutoCompleteInput,
+    FormGrid,
+    InputCells,
+    SelectCells
+} from "./form"
 import { Centered, Div, Stack, Icon, OkCancelLayout } from "./layout"
 import { AppContext } from "./context"
 
@@ -923,7 +930,8 @@ function EntityStack({
     entityIndex,
     emptyMsg,
     actions = [],
-    itemActions,
+    itemActions = [],
+    matcher,
     render = (item) => item.name
 }) {
     const stackRef = useRef()
@@ -961,6 +969,7 @@ function EntityStack({
                     setSelected={setSelected}
                     itemActions={itemActions}
                     emptyMsg={emptyMsg}
+                    matcher={matcher}
                     render={render}
                 />
             </Stack>
@@ -988,6 +997,7 @@ function EntityList({
     itemClassName,
     render = (item) => item.value,
     pick = () => {},
+    matcher,
     entityIndex,
     full,
     selected,
@@ -1012,7 +1022,9 @@ function EntityList({
             ? null
             : props.active
     )
-    const entities = entityIndex.getEntityObjects()
+    const entities = entityIndex.getEntityObjects(
+        matcher ? entityIndex.getView({ match: matcher }).matches : undefined
+    )
     if (props.setActive !== undefined) {
         setActive = props.setActive
         active = props.active
@@ -1152,7 +1164,7 @@ function EntityList({
     const elems = []
     let i = 0
 
-    for (const option of entities) {
+    for (const entity of entities) {
         const isFocused = hasFocus && i === tabIndex
 
         const itemCls = new ClassNames("hover:brightness-110", itemClassName)
@@ -1177,19 +1189,19 @@ function EntityList({
         if (isFocused) {
             itemAttr.style.zIndex = 40
         }
-        const args = [option]
+        const args = [entity]
         // if (itemActions) args.push(getItemActions(i))
         itemCls.add("auto")
 
         let item = (
-            <Div key={i} className={itemCls.value} {...itemAttr}>
+            <Div key={entity.index} className={itemCls.value} {...itemAttr}>
                 {render(...args)}
             </Div>
         )
         if (itemActions) {
             item = (
-                <div key={i} className="stack-h w-full">
-                    <div className="p-2">{getItemActions(i)}</div>
+                <div key={entity.index} className="stack-h w-full">
+                    <div className="p-2">{getItemActions(entity.index)}</div>
                     {item}
                 </div>
             )
@@ -1312,6 +1324,224 @@ function FocusMatrix({}) {
     )
 }
 
+function HeaderEditForm({ model, close, store, edit }) {
+    const [value, setValue] = useState(model.value)
+    const [type, setType] = useState(model.type)
+    const [headerValue, setHeaderValue] = useState(model.headerValue)
+    const typeOptions = [{ id: "fix", name: "Constant" }]
+    return (
+        <OkCancelLayout
+            ok={() => {
+                store({ value, type, headerValue })
+            }}
+            cancel={() => close()}
+        >
+            <FormGrid>
+                <InputCells
+                    name="Name"
+                    value={value}
+                    set={setValue}
+                    autoFocus={!edit}
+                    required
+                />
+                <SelectCells
+                    name="Type"
+                    value={type}
+                    set={setType}
+                    options={typeOptions}
+                />
+                <InputCells
+                    name="Value"
+                    value={headerValue}
+                    set={setHeaderValue}
+                    required
+                    autoFocus={edit}
+                />
+            </FormGrid>
+        </OkCancelLayout>
+    )
+}
+
+function HeaderStack({ headerIndex }) {
+    const EditModal = useModalWindow()
+
+    const actions = [
+        {
+            icon: "add",
+            name: "New",
+            op: {
+                exec: () => {
+                    EditModal.open({
+                        model: {
+                            name: "",
+                            type: "fix",
+                            headerValue: ""
+                        },
+                        store: (newModel) => {
+                            headerIndex.setEntityObject(newModel)
+                            EditModal.close()
+                        }
+                    })
+                }
+            }
+        }
+    ]
+
+    const itemActions = [
+        {
+            icon: "edit",
+            action: (index) => {
+                const model = headerIndex.getEntityObject(index)
+                EditModal.open({
+                    model,
+                    edit: true,
+                    store: (newModel) => {
+                        headerIndex.setEntityObject(
+                            { ...model, ...newModel },
+                            true
+                        )
+                        EditModal.close()
+                    }
+                })
+            }
+        },
+        {
+            icon: "delete",
+            action: (index) => {
+                headerIndex.deleteEntity(index)
+            }
+        }
+    ]
+    return (
+        <>
+            <EntityStack
+                entityIndex={headerIndex}
+                actions={actions}
+                itemActions={itemActions}
+                render={(item) => (
+                    <div className="stack-v">
+                        <div className="text-xs opacity-50">{item.value}:</div>
+                        <pre>{item.headerValue}</pre>
+                    </div>
+                )}
+            />
+
+            <EditModal.content>
+                <HeaderEditForm {...EditModal.props} />
+            </EditModal.content>
+        </>
+    )
+}
+
+function QueryEditForm({ model, close, store, edit }) {
+    const [value, setValue] = useState(model.value)
+    const [type, setType] = useState(model.type)
+    const [queryValue, setQueryValue] = useState(model.queryValue)
+    const typeOptions = [{ id: "fix", name: "Constant" }]
+    return (
+        <OkCancelLayout
+            ok={() => {
+                store({ value, type, queryValue })
+            }}
+            cancel={() => close()}
+        >
+            <FormGrid>
+                <InputCells
+                    name="Name"
+                    value={value}
+                    set={setValue}
+                    autoFocus={!edit}
+                    required
+                />
+                <SelectCells
+                    name="Type"
+                    value={type}
+                    set={setType}
+                    options={typeOptions}
+                />
+                <InputCells
+                    name="Value"
+                    value={queryValue}
+                    set={setQueryValue}
+                    required
+                    autoFocus={edit}
+                />
+            </FormGrid>
+        </OkCancelLayout>
+    )
+}
+
+function QueryStack({ queryIndex }) {
+    const EditModal = useModalWindow()
+
+    const actions = [
+        {
+            icon: "add",
+            name: "New",
+            op: {
+                exec: () => {
+                    EditModal.open({
+                        model: {
+                            name: "",
+                            type: "fix",
+                            queryValue: ""
+                        },
+                        store: (newModel) => {
+                            queryIndex.setEntityObject(newModel)
+                            EditModal.close()
+                        }
+                    })
+                }
+            }
+        }
+    ]
+
+    const itemActions = [
+        {
+            icon: "edit",
+            action: (index) => {
+                const model = queryIndex.getEntityObject(index)
+                EditModal.open({
+                    model,
+                    edit: true,
+                    store: (newModel) => {
+                        queryIndex.setEntityObject(
+                            { ...model, ...newModel },
+                            true
+                        )
+                        EditModal.close()
+                    }
+                })
+            }
+        },
+        {
+            icon: "delete",
+            action: (index) => {
+                queryIndex.deleteEntity(index)
+            }
+        }
+    ]
+    return (
+        <>
+            <EntityStack
+                entityIndex={queryIndex}
+                actions={actions}
+                itemActions={itemActions}
+                render={(item) => (
+                    <div className="stack-v">
+                        <div className="text-xs opacity-50">{item.value}:</div>
+                        <pre>{item.queryValue}</pre>
+                    </div>
+                )}
+            />
+
+            <EditModal.content>
+                <QueryEditForm {...EditModal.props} />
+            </EditModal.content>
+        </>
+    )
+}
+
 export {
     useComponentUpdate,
     useMounted,
@@ -1334,5 +1564,7 @@ export {
     ColorBox,
     EntityList,
     EntityStack,
-    FocusMatrix
+    FocusMatrix,
+    HeaderStack,
+    QueryStack
 }

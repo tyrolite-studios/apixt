@@ -1,13 +1,17 @@
 import { isString, d, isInt, isArray } from "./helper"
 
-const isMethodWithBody = (method) =>
-    ["POST", "PUT", "GET"].includes(method.toUpperCase())
+const isMethodWithRequestBody = (method) =>
+    ["POST", "PUT", "PATCH"].includes(method.toUpperCase())
+
+const isMethodWithResponseBody = (method) =>
+    !["HEAD", "OPTIONS"].includes(method)
 
 const startAbortableApiRequest = (
     baseUrl,
     {
         expect = (response) => response.ok,
         path,
+        query,
         response,
         thenChain = (x) => x,
         ...options
@@ -20,16 +24,18 @@ const startAbortableApiRequest = (
         ? (response) => expect.includes(response.status)
         : expect
 
-    const url =
+    let url =
         (baseUrl.endsWith("/")
             ? baseUrl.substring(0, baseUrl.length - 1)
             : baseUrl) + path
+
+    if (query) url += "?" + query
 
     const request = {
         status: null,
         abort: controller.abort,
         fetchPromise: thenChain(
-            fetch(baseUrl + path, {
+            fetch(url, {
                 signal: controller.signal,
                 ...options
             }).then((response) => {
@@ -77,7 +83,7 @@ const startAbortableApiBodyRequest = (
             })
         }
     }
-    if (!isMethodWithBody(method))
+    if (!isMethodWithResponseBody(method))
         throw Error(
             `Trying to start body request with unsupported method "${method}"`
         )
@@ -141,5 +147,7 @@ const startAbortableArrayStream = (
 export {
     startAbortableApiBodyRequest,
     startAbortableApiRequestStream,
-    startAbortableApiRequest
+    startAbortableApiRequest,
+    isMethodWithRequestBody,
+    isMethodWithResponseBody
 }

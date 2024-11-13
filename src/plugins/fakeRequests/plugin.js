@@ -14,13 +14,13 @@ const responseStream = [
     {
         cmd: CMD.ADD_CODE_BLOCK,
         name: "Http Header",
-        html: "<pre>Content-Type: application/json</pre>"
+        content: "<pre>Content-Type: application/json</pre>"
     },
     { cmd: CMD.CLOSE_SECTION_DETAILS },
     {
         cmd: CMD.ADD_CODE_BLOCK,
         name: "Http Request",
-        html: JSON.stringify({
+        content: JSON.stringify({
             foo: "bar",
             "fooo-3": { number: 666, hack: true }
         }),
@@ -55,13 +55,13 @@ const responseStream = [
     {
         cmd: CMD.ADD_CODE_BLOCK,
         name: "Http Header",
-        html: "<pre>Content-Type: application/json</pre>"
+        content: "<pre>Content-Type: application/json</pre>"
     },
     { cmd: CMD.CLOSE_SECTION_DETAILS },
     {
         cmd: CMD.ADD_CODE_BLOCK,
         name: "Http Response",
-        html: JSON.stringify({
+        content: JSON.stringify({
             foo: "bar",
             "fooo-3": { number: 666, hack: true }
         }),
@@ -88,13 +88,13 @@ const errorResponse = [
     {
         cmd: CMD.ADD_CODE_BLOCK,
         name: "Http Header",
-        html: "<pre>Content-Type: application/json</pre>"
+        content: "<pre>Content-Type: application/json</pre>"
     },
     { cmd: CMD.CLOSE_SECTION_DETAILS },
     {
         cmd: CMD.ADD_CODE_BLOCK,
         name: "Http Request",
-        html: JSON.stringify({
+        content: JSON.stringify({
             foo: "bar",
             "fooo-3": { number: 666, hack: true }
         }),
@@ -114,14 +114,14 @@ const errorResponse = [
     {
         cmd: CMD.ADD_CODE_BLOCK,
         name: "Http Header",
-        html: "<pre>Content-Type: application/json</pre>"
+        content: "<pre>Content-Type: application/json</pre>"
     },
     { cmd: CMD.CLOSE_SECTION_DETAILS },
     {
         cmd: CMD.ADD_CODE_BLOCK,
         name: "Http Request",
         mime: "text/json",
-        html: JSON.stringify({
+        content: JSON.stringify({
             foo: "bar",
             "fooo-3": { number: 666, hack: true }
         })
@@ -153,6 +153,8 @@ class Plugin extends AbstractPlugin {
         this.addHeaderButton({ id: "error", name: "Fake error..." })
         this.setButtonHandler("load", ({ ctx }) => {
             ctx.startContentStream({
+                path: "/fake/response",
+                method: "GET",
                 responseStream: {
                     lines: responseStream,
                     speed: 200,
@@ -170,6 +172,8 @@ class Plugin extends AbstractPlugin {
         })
         this.setButtonHandler("error", ({ ctx }) => {
             ctx.startContentStream({
+                path: "/fake/error",
+                method: "GET",
                 responseStream: {
                     lines: errorResponse,
                     speed: 200

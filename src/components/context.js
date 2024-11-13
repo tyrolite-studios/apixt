@@ -5,15 +5,14 @@ import {
     startAbortableApiBodyRequest
 } from "core/http"
 import { useComponentUpdate, useLoadingSpinner } from "./common"
-import { d, getPathInfo, md5 } from "core/helper"
-import { HOOKS, PluginRegistry } from "../core/plugin"
+import { d, getPathInfo, apply, md5 } from "core/helper"
+import { HOOKS, PluginRegistry } from "core/plugin"
 import {
     defaultApiSettings,
     defaultGlobalSettings,
     defaultKeyBindings
 } from "./settings"
-import { apply } from "../core/helper"
-import { MappingIndex } from "../core/entity"
+import { EntityIndex, MappingIndex, HeadersIndex } from "core/entity"
 
 const controller = window.controller
 const AppContext = createContext(null)
@@ -50,6 +49,50 @@ function SpinnerDiv() {
     }, [])
 
     return <>{LoadingSpinner.Modal}</>
+}
+
+class RouteIndex extends EntityIndex {
+    constructor(routes) {
+        super()
+        this.model = routes
+        this.items = routes.map((route) => route.path)
+    }
+
+    getEntityProps() {
+        return [...super.getEntityProps(), "path", "methods"]
+    }
+
+    getEntityValue(index) {
+        return this.items[index].path
+    }
+
+    getEntityPropValue(index, prop) {
+        if (prop === "path") {
+            return this.model[index].path
+        }
+        if (prop === "methods") return this.model[index].methods
+        return super.getEntityPropValue(index, prop)
+    }
+}
+
+function registerRouteApi({ config }) {
+    const routeIndex = new RouteIndex(config.routes)
+
+    const getMatchingRoutePath = (resolvedPath, method) => {
+        for (const { path, methods } of routeIndex.getEntityObjects()) {
+            if (!methods.includes(method)) continue
+
+            const pathInfo = getPathInfo(path)
+            const pathRegexp = new RegExp(pathInfo.regexp)
+            if (pathRegexp.test(resolvedPath)) return pathInfo
+        }
+        return null
+    }
+
+    return {
+        routeIndex,
+        getMatchingRoutePath
+    }
 }
 
 /*
@@ -363,12 +406,6 @@ function registerSettingsApi({ registry, register, apiRef }) {
     }
 }
 
-class HeadersIndex extends MappingIndex {
-    constructor(model) {
-        super(model, ["type", "headerValue"])
-    }
-}
-
 /*
  * The content API controlls the content area of the API extender where the content from the API is loaded
  */
@@ -449,8 +486,23 @@ function registerContentApi({ registry, register }) {
         },
         getRawContentPromise: (baseUrl) => {
             const { lastRequest } = registry()
+
+            const { headers = {}, ...options } = lastRequest
+            for (const {
+                value,
+                headerValue,
+                type
+            } of baseHeaderIndex.getEntityObjects()) {
+                if (value in headers) continue
+
+                if (type === "fix") {
+                    headers[value] = headerValue
+                }
+            }
+
             return startAbortableApiBodyRequest(baseUrl, {
-                ...lastRequest,
+                headers,
+                ...options,
                 expect: () => true
             })
         },
@@ -565,8 +617,7 @@ function registerEventManagementApi({ registry, register }) {
 function registerHistoryApi({ registry, register }) {
     const { apiStorage } = registry()
 
-    const history = []
-    //apiStorage.getJson("requestHistory", [])
+    const history = apiStorage.getJson("requestHistory", [])
 
     const restrictHistory = () => {
         while (history.length > 10) {
@@ -588,7 +639,7 @@ function registerHistoryApi({ registry, register }) {
             hash
         })
         restrictHistory()
-        // apiStorage.setJson("requestHistory", history)
+        apiStorage.setJson("requestHistory", history)
     }
 
     register("history", { push2history })
@@ -645,11 +696,12 @@ function AppCtx({ config, children }) {
             spinner: null
         }
 
-        const registration = { register, registry, apiRef }
+        const registration = { register, registry, apiRef, config }
 
         apiRef.current = {
             ...registerSettingsApi(registration),
             ...registerEventManagementApi(registration),
+            ...registerRouteApi(registration),
             ...registerContentApi(registration),
             ...registerHistoryApi(registration),
             ...registerModalApi(registration),

@@ -12,9 +12,11 @@ function ContentTree({ root, level = 1 }) {
 
     const nextLevel = type === "section" ? level + 1 : level
     const children = []
+    let hasSectionGroups = false
     if (nodes) {
         let i = 0
         for (const node of nodes) {
+            if (node.type === "section-group") hasSectionGroups = true
             children.push(
                 <ContentTree
                     key={nextLevel + "_" + i}
@@ -31,7 +33,11 @@ function ContentTree({ root, level = 1 }) {
 
         case "section":
             return (
-                <Section {...params} primary={nextLevel % 2 === 1}>
+                <Section
+                    {...params}
+                    primary={nextLevel % 2 === 1}
+                    hasGroups={hasSectionGroups}
+                >
                     {children}
                 </Section>
             )
@@ -119,7 +125,7 @@ function HaltBlock({ next }) {
     )
 }
 
-function Section({ name, children, primary = false }) {
+function Section({ name, children, hasGroups, primary = false }) {
     const [colapsed, setColapsed] = useState(true)
 
     const cls = new ClassNames("px-2 border shadow-xl pt-1 pb-2")
@@ -137,15 +143,24 @@ function Section({ name, children, primary = false }) {
         "stack-v bg-app-bg text-app-text border border-frame-odd-border p-2 gap-2"
     )
     contentCls.addIf(colapsed, "colapsed")
+    const togglerCls = ClassNames("text-frame-odd-bg py-0")
+    togglerCls.addIf(
+        hasGroups,
+        "bg-frame-odd-border px-2 cursor-pointer",
+        "px-1 border-x border-t border-frame-odd-border/50"
+    )
     return (
         <div className={cls.value}>
             <div className="stack-h gap-2">
                 <div
-                    className="bg-frame-odd-border text-frame-odd-bg px-2 py-0"
-                    onClick={toggle}
+                    className={togglerCls.value}
+                    onClick={hasGroups ? toggle : undefined}
                 >
                     <div>
-                        <span>{colapsed ? "+" : "-"}</span>
+                        {hasGroups && <span>{colapsed ? "+" : "-"}</span>}
+                        {!hasGroups && (
+                            <span className="text-frame-odd-bg">+</span>
+                        )}
                     </div>
                 </div>
                 <div className="auto full text-left">
@@ -225,7 +240,7 @@ function DumpBlock({ name, vars }) {
 }
 
 function CodeBlock(props) {
-    const { name, html, footer, isError, mime } = props
+    const { name, content, footer, isError, mime } = props
     const aContext = useContext(AppContext)
     const [colapsed, setColapsed] = useState(name !== "Http Response")
     const toggle = () => {
@@ -249,7 +264,7 @@ function CodeBlock(props) {
     )
     footerCls.addIf(isError, "bg-warning-bg", "bg-block-footer-bg")
 
-    let renderHtml = html
+    let renderHtml = content
     const pipeline = PluginRegistry.getContentPipeline(mime)
     while (pipeline.length) {
         const exec = pipeline.shift()

@@ -5,35 +5,11 @@ import { AppContext } from "components/context"
 import { Input } from "components/form"
 import { d, getPathInfo } from "core/helper"
 import { Tabs, Tab, OkCancelLayout } from "components/layout"
-import { EntityIndex } from "core/entity"
-import { EntityStack } from "components/common"
-import { Form, FormGrid, InputCells, SelectCells } from "components/form"
-
-class RouteIndex extends EntityIndex {
-    constructor(routes, method) {
-        super()
-        this.model = routes
-        this.method = method
-        this.items = routes.map((route) => route.path)
-    }
-
-    getEntityProps() {
-        return [...super.getEntityProps(), "path", "method", "methods"]
-    }
-
-    getEntityValue(index) {
-        return this.items[index].path
-    }
-
-    getEntityPropValue(index, prop) {
-        if (prop === "path") {
-            return this.model[index].path
-        }
-        if (prop === "methods") return this.model[index].methods
-        if (prop === "method") return this.method
-        return super.getEntityPropValue(index, prop)
-    }
-}
+import { EntityStack, HeaderStack, QueryStack } from "components/common"
+import { FormGrid, InputCells, SelectCells, Textarea } from "components/form"
+import { isMethodWithRequestBody } from "core/http"
+import { CustomCells, TextareaCells } from "../../components/form"
+import { HeadersIndex, QueryIndex } from "core/entity"
 
 function RoutePath({ path, params = [] }) {
     const parts = path.substring(1).split("/")
@@ -63,12 +39,29 @@ function RoutePath({ path, params = [] }) {
     return <div className="stack-h">{elems}</div>
 }
 
-function RouteLauncher({ path, method, body, params, close }) {
+function RouteLauncher({
+    path,
+    method,
+    params,
+    close,
+    query = {},
+    headers = {},
+    ...props
+}) {
     const aContext = useContext(AppContext)
     const pathInfo = useMemo(() => {
         return getPathInfo(path)
     }, [])
 
+    const headerIndex = useMemo(() => {
+        return new HeadersIndex(headers)
+    }, [])
+    const queryIndex = useMemo(() => {
+        return new QueryIndex(query)
+    }, [])
+    const [body, setBody] = useState(
+        isMethodWithRequestBody(method) ? props.body ?? "" : undefined
+    )
     const [pathParams, setPathParams] = useState(() => {
         const { varCount } = pathInfo
         if (!varCount) return []
@@ -107,21 +100,43 @@ function RouteLauncher({ path, method, body, params, close }) {
         <OkCancelLayout
             ok={() => {
                 let path = ""
-                for (const { fix, value, ref } of d(pathInfo.components)) {
+                for (const { fix, value, ref } of pathInfo.components) {
                     path += "/"
                     path += fix ? value : pathParams[ref]
                 }
+                let params = {}
+                for (const {
+                    fix,
+                    queryValue,
+                    value
+                } of queryIndex.getEntityObjects()) {
+                    params[value] = queryValue
+                }
+                const query = new URLSearchParams(params).toString()
                 close()
-                aContext.startContentStream({ method, path })
+                aContext.startContentStream({ method, path, query, body })
             }}
             cancel={() => close()}
         >
-            <div className="stack-h gap-1 p-4">{routeElems}</div>
+            <FormGrid>
+                <CustomCells name="Path:">
+                    <div className="stack-h gap-1">{routeElems}</div>
+                </CustomCells>
+                <CustomCells name="Query:">
+                    <QueryStack queryIndex={queryIndex} />
+                </CustomCells>
+                <CustomCells name="Headers:">
+                    <HeaderStack headerIndex={headerIndex} />
+                </CustomCells>
+                {body !== undefined && (
+                    <TextareaCells name="Body:" value={body} set={setBody} />
+                )}
+            </FormGrid>
         </OkCancelLayout>
     )
 }
 
-function RouteStack({ close, routeIndex, plugin }) {
+function RouteStack({ close, routeIndex, method, plugin }) {
     const aContext = useContext(AppContext)
     const index2lastParams = useMemo(() => {
         const result = {}
@@ -135,7 +150,7 @@ function RouteStack({ close, routeIndex, plugin }) {
             icon: "edit",
             action: (index) => {
                 close()
-                const { path, method } = routeIndex.getEntityObject(index)
+                const { path } = routeIndex.getEntityObject(index)
                 plugin.openEditor({
                     path,
                     method,
@@ -147,7 +162,7 @@ function RouteStack({ close, routeIndex, plugin }) {
             icon: "east",
             action: (index) => {
                 close()
-                const { path, method } = routeIndex.getEntityObject(index)
+                const { path } = routeIndex.getEntityObject(index)
                 const pathInfo = getPathInfo(path)
                 if (pathInfo.varCount === 0) {
                     aContext.startContentStream({ path, method })
@@ -178,6 +193,9 @@ function RouteStack({ close, routeIndex, plugin }) {
         <EntityStack
             entityIndex={routeIndex}
             itemActions={actions}
+            matcher={(index) =>
+                routeIndex.getEntityPropValue(index, "methods").includes(method)
+            }
             render={(item) => (
                 <div className="stack-v">
                     <RoutePath
@@ -193,134 +211,16 @@ function RouteStack({ close, routeIndex, plugin }) {
     )
 }
 
-function HeaderEditForm({ model, close, store, edit }) {
-    const [value, setValue] = useState(model.value)
-    const [type, setType] = useState(model.type)
-    const [headerValue, setHeaderValue] = useState(model.headerValue)
-    const typeOptions = [{ id: "fix", name: "Constant" }]
-    return (
-        <OkCancelLayout
-            ok={() => {
-                store({ value, type, headerValue })
-            }}
-            cancel={() => close()}
-        >
-            <FormGrid>
-                <InputCells
-                    name="Name"
-                    value={value}
-                    set={setValue}
-                    autoFocus={!edit}
-                    required
-                />
-                <SelectCells
-                    name="Type"
-                    value={type}
-                    set={setType}
-                    options={typeOptions}
-                />
-                <InputCells
-                    name="Value"
-                    value={headerValue}
-                    set={setHeaderValue}
-                    required
-                    autoFocus={edit}
-                />
-            </FormGrid>
-        </OkCancelLayout>
-    )
-}
-
-function HeaderStack({ headerIndex }) {
-    const EditModal = useModalWindow()
-
-    const actions = [
-        {
-            icon: "add",
-            name: "New",
-            op: {
-                exec: () => {
-                    EditModal.open({
-                        model: {
-                            name: "",
-                            type: "fix",
-                            headerValue: ""
-                        },
-                        store: (newModel) => {
-                            headerIndex.setEntityObject(newModel)
-                            EditModal.close()
-                        }
-                    })
-                }
-            }
-        }
-    ]
-
-    const itemActions = [
-        {
-            icon: "edit",
-            action: (index) => {
-                const model = headerIndex.getEntityObject(index)
-                EditModal.open({
-                    model,
-                    edit: true,
-                    store: (newModel) => {
-                        headerIndex.setEntityObject(
-                            { ...model, ...newModel },
-                            true
-                        )
-                        EditModal.close()
-                    }
-                })
-            }
-        },
-        {
-            icon: "delete",
-            action: (index) => {
-                headerIndex.deleteEntity(index)
-            }
-        }
-    ]
-    return (
-        <>
-            <EntityStack
-                entityIndex={headerIndex}
-                actions={actions}
-                itemActions={itemActions}
-                render={(item) => (
-                    <div className="stack-v">
-                        <div className="text-xs opacity-50">{item.value}:</div>
-                        <pre>{item.headerValue}</pre>
-                    </div>
-                )}
-            />
-
-            <EditModal.content>
-                <HeaderEditForm {...EditModal.props} />
-            </EditModal.content>
-        </>
-    )
-}
-
 function RouteSelector({ close, plugin }) {
     const aContext = useContext(AppContext)
-    const method2routes = useMemo(() => {
-        const result = {}
-        for (const routeConfig of aContext.config.routes) {
-            for (const method of routeConfig.methods) {
-                if (!result[method]) result[method] = []
-                result[method].push(routeConfig)
-            }
-        }
-        return result
-    }, [])
-
-    const method2routeIndex = useMemo(() => {
-        const result = {}
-        for (const [method, routes] of Object.entries(method2routes)) {
-            result[method] = new RouteIndex(routes, method)
-        }
-        return result
+    const routeIndex = aContext.routeIndex
+    const methods = useMemo(() => {
+        return ["GET", "POST", "HEAD", "PUT", "PATCH", "DELETE"].filter(
+            (method) =>
+                routeIndex.hasPropValueMatch("methods", (value) =>
+                    value.includes(method)
+                )
+        )
     }, [])
 
     const headerIndex = aContext.getBaseHeaderIndex()
@@ -337,7 +237,7 @@ function RouteSelector({ close, plugin }) {
 
     return (
         <Tabs persistId="routeSelector">
-            {Object.entries(method2routes).map(([method, routes]) => (
+            {methods.map((method) => (
                 <Tab key={method} active={method === "GET"} name={method}>
                     <div className="p-4 overflow-auto">
                         <div className="stack-v gap-2">
@@ -346,7 +246,8 @@ function RouteSelector({ close, plugin }) {
                             <div>Routes</div>
                             <RouteStack
                                 plugin={plugin}
-                                routeIndex={method2routeIndex[method]}
+                                routeIndex={routeIndex}
+                                method={method}
                                 close={close}
                             />
                         </div>
@@ -383,4 +284,4 @@ function RoutesModal({ plugin }) {
     )
 }
 
-export { RoutesModal }
+export { RoutesModal, RoutePath }
