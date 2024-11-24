@@ -554,7 +554,7 @@ function Select({
         <select
             className={cls.value}
             required={required}
-            defaultValue={!interactive ? tmpValue : null}
+            defaultValue={tmpValue}
             onMouseDown={!interactive ? (e) => e.preventDefault() : onMouseDown}
             onKeyDown={
                 !interactive
@@ -1483,12 +1483,18 @@ function ButtonGroup({
     buttonProps = {},
     autoFocus,
     active,
+    rowChange,
+    lastTabIndex,
+    setLastTabIndex,
     ...props
 }) {
     const stackRef = useRef(null)
     const { focusItem, attr, refocus, ...focus } = useFocusManager({
         divRef: stackRef,
+        rowChange,
         count: buttons.length,
+        lastTabIndex,
+        setLastTabIndex,
         active: active !== undefined ? active : 0,
         setActive: () => {}
     })
@@ -1963,6 +1969,7 @@ function SliderCells({ name, ...props }) {
 }
 
 export {
+    FormContext,
     Button,
     Submit,
     ButtonGroup,

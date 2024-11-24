@@ -1,7 +1,15 @@
-import { useRef, useState, useEffect, useContext } from "react"
+import { useRef, useState, useEffect, useContext, useMemo } from "react"
 import { useModalWindow } from "./modal"
-import { ClassNames, isValidJson, clamp, d } from "core/helper"
-import { Button, ButtonGroup, AutoCompleteInput } from "./form"
+import { ClassNames, isValidJson, clamp, without, d } from "core/helper"
+import {
+    Button,
+    ButtonGroup,
+    AutoCompleteInput,
+    FormGrid,
+    InputCells,
+    SelectCells,
+    CustomCells
+} from "./form"
 import { Centered, Div, Stack, Icon, OkCancelLayout } from "./layout"
 import { AppContext } from "./context"
 
@@ -151,7 +159,9 @@ function useFocusManager({
     rootSelect,
     dblAction,
     active,
+    rowChange,
     items,
+    lastTabIndex,
     pos = 0,
     setPos = () => null,
     page,
@@ -166,6 +176,7 @@ function useFocusManager({
 
     const doubleRef = useRef({})
     const [catchFocus, setCatchFocus] = useState(true)
+
     const [focused, setFocused] = useState(false)
     const [tabIndex, setTabIndexRaw] = useState(0)
     const setTabIndex = (value) => {
@@ -206,6 +217,7 @@ function useFocusManager({
     const refocus = () => {
         requestAnimationFrame(() => {
             if (!mounted.current || !divRef.current) return
+
             const elems = divRef.current.querySelectorAll(".tabbed")
             if (elems.length) {
                 elems[elems.length - 1].focus()
@@ -301,7 +313,12 @@ function useFocusManager({
     const autoFocus = (e) => {
         if (!mounted.current) return
         setCatchFocus(false)
-        const newTabIndex = activeIndex === -1 ? 0 : activeIndex
+        const newTabIndex =
+            lastTabIndex !== undefined
+                ? lastTabIndex
+                : activeIndex === -1
+                  ? 0
+                  : activeIndex
         setTabIndex(
             isOutsideFocus || newTabIndex === null ? currPos : newTabIndex
         )
@@ -322,7 +339,9 @@ function useFocusManager({
     }
     const onKeyDown = (e) => {
         if (["ArrowLeft", "ArrowUp"].includes(e.key)) {
-            if (
+            if (rowChange && e.key === "ArrowUp") {
+                rowChange("arrow", -1, tabIndex)
+            } else if (
                 treeView &&
                 e.key === "ArrowLeft" &&
                 !treeView.isLeafByViewIndex(tabIndex) &&
@@ -345,7 +364,9 @@ function useFocusManager({
             }
             e.preventDefault()
         } else if (["ArrowRight", "ArrowDown"].includes(e.key)) {
-            if (
+            if (rowChange && e.key === "ArrowDown") {
+                rowChange("arrow", 1, tabIndex)
+            } else if (
                 treeView &&
                 e.key === "ArrowRight" &&
                 !treeView.isLeafByViewIndex(tabIndex) &&
@@ -377,6 +398,10 @@ function useFocusManager({
             activateIndex(tabIndex)
             // prevent scrolling
             e.preventDefault()
+        } else if (rowChange && e.key === "Tab") {
+            rowChange("tab", e.shiftKey ? -1 : 1)
+            e.preventDefault()
+            return
         } else {
             return
         }
@@ -388,6 +413,10 @@ function useFocusManager({
             tab: (tabIndex === index && !catchFocus) || isCatcher,
             onMouseDown: (e) => {
                 if (!mounted.current) return
+
+                if (rowChange) {
+                    rowChange("row", e.target)
+                }
                 setTabIndex(index)
                 activateIndex(index, e)
                 setCatchFocus(false)
@@ -460,16 +489,31 @@ function LoadingSpinner({ abort, close }) {
 
 function useLoadingSpinner() {
     const SpinnerWindow = useModalWindow()
+    const [open, setOpen] = useState(false)
+    const openRef = useRef()
+    openRef.current = open
 
     return {
         start: (promise, abort) => {
+            setOpen(true)
             SpinnerWindow.open({
                 abort,
                 cleanUp: (source) => {
                     if (source) abort()
                 }
             })
-            promise.finally(() => SpinnerWindow.close())
+            promise.finally(() => {
+                if (openRef.current) {
+                    SpinnerWindow.close()
+                    setOpen(false)
+                }
+            })
+            return promise
+        },
+        close: () => {
+            if (!openRef.current) return
+            SpinnerWindow.close()
+            setOpen(false)
         },
         Modal: (
             <SpinnerWindow.content width="250px">
@@ -747,7 +791,7 @@ function ColorBox({ color, width, height, className }) {
     )
 }
 
-function EntityList({
+function EntityList2({
     className,
     itemClassName,
     render = (item) => item.value,
@@ -880,60 +924,39 @@ const action2icon = {
     add: "add"
 }
 
+const getActionName = (action) => action2name[action] ?? action
+const getActionIcon = (action) => action2icon[action] ?? action
+
 function EntityStack({
     entityIndex,
-    items,
-    newItem,
-    editItem,
-    deleteItems,
     emptyMsg,
-    actions = {},
+    actions = [],
+    itemActions = [],
+    matcher,
     render = (item) => item.name
 }) {
+    const stackRef = useRef()
     const [selected, setSelected] = useState([])
-
     const update = useUpdateOnEntityIndexChanges(entityIndex)
 
     const actionBtns = []
-    for (const [name, op] of Object.entries(actions)) {
+    const hotKeys = {}
+    for (const { action, name, icon, op } of actions) {
+        const actionHandler = () => op.exec(selected, setSelected)
+        hotKeys[action] = actionHandler
         actionBtns.push({
-            name: action2name[name] ?? name,
-            icon: action2icon[name],
-            onPressed: () => op(selected)
+            name: name ?? getActionName(action),
+            icon: icon ?? getActionIcon(action),
+            disabled: op.can && !op.can(selected),
+            onPressed: actionHandler
         })
     }
-
-    if (newItem) {
-        actionBtns.push({
-            name: "New",
-            icon: "add",
-            onPressed: newItem
-        })
-    }
-    if (editItem) {
-        actionBtns.push({
-            name: "Edit",
-            icon: "edit",
-            disabled: selected.length !== 1,
-            onPressed: () => editItem(selected[0])
-        })
-    }
-    if (deleteItems) {
-        actionBtns.push({
-            name: "Delete",
-            icon: "delete",
-            disabled: selected.length === 0,
-            onPressed: () => {
-                deleteItems(selected)
-                setSelected([])
-            }
-        })
-    }
+    useHotKeys(stackRef, hotKeys)
 
     return (
-        <Stack
-            vertical
-            className="border border-header-border/50 divide divide-header-border/25"
+        <Div
+            ref={stackRef}
+            className="stack-v border border-header-border/50 divide divide-header-border/25"
         >
             <div className="bg-header-bg/25 p-1">
                 <ButtonGroup buttons={actionBtns} />
@@ -945,8 +968,9 @@ function EntityStack({
                     entityIndex={entityIndex}
                     selected={selected}
                     setSelected={setSelected}
+                    itemActions={itemActions}
                     emptyMsg={emptyMsg}
-                    options={items}
+                    matcher={matcher}
                     render={render}
                 />
             </Stack>
@@ -965,7 +989,557 @@ function EntityStack({
                     </>
                 )}
             </div>
-        </Stack>
+        </Div>
+    )
+}
+
+function EntityList({
+    className,
+    itemClassName,
+    render = (item) => item.value,
+    pick = () => {},
+    matcher,
+    entityIndex,
+    full,
+    selected,
+    setSelected,
+    itemActions,
+    wrap = true,
+    bordered = true,
+    divided = true,
+    padded = true,
+    sized = true,
+    colored = true,
+    styled = true,
+    emptyMsg = "No items available",
+    ...props
+}) {
+    const mounted = useMounted()
+    const [catchFocus, setCatchFocus] = useState(true)
+    const [focusRow, setFocusRow] = useState(0)
+    const [lastTabIndex, setLastTabIndex] = useState(0)
+    let [active, setActive] = useState(
+        props.active === undefined || entityIndex.getLength() === 0
+            ? null
+            : props.active
+    )
+    const entities = entityIndex.getEntityObjects(
+        matcher ? entityIndex.getView({ match: matcher }).matches : undefined
+    )
+    if (props.setActive !== undefined) {
+        setActive = props.setActive
+        active = props.active
+    }
+    const update = useUpdateOnEntityIndexChanges(entityIndex)
+
+    const cls = new ClassNames("stack-v overflow-y-auto", className)
+    cls.addIf(styled && colored, "bg-input-bg text-input-text")
+    cls.addIf(styled && bordered, "border")
+    cls.addIf(styled && bordered && colored, "border-input-border")
+    cls.addIf(styled && divided, "divide-y")
+    cls.addIf(styled && divided && colored, "divide-input-border")
+    const stackRef = useRef(null)
+
+    let { focusItem, hasFocus, attr, tabIndex, ...focus } = useFocusManager({
+        setActive: (index) => {
+            if (!selected.includes(index)) {
+                setSelected([...selected, index])
+            } else {
+                setSelected(selected.filter((item) => index !== item))
+            }
+            setActive(index)
+        },
+        update,
+        active,
+        deselect: true,
+        divRef: stackRef,
+        count: entityIndex.length,
+        handleSpace: true
+    })
+    if (itemActions) {
+        attr = {}
+        tabIndex = -1
+    }
+
+    const divAttr = useGetAttrWithDimProps(props)
+    cls.addIf(!divAttr.style?.width && !full, "max-w-max")
+    cls.addIf(full, "w-full")
+    cls.addIf(!wrap, "text-nowrap")
+
+    let getItemActions = () => []
+    if (itemActions) {
+        const refocus = () => {
+            const elems = stackRef.current.querySelectorAll(".focus-row")
+            const elem = elems[focusRow].querySelector(".tabbed")
+            elem.focus()
+            setCatchFocus(false)
+        }
+
+        const onBlur = () => {
+            requestAnimationFrame(() => {
+                if (!mounted.current) return
+                if (!stackRef.current.contains(document.activeElement)) {
+                    setCatchFocus(true)
+                    setLastTabIndex(0)
+                    setFocusRow(0)
+                }
+            })
+        }
+
+        const nextRow = (key, dir, tabIndex) => {
+            const maxRow = entityIndex.length - 1
+            if (key === "tab") {
+                const all = [...document.querySelectorAll(".tabbed")]
+                if (dir === -1) all.reverse()
+
+                let found = false
+                for (const elem of all) {
+                    if (
+                        elem === stackRef.current ||
+                        stackRef.current.contains(elem)
+                    ) {
+                        found = true
+                    } else if (found) {
+                        elem.focus()
+                        break
+                    }
+                }
+                return
+            } else if (key === "row") {
+                let elem = dir
+                let buttonElem = dir
+                while (!elem.classList.contains("focus-row")) {
+                    if (elem.tagName === "BUTTON") buttonElem = elem
+                    if (elem === stackRef.current) {
+                        elem = null
+                        break
+                    }
+                    elem = elem.parentNode
+                }
+                const rowButtons = [...elem.querySelectorAll("button")]
+                setLastTabIndex(rowButtons.indexOf(buttonElem))
+                if (elem) {
+                    const all = [
+                        ...stackRef.current.querySelectorAll(".focus-row")
+                    ]
+                    const index = all.indexOf(elem)
+                    setFocusRow(index)
+                }
+                return
+            }
+            let newRow = focusRow + dir
+            if (newRow > maxRow) {
+                newRow = 0
+            } else if (newRow < 0) {
+                newRow = maxRow
+            }
+            setFocusRow(newRow)
+            setLastTabIndex(tabIndex)
+            requestAnimationFrame(refocus)
+        }
+
+        attr.tab = entityIndex.length && catchFocus ? "true" : undefined
+        attr.onFocus = refocus
+        attr.onBlur = onBlur
+
+        getItemActions = (item) => {
+            const buttons = []
+            for (const { action, ...button } of itemActions) {
+                buttons.push({
+                    onPressed: () => action(item, selected, setSelected),
+                    ...button
+                })
+            }
+            return (
+                <ButtonGroup
+                    lastTabIndex={lastTabIndex}
+                    setLastTabIndex={setLastTabIndex}
+                    rowChange={nextRow}
+                    buttons={buttons}
+                    className="focus-row"
+                />
+            )
+        }
+    }
+
+    const elems = []
+    let i = 0
+
+    for (const entity of entities) {
+        const isFocused = hasFocus && i === tabIndex
+
+        const itemCls = new ClassNames("hover:brightness-110", itemClassName)
+        itemCls.addIf(
+            !itemActions,
+            "focus:outline-none focus:ring focus:ring-inset focus:ring-focus-border focus:border-0"
+        )
+        itemCls.addIf(styled && sized, "text-sm")
+        itemCls.addIf(styled && padded, "p-2")
+        itemCls.addIf(!wrap, "truncate")
+        if (styled && colored) {
+            itemCls.addIf(
+                selected.includes(i),
+                "bg-active-bg text-active-text",
+                "bg-input-bg text-input-text"
+            )
+        }
+        const itemAttr = focus.itemAttr(i)
+        itemAttr.style = {
+            cursor: "pointer"
+        }
+        if (isFocused) {
+            itemAttr.style.zIndex = 40
+        }
+        const args = [entity]
+        // if (itemActions) args.push(getItemActions(i))
+        itemCls.add("auto")
+
+        let item = (
+            <Div key={entity.index} className={itemCls.value} {...itemAttr}>
+                {render(...args)}
+            </Div>
+        )
+        if (itemActions) {
+            item = (
+                <div key={entity.index} className="stack-h w-full">
+                    <div className="p-2">{getItemActions(entity.index)}</div>
+                    {item}
+                </div>
+            )
+        }
+        elems.push(item)
+        i++
+    }
+
+    return (
+        <div ref={stackRef} className={cls.value} {...attr} {...divAttr}>
+            {elems.length ? (
+                elems
+            ) : (
+                <Centered className="text-xs text-input-text/75 p-2">
+                    {emptyMsg}
+                </Centered>
+            )}
+        </div>
+    )
+}
+
+function FocusMatrix({}) {
+    const [catchFocus, setCatchFocusRaw] = useState(true)
+    const [focusRow, setFocusRow] = useState(0)
+    const [lastTabIndex, setLastTabIndex] = useState(0)
+    const divRef = useRef()
+
+    const buttons = [{ name: "Mark" }, { name: "Edit" }, { name: "Delete" }]
+
+    const items = ["Foo", "Bar", "Damn"]
+    const setCatchFocus = (value) => setCatchFocusRaw(value)
+
+    const refocus = () => {
+        const elems = divRef.current.querySelectorAll(".focus-row")
+        const elem = elems[focusRow].querySelector(".tabbed")
+        elem.focus()
+        setCatchFocus(false)
+    }
+
+    const onBlur = () => {
+        requestAnimationFrame(() => {
+            if (!divRef.current.contains(document.activeElement)) {
+                setCatchFocus(true)
+                setLastTabIndex(0)
+                setFocusRow(0)
+            }
+        })
+    }
+
+    const nextRow = (key, dir, tabIndex) => {
+        const maxRow = items.length - 1
+        if (key === "tab") {
+            const all = [...document.querySelectorAll(".tabbed")]
+            if (dir === -1) all.reverse()
+
+            let found = false
+            for (const elem of all) {
+                if (elem === divRef.current || divRef.current.contains(elem)) {
+                    found = true
+                } else if (found) {
+                    elem.focus()
+                    break
+                }
+            }
+            return
+        } else if (key === "row") {
+            let elem = dir
+            let buttonElem = dir
+            while (!elem.classList.contains("focus-row")) {
+                if (elem.tagName === "BUTTON") buttonElem = elem
+                if (elem === divRef.current) {
+                    elem = null
+                    break
+                }
+                elem = elem.parentNode
+            }
+            const rowButtons = [...elem.querySelectorAll("button")]
+            setLastTabIndex(rowButtons.indexOf(buttonElem))
+            if (elem) {
+                const all = [...divRef.current.querySelectorAll(".focus-row")]
+                const index = all.indexOf(elem)
+                setFocusRow(index)
+            }
+            return
+        }
+        let newRow = focusRow + dir
+        if (newRow > maxRow) {
+            newRow = 0
+        } else if (newRow < 0) {
+            newRow = maxRow
+        }
+        setFocusRow(newRow)
+        setLastTabIndex(tabIndex)
+        requestAnimationFrame(refocus)
+    }
+
+    return (
+        <Div
+            ref={divRef}
+            tab={items.length && catchFocus}
+            className="stack-v gap-2 divide-y"
+            onFocus={refocus}
+            onBlur={onBlur}
+        >
+            {items.map((item) => {
+                return (
+                    <div key={item} className="stack-h items-center">
+                        <ButtonGroup
+                            lastTabIndex={lastTabIndex}
+                            setLastTabIndex={setLastTabIndex}
+                            rowChange={nextRow}
+                            buttons={buttons}
+                            className="focus-row"
+                        />
+                        <div className="p-2">{item}</div>
+                    </div>
+                )
+            })}
+        </Div>
+    )
+}
+
+function HeaderEditForm({ model, close, store, edit }) {
+    const [value, setValue] = useState(model.value)
+    const [type, setType] = useState(model.type)
+    const [headerValue, setHeaderValue] = useState(model.headerValue)
+    const typeOptions = [{ id: "fix", name: "Constant" }]
+    return (
+        <OkCancelLayout
+            ok={() => {
+                store({ value, type, headerValue })
+            }}
+            cancel={() => close()}
+        >
+            <FormGrid>
+                <InputCells
+                    name="Name"
+                    value={value}
+                    set={setValue}
+                    autoFocus={!edit}
+                    required
+                />
+                <SelectCells
+                    name="Type"
+                    value={type}
+                    set={setType}
+                    options={typeOptions}
+                />
+                <InputCells
+                    name="Value"
+                    value={headerValue}
+                    set={setHeaderValue}
+                    required
+                    autoFocus={edit}
+                />
+            </FormGrid>
+        </OkCancelLayout>
+    )
+}
+
+function HeaderStack({ headerIndex }) {
+    const EditModal = useModalWindow()
+
+    const actions = [
+        {
+            icon: "add",
+            name: "New",
+            op: {
+                exec: () => {
+                    EditModal.open({
+                        model: {
+                            name: "",
+                            type: "fix",
+                            headerValue: ""
+                        },
+                        store: (newModel) => {
+                            headerIndex.setEntityObject(newModel)
+                            EditModal.close()
+                        }
+                    })
+                }
+            }
+        }
+    ]
+
+    const itemActions = [
+        {
+            icon: "edit",
+            action: (index) => {
+                const model = headerIndex.getEntityObject(index)
+                EditModal.open({
+                    model,
+                    edit: true,
+                    store: (newModel) => {
+                        headerIndex.setEntityObject(
+                            { ...model, ...newModel },
+                            true
+                        )
+                        EditModal.close()
+                    }
+                })
+            }
+        },
+        {
+            icon: "delete",
+            action: (index) => {
+                headerIndex.deleteEntity(index)
+            }
+        }
+    ]
+    return (
+        <>
+            <EntityStack
+                entityIndex={headerIndex}
+                actions={actions}
+                itemActions={itemActions}
+                render={(item) => (
+                    <div className="stack-v">
+                        <div className="text-xs opacity-50">{item.value}:</div>
+                        <pre>{item.headerValue}</pre>
+                    </div>
+                )}
+            />
+
+            <EditModal.content>
+                <HeaderEditForm {...EditModal.props} />
+            </EditModal.content>
+        </>
+    )
+}
+
+function QueryEditForm({ model, close, store, edit }) {
+    const [value, setValue] = useState(model.value)
+    const [type, setType] = useState(model.type)
+    const [queryValue, setQueryValue] = useState(model.queryValue)
+    const typeOptions = [{ id: "fix", name: "Constant" }]
+    return (
+        <OkCancelLayout
+            ok={() => {
+                store({ value, type, queryValue })
+            }}
+            cancel={() => close()}
+        >
+            <FormGrid>
+                <InputCells
+                    name="Name"
+                    value={value}
+                    set={setValue}
+                    autoFocus={!edit}
+                    required
+                />
+                <SelectCells
+                    name="Type"
+                    value={type}
+                    set={setType}
+                    options={typeOptions}
+                />
+                <InputCells
+                    name="Value"
+                    value={queryValue}
+                    set={setQueryValue}
+                    required
+                    autoFocus={edit}
+                />
+            </FormGrid>
+        </OkCancelLayout>
+    )
+}
+
+function QueryStack({ queryIndex }) {
+    const EditModal = useModalWindow()
+
+    const actions = [
+        {
+            icon: "add",
+            name: "New",
+            op: {
+                exec: () => {
+                    EditModal.open({
+                        model: {
+                            name: "",
+                            type: "fix",
+                            queryValue: ""
+                        },
+                        store: (newModel) => {
+                            queryIndex.setEntityObject(newModel)
+                            EditModal.close()
+                        }
+                    })
+                }
+            }
+        }
+    ]
+
+    const itemActions = [
+        {
+            icon: "edit",
+            action: (index) => {
+                const model = queryIndex.getEntityObject(index)
+                EditModal.open({
+                    model,
+                    edit: true,
+                    store: (newModel) => {
+                        queryIndex.setEntityObject(
+                            { ...model, ...newModel },
+                            true
+                        )
+                        EditModal.close()
+                    }
+                })
+            }
+        },
+        {
+            icon: "delete",
+            action: (index) => {
+                queryIndex.deleteEntity(index)
+            }
+        }
+    ]
+    return (
+        <>
+            <EntityStack
+                entityIndex={queryIndex}
+                actions={actions}
+                itemActions={itemActions}
+                render={(item) => (
+                    <div className="stack-v">
+                        <div className="text-xs opacity-50">{item.value}:</div>
+                        <pre>{item.queryValue}</pre>
+                    </div>
+                )}
+            />
+
+            <EditModal.content>
+                <QueryEditForm {...EditModal.props} />
+            </EditModal.content>
+        </>
     )
 }
 
@@ -990,5 +1564,8 @@ export {
     JsonTextarea,
     ColorBox,
     EntityList,
-    EntityStack
+    EntityStack,
+    FocusMatrix,
+    HeaderStack,
+    QueryStack
 }

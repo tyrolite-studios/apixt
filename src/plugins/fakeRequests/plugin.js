@@ -2,7 +2,7 @@ import { AbstractPlugin, PluginRegistry } from "core/plugin"
 import { CMD } from "core/tree"
 import { d } from "core/helper"
 
-const fakeResponse = [
+const responseStream = [
     { cmd: CMD.OPEN_SECTION, name: "Application" },
     {
         cmd: CMD.ADD_DUMP,
@@ -14,13 +14,13 @@ const fakeResponse = [
     {
         cmd: CMD.ADD_CODE_BLOCK,
         name: "Http Header",
-        html: "<pre>Content-Type: application/json</pre>"
+        content: "<pre>Content-Type: application/json</pre>"
     },
     { cmd: CMD.CLOSE_SECTION_DETAILS },
     {
         cmd: CMD.ADD_CODE_BLOCK,
         name: "Http Request",
-        html: JSON.stringify({
+        content: JSON.stringify({
             foo: "bar",
             "fooo-3": { number: 666, hack: true }
         }),
@@ -55,13 +55,14 @@ const fakeResponse = [
     {
         cmd: CMD.ADD_CODE_BLOCK,
         name: "Http Header",
-        html: "<pre>Content-Type: application/json</pre>"
+        content: "<pre>Content-Type: application/json</pre>"
     },
     { cmd: CMD.CLOSE_SECTION_DETAILS },
     {
         cmd: CMD.ADD_CODE_BLOCK,
-        name: "Http Request",
-        html: JSON.stringify({
+        name: "Http Response",
+        tags: ["api.response"],
+        content: JSON.stringify({
             foo: "bar",
             "fooo-3": { number: 666, hack: true }
         }),
@@ -88,13 +89,13 @@ const errorResponse = [
     {
         cmd: CMD.ADD_CODE_BLOCK,
         name: "Http Header",
-        html: "<pre>Content-Type: application/json</pre>"
+        content: "<pre>Content-Type: application/json</pre>"
     },
     { cmd: CMD.CLOSE_SECTION_DETAILS },
     {
         cmd: CMD.ADD_CODE_BLOCK,
         name: "Http Request",
-        html: JSON.stringify({
+        content: JSON.stringify({
             foo: "bar",
             "fooo-3": { number: 666, hack: true }
         }),
@@ -114,14 +115,14 @@ const errorResponse = [
     {
         cmd: CMD.ADD_CODE_BLOCK,
         name: "Http Header",
-        html: "<pre>Content-Type: application/json</pre>"
+        content: "<pre>Content-Type: application/json</pre>"
     },
     { cmd: CMD.CLOSE_SECTION_DETAILS },
     {
         cmd: CMD.ADD_CODE_BLOCK,
         name: "Http Request",
         mime: "text/json",
-        html: JSON.stringify({
+        content: JSON.stringify({
             foo: "bar",
             "fooo-3": { number: 666, hack: true }
         })
@@ -153,12 +154,31 @@ class Plugin extends AbstractPlugin {
         this.addHeaderButton({ id: "error", name: "Fake error..." })
         this.setButtonHandler("load", ({ ctx }) => {
             ctx.startContentStream({
-                response: fakeResponse
+                path: "/fake/response",
+                method: "GET",
+                responseStream: {
+                    lines: responseStream,
+                    speed: 200,
+                    status: 200
+                },
+                response: {
+                    status: 200,
+                    body: {
+                        foo: "bar",
+                        woo: "boo",
+                        "fooo-3": { number: 766 }
+                    }
+                }
             })
         })
         this.setButtonHandler("error", ({ ctx }) => {
             ctx.startContentStream({
-                response: errorResponse
+                path: "/fake/error",
+                method: "GET",
+                responseStream: {
+                    lines: errorResponse,
+                    speed: 200
+                }
             })
         })
     }

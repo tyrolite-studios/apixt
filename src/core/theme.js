@@ -57,14 +57,12 @@ extractKeys2types(defaultTheme)
 
 let currentTheme = null
 let backup = null
-let storage = null
 
 const manager = {
     init: () => {
-        storage = window.controller.globalStorage
-
+        const globalStorage = window.controller.globalStorage
         currentTheme = { ...defaultTheme }
-        const storedTheme = storage && storage.getJson("theme")
+        const storedTheme = globalStorage && globalStorage.getJson("theme")
         if (storedTheme) {
             for (const [key, value] of Object.entries(storedTheme)) {
                 const defaultValue = defaultTheme[key]
@@ -94,7 +92,8 @@ const manager = {
     },
 
     store: () => {
-        storage.setJson("theme", currentTheme)
+        const globalStorage = window.controller.globalStorage
+        globalStorage.setJson("theme", currentTheme)
     },
 
     applyProp: (key, value, elem = root) => {

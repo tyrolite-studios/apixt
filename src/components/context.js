@@ -1,15 +1,23 @@
 import { createContext, useState, useRef, useContext, useEffect } from "react"
 import { treeBuilder } from "core/tree"
-import { getHttpStreamPromise } from "core/http"
+import {
+    startAbortableApiRequestStream,
+    startAbortableApiBodyRequest,
+    isMethodWithRequestBody
+} from "core/http"
 import { useComponentUpdate, useLoadingSpinner } from "./common"
-import { d } from "core/helper"
-import { HOOKS, PluginRegistry } from "../core/plugin"
+import { d, getPathInfo, apply, md5 } from "core/helper"
+import { HOOKS, PluginRegistry } from "core/plugin"
 import {
     defaultApiSettings,
     defaultGlobalSettings,
     defaultKeyBindings
 } from "./settings"
-import { apply } from "../core/helper"
+import { EntityIndex, AssignmentIndex } from "core/entity"
+import { ConstantIndex } from "entities/constants"
+import { useModalWindow } from "./modal"
+import { OkCancelLayout } from "./layout"
+import { Input } from "./form"
 
 const controller = window.controller
 const AppContext = createContext(null)
@@ -46,6 +54,111 @@ function SpinnerDiv() {
     }, [])
 
     return <>{LoadingSpinner.Modal}</>
+}
+
+function Prompt({ close, prompts, assign }) {
+    const [inputs, setInputs] = useState(() => {
+        const values = []
+        while (values.length < prompts.length) {
+            values.push("")
+        }
+        return values
+    })
+
+    const elems = []
+    let i = 0
+    while (i < prompts.length) {
+        const idx = i
+
+        const [question] = prompts[idx]
+        elems.push(
+            <div key={question} className="stack-v gap-2 text-sm">
+                <div>{question}</div>
+                <Input
+                    required
+                    value={inputs[idx]}
+                    set={(value) => {
+                        const newValues = [...inputs]
+                        newValues[idx] = value
+                        setInputs(newValues)
+                    }}
+                />
+            </div>
+        )
+        i++
+    }
+
+    return (
+        <OkCancelLayout
+            cancel={close}
+            submit={true}
+            ok={() => {
+                assign(inputs)
+            }}
+        >
+            <div className="p-4 stack-v gap-2">{elems}</div>
+        </OkCancelLayout>
+    )
+}
+
+function PromptDiv() {
+    const aContext = useContext(AppContext)
+    const PromptModal = useModalWindow()
+    useEffect(() => {
+        aContext.register("openPrompt", PromptModal.open)
+        aContext.register("closePrompt", PromptModal.close)
+    }, [])
+    return (
+        <>
+            <PromptModal.content name="Prompt">
+                <Prompt {...PromptModal.props} />
+            </PromptModal.content>
+        </>
+    )
+}
+
+class RouteIndex extends EntityIndex {
+    constructor(routes) {
+        super()
+        this.model = routes
+        this.items = routes.map((route) => route.path)
+    }
+
+    getEntityProps() {
+        return [...super.getEntityProps(), "path", "methods"]
+    }
+
+    getEntityValue(index) {
+        return this.items[index].path
+    }
+
+    getEntityPropValue(index, prop) {
+        if (prop === "path") {
+            return this.model[index].path
+        }
+        if (prop === "methods") return this.model[index].methods
+        return super.getEntityPropValue(index, prop)
+    }
+}
+
+function registerRouteApi({ config }) {
+    const routeIndex = new RouteIndex(config.routes)
+
+    const getMatchingRoutePath = (resolvedPath, method) => {
+        for (const { path, methods } of routeIndex.getEntityObjects()) {
+            if (!methods.includes(method)) continue
+
+            const pathInfo = getPathInfo(path)
+            const pathRegexp = new RegExp(pathInfo.regexp)
+            if (pathRegexp.test(resolvedPath)) return pathInfo
+        }
+        return null
+    }
+
+    return {
+        routeIndex,
+        getMatchingRoutePath
+    }
 }
 
 /*
@@ -362,26 +475,174 @@ function registerSettingsApi({ registry, register, apiRef }) {
 /*
  * The content API controlls the content area of the API extender where the content from the API is loaded
  */
-function registerContentApi({ registry, register }) {
+function registerContentApi({ registry, register, apiRef }) {
     register("treeBuilder", treeBuilder)
+    register("lastStatus", null)
+    register("lastAssignments", null)
+    register("streamAbort", null)
 
-    const startContentStream = (request) => {
-        PluginRegistry.applyHooks(HOOKS.FETCH_CONTENT, request)
+    const baseHeaderIndex = new AssignmentIndex(
+        registry("apiStorage").getJson("baseHeaders", {})
+    )
+    register("baseHeaderIndex", baseHeaderIndex)
+    const getAssignments = (
+        section,
+        assignments = {},
+        defaults = {},
+        prompts
+    ) => {
+        const resolved = {}
+        const resolveAssignment = (key, value, type) => {
+            switch (type) {
+                case "set":
+                    resolved[key] = value
+                    break
 
-        const { treeBuilder, spinner, config } = registry()
-        treeBuilder.reset()
+                case "const":
+                    resolved[key] = apiRef.current.getConstValue(value)
+                    break
 
+                case "prompt":
+                    if (prompts[value] === undefined) {
+                        prompts[value] = { key, targets: [] }
+                    }
+                    prompts[value].targets.push(section)
+                    break
+
+                case "extract":
+                    break
+            }
+        }
+        for (const [key, assignment] of Object.entries(assignments)) {
+            const { type, assignmentValue } = assignment
+
+            if (type === "default") {
+                const defaultValue = defaults[key]
+                resolveAssignment(
+                    key,
+                    defaultValue.assignmentValue,
+                    defaultValue.type
+                )
+            } else {
+                resolveAssignment(key, assignmentValue, type)
+            }
+        }
+        return { resolved }
+    }
+
+    const startContentStream = (
+        request,
+        assignments = {},
+        overwriteHeaders = {}
+    ) => {
         register("lastRequest", request)
-        const httpStream = getHttpStreamPromise(config, request)
-        register("streamAbort", httpStream.abort)
-        const promise = treeBuilder
-            .processStream(httpStream)
-            .finally(() => register("streamAbort", null))
+        register("lastAssignments", assignments)
+        register("lastStatus", null)
 
-        spinner.start(promise, () => {
-            httpStream.abort()
-            treeBuilder.abort()
-        })
+        const {
+            treeBuilder,
+            spinner,
+            config,
+            baseHeaderIndex,
+            history,
+            openPrompt,
+            closePrompt
+        } = registry()
+
+        const prompts = {}
+        const extracts = {}
+
+        const { path, method, body, ...options } = request
+
+        const pathMatch = apiRef.current.getMatchingRoutePath(path, method)
+        const defaults = pathMatch
+            ? { headers: apiRef.current.getBaseHeaderIndex().model }
+            : {}
+
+        const queryAssignments = getAssignments(
+            "query",
+            assignments.query,
+            defaults.query,
+            prompts
+        )
+        const headersAssignments = getAssignments(
+            "headers",
+            assignments.headers,
+            defaults.headers,
+            prompts
+        )
+        const hasBody = isMethodWithRequestBody(method)
+        const bodyAssignments = !hasBody
+            ? {}
+            : getAssignments("body", assignments.body, defaults.body, prompts)
+
+        const fireRequest = (resHeaders, resQuery) => {
+            history.push2history(request, assignments)
+            treeBuilder.reset()
+
+            const query = new URLSearchParams(resQuery).toString()
+            const httpStream = startAbortableApiRequestStream(config.baseUrl, {
+                method,
+                path,
+                query,
+                headers: {
+                    ...resHeaders,
+                    ...overwriteHeaders,
+                    [config.dumpHeader]: "cmd"
+                },
+                body: !hasBody
+                    ? ""
+                    : JSON.stringify({
+                          ...JSON.parse(body),
+                          ...bodyAssignments.resolved
+                      }),
+                ...options
+            })
+            register("streamAbort", httpStream.abort)
+            const promise = treeBuilder
+                .processStream(httpStream)
+                .finally(() => {
+                    register("lastStatus", httpStream.status)
+                    register("streamAbort", null)
+                })
+            spinner.start(promise, () => {
+                httpStream.abort()
+                treeBuilder.abort()
+            })
+        }
+
+        const promptEntries = Object.entries(prompts)
+        if (promptEntries.length) {
+            openPrompt({
+                prompts: promptEntries,
+                assign: (values) => {
+                    const headers = {}
+                    const query = {}
+                    let i = 0
+                    while (i < promptEntries.length) {
+                        const [, assignments] = promptEntries[i]
+
+                        const value = values[i]
+                        const { key, targets } = assignments
+                        for (const target of targets) {
+                            if (target === "headers") {
+                                headers[key] = value
+                            } else if (target === "query") {
+                                query[key] = value
+                            }
+                        }
+                        i++
+                    }
+                    fireRequest(
+                        { ...headersAssignments.resolved, ...headers },
+                        { ...queryAssignments.resolved, ...query }
+                    )
+                    closePrompt()
+                }
+            })
+        } else {
+            fireRequest(headersAssignments.resolved, queryAssignments.resolved)
+        }
     }
 
     const restartContentStream = (overwrites = {}) => {
@@ -409,10 +670,34 @@ function registerContentApi({ registry, register }) {
         haltContentStream: (hash) => {
             restartContentStream({ headers: { "Tls-Apixt-Halt": hash } })
         },
+        getRawContentPromise: (baseUrl) => {
+            const { lastRequest } = registry()
+
+            const { headers = {}, ...options } = lastRequest
+            for (const {
+                value,
+                headerValue,
+                type
+            } of baseHeaderIndex.getEntityObjects()) {
+                if (value in headers) continue
+
+                if (type === "fix") {
+                    headers[value] = headerValue
+                }
+            }
+
+            return startAbortableApiBodyRequest(baseUrl, {
+                headers,
+                ...options,
+                expect: () => true
+            })
+        },
         clearContent: () => {
             const { treeBuilder } = registry()
             treeBuilder.reset()
-        }
+        },
+        getLastStatus: () => registry("lastStatus"),
+        getBaseHeaderIndex: () => registry("baseHeaderIndex")
     }
 }
 
@@ -515,6 +800,114 @@ function registerEventManagementApi({ registry, register }) {
     }
 }
 
+function registerConstantsApi({ registry, register }) {
+    const { apiStorage } = registry()
+
+    const constants = apiStorage.getJson("constants", {
+        u88hwenbweuqw: {
+            name: "Dev User Token",
+            constValue: "42683e2f-bacb-4e1a-a60c-73b15c67624b",
+            envVars: {}
+        }
+    })
+    const constantIndex = new ConstantIndex(constants)
+    const getConstName = (id) => {
+        const index = constantIndex.getEntityByPropValue("value", id)
+        return constantIndex.getEntityPropValue(index, "name")
+    }
+    const getConstValue = (id) => {
+        const index = constantIndex.getEntityByPropValue("value", id)
+        return constantIndex.getEntityPropValue(index, "constValue")
+    }
+    const getConstOptions = () => {
+        const options = []
+        const items = constantIndex.getEntityObjects()
+        for (const { value, name } of items) {
+            options.push({ id: value, name })
+        }
+        return options
+    }
+    return {
+        constantIndex,
+        getConstName,
+        getConstValue,
+        getConstOptions
+    }
+}
+
+function registerHistoryApi({ registry, register }) {
+    const { apiStorage } = registry()
+
+    const history = apiStorage.getJson("requestHistory", [])
+
+    const restrictHistory = () => {
+        while (history.length > 10) {
+            history.pop()
+        }
+    }
+
+    const push2history = (request, assignments) => {
+        const hash = md5(request)
+        let i = 0
+        while (i < history.length && history[i].hash !== hash) i++
+
+        if (i < history.length) {
+            history.splice(i, 1)
+        }
+        history.unshift({
+            timestamp: Date.now(),
+            request,
+            assignments,
+            hash
+        })
+        restrictHistory()
+        apiStorage.setJson("requestHistory", history)
+    }
+
+    register("history", { push2history })
+
+    const getLastPathParams = (path) => {
+        const pathInfo = getPathInfo(path)
+        if (!pathInfo.varCount) return []
+
+        const matchExpr = new RegExp(pathInfo.regexp)
+
+        for (const { request } of history) {
+            const matches = matchExpr.exec(request.path)
+            if (matches === null) continue
+
+            const result = []
+            let i = 0
+            while (i < pathInfo.varCount) {
+                i++
+                result.push(matches[i])
+            }
+            return result
+        }
+        return []
+    }
+
+    const getLastRouteMatch = (method, pathInfo) => {
+        const matchExpr = new RegExp(pathInfo.regexp)
+
+        for (const { request, assignments } of history) {
+            const matches = matchExpr.exec(request.path)
+            if (matches !== null && request.method === method)
+                return {
+                    request,
+                    assignments
+                }
+        }
+    }
+
+    return {
+        history,
+        push2history,
+        getLastPathParams,
+        getLastRouteMatch
+    }
+}
+
 function AppCtx({ config, children }) {
     const registryRef = useRef()
     const apiRef = useRef()
@@ -539,14 +932,17 @@ function AppCtx({ config, children }) {
             spinner: null
         }
 
-        const registration = { register, registry, apiRef }
+        const registration = { register, registry, apiRef, config }
 
         apiRef.current = {
             ...registerSettingsApi(registration),
             ...registerEventManagementApi(registration),
+            ...registerRouteApi(registration),
             ...registerContentApi(registration),
+            ...registerHistoryApi(registration),
             ...registerModalApi(registration),
             ...registerHotkeyApi(registration),
+            ...registerConstantsApi(registration),
 
             config: registry("config"),
             version: registry("version"),
@@ -560,6 +956,7 @@ function AppCtx({ config, children }) {
     return (
         <AppContext.Provider value={apiRef.current}>
             <>
+                <PromptDiv key="pd" />
                 <SpinnerDiv key="sd" />
                 <FixCursorArea key="em" />
                 {children}

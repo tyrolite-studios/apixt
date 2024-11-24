@@ -5,6 +5,7 @@ module.exports = {
         permanent: true,
         storePrefix: "tls.apixt.",
         jwtCookieKey: "tls.apixt.dev-api",
+        dumpHeader: "Tls-Apixt-Dump",
         routes: [],
         hostingApi: {
             language: { name: "nodejs", version: "TODO" },
