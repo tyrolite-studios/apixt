@@ -8,20 +8,23 @@ import { getPathParams, d } from "core/helper"
 import { EntityIndex } from "core/entity"
 import { EntityStack } from "components/common"
 import { RoutePath } from "../routeSelector/components"
+import { RenderWithAssignments } from "../../components/assignments"
 
 function HistoryWidget({}) {
     const aContext = useContext(AppContext)
     const routePlugin = PluginRegistry.getActivePlugin("routeSelector")
 
     const elems = []
-    for (const { request } of aContext.history) {
+    for (const { request, assignments } of aContext.history) {
         if (elems.length > 10) break
 
         elems.push(
             <div key={elems.length} className="py-1 stack-h gap-x-2 w-full">
                 <pre
                     className="auto cursor-pointer"
-                    onClick={() => aContext.startContentStream(request)}
+                    onClick={() =>
+                        aContext.startContentStream(request, assignments)
+                    }
                 >
                     {request.method} {request.path}
                 </pre>
@@ -36,12 +39,8 @@ function HistoryWidget({}) {
                                 )
                                 if (pathInfo) {
                                     routePlugin.openEditor({
-                                        path: pathInfo.path,
-                                        params: getPathParams(
-                                            pathInfo,
-                                            request.path
-                                        ),
-                                        method: request.method
+                                        request,
+                                        assignments
                                     })
                                 }
                             }}
@@ -72,11 +71,16 @@ class HistoryIndex extends EntityIndex {
     }
 
     getEntityProps() {
-        return [...super.getEntityProps(), "timestamp", "request"]
+        return [
+            ...super.getEntityProps(),
+            "timestamp",
+            "request",
+            "assignments"
+        ]
     }
 
     getEntityPropValue(index, prop) {
-        if (["timestamp", "request"].includes(prop)) {
+        if (["timestamp", "request", "assignments"].includes(prop)) {
             return this.model[index][prop]
         }
         return super.getEntityPropValue(index, prop)
@@ -99,20 +103,14 @@ function History({ close }) {
         {
             icon: "edit",
             action: (index) => {
-                const request = historyIndex.getEntityPropValue(
-                    index,
-                    "request"
-                )
+                const { request, assignments = {} } =
+                    historyIndex.getEntityObject(index)
                 const pathInfo = aContext.getMatchingRoutePath(
                     request.path,
                     request.method
                 )
                 if (pathInfo) {
-                    routePlugin.openEditor({
-                        path: pathInfo.path,
-                        params: getPathParams(pathInfo, request.path),
-                        method: request.method
-                    })
+                    routePlugin.openEditor({ request, assignments })
                 }
                 close()
             }
@@ -120,8 +118,9 @@ function History({ close }) {
         {
             icon: "east",
             action: (index) => {
-                const { request } = historyIndex.getEntityObject(index)
-                aContext.startContentStream(request)
+                const { request, assignments } =
+                    historyIndex.getEntityObject(index)
+                aContext.startContentStream({ request, assignments })
                 close()
             }
         },
@@ -152,7 +151,12 @@ function History({ close }) {
                             }
                             actions={actions}
                             itemActions={actionItems}
-                            render={({ timestamp, request, hash }) => {
+                            render={({
+                                timestamp,
+                                request,
+                                assignments,
+                                hash
+                            }) => {
                                 const pathInfo = aContext.getMatchingRoutePath(
                                     request.path,
                                     request.method
@@ -161,31 +165,37 @@ function History({ close }) {
                                     ? getPathParams(pathInfo, request.path)
                                     : []
                                 return (
-                                    <div
+                                    <RenderWithAssignments
                                         key={hash}
-                                        className="stack-h w-full gap-2"
+                                        mode={1}
+                                        method={method}
+                                        request={request}
+                                        assignments={assignments}
+                                        className="w-full"
                                     >
-                                        <div className="opacity-50">
-                                            {method}
+                                        <div className="w-full gap-2 stack-h">
+                                            <div className="opacity-50">
+                                                {method}
+                                            </div>
+                                            <div className="auto">
+                                                {pathInfo && (
+                                                    <RoutePath
+                                                        path={pathInfo.path}
+                                                        params={params}
+                                                    />
+                                                )}
+                                                {!pathInfo && request.path}
+                                            </div>
+                                            <div className="opacity-50 text-xs">
+                                                {new Date(
+                                                    timestamp
+                                                ).toLocaleDateString()}{" "}
+                                                {new Date(
+                                                    timestamp
+                                                ).toLocaleTimeString()}
+                                            </div>
                                         </div>
-                                        <div className="auto">
-                                            {pathInfo && (
-                                                <RoutePath
-                                                    path={pathInfo.path}
-                                                    params={params}
-                                                />
-                                            )}
-                                            {!pathInfo && request.path}
-                                        </div>
-                                        <div className="opacity-50 text-xs">
-                                            {new Date(
-                                                timestamp
-                                            ).toLocaleDateString()}{" "}
-                                            {new Date(
-                                                timestamp
-                                            ).toLocaleTimeString()}
-                                        </div>
-                                    </div>
+                                    </RenderWithAssignments>
                                 )
                             }}
                         />

@@ -554,7 +554,7 @@ function Select({
         <select
             className={cls.value}
             required={required}
-            defaultValue={!interactive ? tmpValue : null}
+            defaultValue={tmpValue}
             onMouseDown={!interactive ? (e) => e.preventDefault() : onMouseDown}
             onKeyDown={
                 !interactive

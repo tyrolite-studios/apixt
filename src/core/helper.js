@@ -249,6 +249,22 @@ const isValidJson = (str) => {
     }
 }
 
+/**
+ * Returns the given array without the given element or elements (if an array)
+ *
+ * @param {array} source
+ * @param {mixed|array} remove
+ *
+ * @returns {array}
+ */
+const without = (source, remove) => {
+    if (!Array.isArray(remove)) remove = [remove]
+
+    return remove.length
+        ? source.filter((x) => !remove.includes(x))
+        : [...source]
+}
+
 function clamp(min, curr, max) {
     const minValue = min === null ? curr : Math.max(min, curr)
     if (max == null) return minValue
@@ -318,7 +334,7 @@ function getPathInfo(path) {
                 value: pathPart.substring(1),
                 ref: varIndex
             })
-            regexp += "\\/([^\\/:?]+)"
+            regexp += "\\/([^\\/:?]*)"
         } else {
             pathComponents.push({ fix: true, value: pathPart })
             regexp += "\\/" + pathPart
@@ -348,6 +364,22 @@ function getPathParams(pathInfo, path) {
         result.push(matches[i])
     }
     return result
+}
+
+function getResolvedPath(path, params, strict = false) {
+    const pathInfo = getPathInfo(path)
+    if (!pathInfo.varCount) return path
+
+    if (strict && pathInfo.varCount !== params.length)
+        throw Error(
+            `Path ${path} requires ${pathInfo.varCount} parameters but only got ${params.length}`
+        )
+
+    let resolved = []
+    for (const { fix, value, ref } of pathInfo.components) {
+        resolved.push(fix ? value : params[ref] ?? "")
+    }
+    return "/" + resolved.join("/")
 }
 
 const replacer = (key, value) =>
@@ -509,10 +541,12 @@ export {
     isInRange,
     isValidJson,
     isEventInRect,
+    without,
     clamp,
     round,
     getPathInfo,
     getPathParams,
+    getResolvedPath,
     extractFullClasses,
     ClassNames,
     Attributes,

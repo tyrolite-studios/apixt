@@ -61,6 +61,7 @@ const responseStream = [
     {
         cmd: CMD.ADD_CODE_BLOCK,
         name: "Http Response",
+        tags: ["api.response"],
         content: JSON.stringify({
             foo: "bar",
             "fooo-3": { number: 666, hack: true }

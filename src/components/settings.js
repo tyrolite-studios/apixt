@@ -12,20 +12,23 @@ import {
     SectionCells,
     Slider,
     Number,
-    Picker,
     ColorCells,
-    SliderCells,
-    ButtonGroup,
-    FormContext
+    SliderCells
 } from "./form"
 import { useConfirmation, EntityStack } from "./common"
 import { AppContext } from "./context"
-import { Div, Tabs, Tab, Stack, OkCancelLayout, Centered } from "./layout"
+import { Div, Tabs, Tab, Stack, OkCancelLayout, Centered, Icon } from "./layout"
 import { d, isString, cloneDeep } from "core/helper"
 import { useModalWindow } from "./modal"
 import themeManager from "core/theme"
-import { MappingIndex, SimpleMappingIndex } from "../core/entity"
+import {
+    MappingIndex,
+    SimpleMappingIndex,
+    extractLcProps
+} from "../core/entity"
 import { ClassNames } from "../core/helper"
+import { ConstantStack } from "entities/constants"
+import { ApiEnvIndex } from "entities/api-envs"
 
 const root = document.documentElement
 
@@ -156,23 +159,21 @@ function About() {
 }
 
 function NewApiEnv({ close, model, save, reserved = [] }) {
-    const [value, setValue] = useState(model?.value || "")
-    const [url, setUrl] = useState(model?.url || "")
-    const [cors, setCors] = useState(
-        model?.cors === undefined ? false : model.cors
-    )
+    const [name, setName] = useState(model.name)
+    const [url, setUrl] = useState(model.url)
+    const [cors, setCors] = useState(model.cors ?? true)
     return (
         <OkCancelLayout
             cancel={close}
-            ok={() => save({ value, url, cors })}
+            ok={() => save({ name, url, cors })}
             submit
         >
             <FormGrid className="p-4">
                 <InputCells
                     name="Name:"
-                    value={value}
-                    set={setValue}
-                    isValid={(value) => !reserved.includes(value)}
+                    value={name}
+                    set={setName}
+                    isValid={(value) => !reserved.includes(value.toLowerCase())}
                     autoFocus
                     required
                 />
@@ -192,11 +193,21 @@ function ApiEnvStack({ entityIndex }) {
             name: "New",
             op: {
                 exec: () => {
-                    const reserved = entityIndex.getPropValues("value")
+                    const model = {
+                        value: crypto.randomUUID(),
+                        name: "",
+                        cors: true,
+                        url: ""
+                    }
+                    const reserved = extractLcProps(entityIndex, "name")
                     NewEnvModal.open({
+                        model,
                         reserved,
-                        save: (model) => {
-                            entityIndex.setEntityObject(model)
+                        save: (newModel) => {
+                            entityIndex.setEntityObject({
+                                ...model,
+                                ...newModel
+                            })
                             NewEnvModal.close()
                         }
                     })
@@ -209,10 +220,9 @@ function ApiEnvStack({ entityIndex }) {
                 exec: (selected) => {
                     const index = selected[0]
                     const model = entityIndex.getEntityObject(index)
-                    const reserved = entityIndex
-                        .getPropValues("value")
-                        .filter((x) => x !== model.value)
+                    const reserved = extractLcProps(entityIndex, "name", model)
                     NewEnvModal.open({
+                        edit: true,
                         model,
                         reserved,
                         save: (newModel) => {
@@ -241,6 +251,30 @@ function ApiEnvStack({ entityIndex }) {
             }
         }
     ]
+    const itemActions = [
+        {
+            icon: "edit",
+            action: (index) => {
+                const model = entityIndex.getEntityObject(index)
+                const reserved = extractLcProps(entityIndex, "name", model)
+                NewEnvModal.open({
+                    edit: true,
+                    model,
+                    reserved,
+                    save: (newModel) => {
+                        entityIndex.setEntityObject(
+                            {
+                                ...model,
+                                ...newModel
+                            },
+                            true
+                        )
+                        NewEnvModal.close()
+                    }
+                })
+            }
+        }
+    ]
 
     return (
         <>
@@ -249,15 +283,16 @@ function ApiEnvStack({ entityIndex }) {
                     "No API environments available. Add one by clicking on the new button above"
                 }
                 entityIndex={entityIndex}
-                render={({ value, url }) => (
-                    <Stack vertical key={value} className="">
-                        <div className="text-sm">{value}</div>
+                render={({ name, url }) => (
+                    <Stack vertical key={name} className="">
+                        <div className="text-sm">{name}</div>
                         <div className="text-app-text text-xs">
                             URL: <span className="text-app-text/50">{url}</span>
                         </div>
                     </Stack>
                 )}
                 actions={actions}
+                itemActions={itemActions}
             />
 
             <NewEnvModal.content name="New API environment">
@@ -268,6 +303,7 @@ function ApiEnvStack({ entityIndex }) {
 }
 
 function General({ general, setGeneral, apiEnvIndex }) {
+    const aContext = useContext(AppContext)
     const getGeneralSetter = (prop) => {
         return (value) => {
             const newGeneral = { ...general }
@@ -310,6 +346,14 @@ function General({ general, setGeneral, apiEnvIndex }) {
             <SectionCells name="API environments" />
             <FullCell className="px-2">
                 <ApiEnvStack entityIndex={apiEnvIndex} />
+            </FullCell>
+
+            <SectionCells name="Constants" />
+            <FullCell className="px-2">
+                <ConstantStack
+                    constantIndex={aContext.constantIndex}
+                    apiEnvIndex={apiEnvIndex}
+                />
             </FullCell>
         </FormGrid>
     )
@@ -757,8 +801,10 @@ function Settings({ close }) {
         [aContext.plugins]
     )
     const apiEnvIndex = useMemo(
-        () => new MappingIndex(aContext.apiSettings.apiEnvs, ["url", "cors"]),
-        [aContext.apiSettings.apiEnvs]
+        () =>
+            new ApiEnvIndex(aContext.apiSettings.apiEnvs)[
+                aContext.apiSettings.apiEnvs
+            ]
     )
     const keyBindingsIndex = useMemo(
         () => new SimpleMappingIndex(aContext.keyBindings, "key"),

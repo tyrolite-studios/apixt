@@ -199,7 +199,8 @@ const getWebpackConfig = (name, entryFiles) => {
                 core: path.resolve(baseDir, "src/core") + "/",
                 components: path.resolve(baseDir, "src/components") + "/",
                 plugins: path.resolve(baseDir, "src/plugins") + "/",
-                themes: path.resolve(baseDir, "src/themes") + "/"
+                themes: path.resolve(baseDir, "src/themes") + "/",
+                entities: path.resolve(baseDir, "src/entities") + "/"
             },
             extensions: [".js", ".cjs", ".jsx"]
         },

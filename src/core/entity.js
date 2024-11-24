@@ -1,4 +1,4 @@
-import { d, isFunction, cloneDeep } from "./helper"
+import { d, isFunction, cloneDeep, without } from "./helper"
 
 class EntityIndex {
     constructor() {
@@ -532,10 +532,25 @@ class QueryIndex extends MappingIndex {
     }
 }
 
+class AssignmentIndex extends MappingIndex {
+    constructor(model) {
+        super(model, ["type", "assignmentValue"])
+    }
+}
+
+function extractLcProps(entityIndex, prop, except) {
+    const values = entityIndex.getPropValues(prop).map((x) => x.toLowerCase())
+    if (!except) return values
+
+    return without(values, except[prop].toLowerCase())
+}
+
 export {
     EntityIndex,
     MappingIndex,
     SimpleMappingIndex,
+    AssignmentIndex,
     HeadersIndex,
-    QueryIndex
+    QueryIndex,
+    extractLcProps
 }

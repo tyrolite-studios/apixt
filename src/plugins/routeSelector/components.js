@@ -1,15 +1,15 @@
-import { useMemo, useState } from "react"
+import { useMemo, useState, useContext, useEffect } from "react"
 import { useModalWindow } from "components/modal"
-import { useContext, useEffect } from "react"
 import { AppContext } from "components/context"
-import { Input } from "components/form"
-import { d, getPathInfo } from "core/helper"
+import { Input, Textarea } from "components/form"
+import { d, getPathInfo, getResolvedPath, getPathParams } from "core/helper"
 import { Tabs, Tab, OkCancelLayout } from "components/layout"
-import { EntityStack, HeaderStack, QueryStack } from "components/common"
-import { FormGrid, InputCells, SelectCells, Textarea } from "components/form"
+import { EntityStack } from "components/common"
+import { FormGrid } from "components/form"
 import { isMethodWithRequestBody } from "core/http"
-import { CustomCells, TextareaCells } from "../../components/form"
-import { HeadersIndex, QueryIndex } from "core/entity"
+import { CustomCells } from "components/form"
+import { AssignmentIndex } from "core/entity"
+import { RenderWithAssignments, AssignmentStack } from "components/assignments"
 
 function RoutePath({ path, params = [] }) {
     const parts = path.substring(1).split("/")
@@ -39,29 +39,55 @@ function RoutePath({ path, params = [] }) {
     return <div className="stack-h">{elems}</div>
 }
 
-function RouteLauncher({
-    path,
-    method,
-    params,
-    close,
-    query = {},
-    headers = {},
-    ...props
-}) {
+function getDefaultedAssignments(assignments, defaults) {
+    for (const key of Object.keys(defaults)) {
+        if (assignments[key] !== undefined) continue
+
+        assignments[key] = {
+            type: "default",
+            value: ""
+        }
+    }
+    return assignments
+}
+
+function RouteLauncher({ close, request, assignments = {} }) {
     const aContext = useContext(AppContext)
+
+    const { method } = request
     const pathInfo = useMemo(() => {
-        return getPathInfo(path)
+        return aContext.getMatchingRoutePath(request.path, method)
+    }, [])
+    const params = useMemo(() => {
+        return pathInfo ? getPathParams(pathInfo, request.path) : []
+    })
+    const supportsBody = isMethodWithRequestBody(method)
+    const [body, setBody] = useState(
+        supportsBody ? request.body ?? "" : undefined
+    )
+    const defaults = useMemo(() => {
+        // TODO get from defaults associated with the pathMatch
+        return {
+            headers: pathInfo ? aContext.getBaseHeaderIndex().model : {},
+            query: {},
+            body: {}
+        }
     }, [])
 
-    const headerIndex = useMemo(() => {
-        return new HeadersIndex(headers)
+    const queryAssignmentIndex = useMemo(() => {
+        return new AssignmentIndex(
+            getDefaultedAssignments(assignments.query ?? {}, defaults.query)
+        )
     }, [])
-    const queryIndex = useMemo(() => {
-        return new QueryIndex(query)
+    const headersAssignmentIndex = useMemo(() => {
+        return new AssignmentIndex(
+            getDefaultedAssignments(assignments.headers ?? {}, defaults.headers)
+        )
     }, [])
-    const [body, setBody] = useState(
-        isMethodWithRequestBody(method) ? props.body ?? "" : undefined
-    )
+    const bodyAssignmentIndex = useMemo(() => {
+        return new AssignmentIndex(assignments.body ?? {})
+    }, [])
+
     const [pathParams, setPathParams] = useState(() => {
         const { varCount } = pathInfo
         if (!varCount) return []
@@ -71,8 +97,8 @@ function RouteLauncher({
         return arr
     })
 
-    const routeElems = []
     let i = -1
+    const routeElems = []
     for (const { fix, value, ref } of pathInfo.components) {
         i++
         routeElems.push(<div key={i + "_0"}>/</div>)
@@ -96,40 +122,55 @@ function RouteLauncher({
             </div>
         )
     }
+
+    const launch = () => {
+        let path = ""
+        for (const { fix, value, ref } of pathInfo.components) {
+            path += "/"
+            path += fix ? value : pathParams[ref]
+        }
+        close()
+        aContext.startContentStream(
+            { method, path, body },
+            {
+                query: queryAssignmentIndex.model,
+                headers: headersAssignmentIndex.model,
+                body: supportsBody ? bodyAssignmentIndex.model : undefined
+            }
+        )
+    }
+
     return (
-        <OkCancelLayout
-            ok={() => {
-                let path = ""
-                for (const { fix, value, ref } of pathInfo.components) {
-                    path += "/"
-                    path += fix ? value : pathParams[ref]
-                }
-                let params = {}
-                for (const {
-                    fix,
-                    queryValue,
-                    value
-                } of queryIndex.getEntityObjects()) {
-                    params[value] = queryValue
-                }
-                const query = new URLSearchParams(params).toString()
-                close()
-                aContext.startContentStream({ method, path, query, body })
-            }}
-            cancel={() => close()}
-        >
+        <OkCancelLayout cancel={close} ok={launch}>
             <FormGrid>
                 <CustomCells name="Path:">
                     <div className="stack-h gap-1">{routeElems}</div>
                 </CustomCells>
                 <CustomCells name="Query:">
-                    <QueryStack queryIndex={queryIndex} />
+                    <AssignmentStack
+                        assignmentIndex={queryAssignmentIndex}
+                        defaultsModel={defaults.query}
+                    />
                 </CustomCells>
                 <CustomCells name="Headers:">
-                    <HeaderStack headerIndex={headerIndex} />
+                    <AssignmentStack
+                        assignmentIndex={headersAssignmentIndex}
+                        defaultsModel={defaults.headers}
+                    />
                 </CustomCells>
                 {body !== undefined && (
-                    <TextareaCells name="Body:" value={body} set={setBody} />
+                    <CustomCells name="Body:">
+                        <div className="stack-v">
+                            <Textarea value={body} set={setBody} />
+                            <div className="text-xs py-2">
+                                Auto-Assignments:
+                            </div>
+                            <AssignmentStack
+                                assignmentIndex={bodyAssignmentIndex}
+                                defaultsModel={defaults.body}
+                            />
+                        </div>
+                    </CustomCells>
                 )}
             </FormGrid>
         </OkCancelLayout>
@@ -145,16 +186,31 @@ function RouteStack({ close, routeIndex, method, plugin }) {
         }
         return result
     }, [])
+    const index2lastRouteMatch = useMemo(() => {
+        const result = {}
+        for (const { index, path } of routeIndex.getEntityObjects()) {
+            result[index] = aContext.getLastRouteMatch(
+                method,
+                getPathInfo(path)
+            )
+        }
+        return result
+    }, [])
     const actions = [
         {
             icon: "edit",
             action: (index) => {
                 close()
+                const match = index2lastRouteMatch[index]
+                const { assignments = {}, request = {} } = match ?? {}
                 const { path } = routeIndex.getEntityObject(index)
                 plugin.openEditor({
-                    path,
-                    method,
-                    params: index2lastParams[index]
+                    request: {
+                        path: getResolvedPath(path, index2lastParams[index]),
+                        method,
+                        body: request.body ?? ""
+                    },
+                    assignments
                 })
             }
         },
@@ -170,21 +226,28 @@ function RouteStack({ close, routeIndex, method, plugin }) {
                 }
                 const params = index2lastParams[index]
                 if (pathInfo.varCount > params.length) {
+                    const pathParams = []
+                    while (pathParams.length < pathInfo.count)
+                        pathParams.push("")
                     plugin.openEditor({
-                        path,
-                        method
+                        request: {
+                            path: getResolvedPath(path, pathParams),
+                            method,
+                            body: "{}"
+                        },
+                        assignments: {
+                            query: {},
+                            headers: {},
+                            body: {}
+                        }
                     })
                     return
                 }
-                let resolvedPath = ""
-                for (const { fix, value, ref } of pathInfo.components) {
-                    if (fix) {
-                        resolvedPath += `/${value}`
-                    } else {
-                        resolvedPath += `/${params[ref]}`
-                    }
+                const last = aContext.getLastRouteMatch(method, pathInfo)
+                if (last) {
+                    aContext.startContentStream(last.request, last.assignments)
+                    return
                 }
-                aContext.startContentStream({ path: resolvedPath, method })
             }
         }
     ]
@@ -196,17 +259,29 @@ function RouteStack({ close, routeIndex, method, plugin }) {
             matcher={(index) =>
                 routeIndex.getEntityPropValue(index, "methods").includes(method)
             }
-            render={(item) => (
-                <div className="stack-v">
-                    <RoutePath
-                        path={item.path}
-                        params={index2lastParams[item.index]}
-                    />
-                    <div className="text-xs opacity-50">
-                        {item.methods.join(", ")}
-                    </div>
-                </div>
-            )}
+            render={(item) => {
+                const match = index2lastRouteMatch[item.index] ?? {}
+                const { assignments = {}, request = {} } = match
+
+                return (
+                    <RenderWithAssignments
+                        assignments={assignments}
+                        mode={1}
+                        method={method}
+                        request={request}
+                    >
+                        <div key="i1" className="stack-v">
+                            <RoutePath
+                                path={item.path}
+                                params={index2lastParams[item.index]}
+                            />
+                            <div className="text-xs opacity-50">
+                                {item.methods.join(", ")}
+                            </div>
+                        </div>
+                    </RenderWithAssignments>
+                )
+            }}
         />
     )
 }
@@ -242,7 +317,7 @@ function RouteSelector({ close, plugin }) {
                     <div className="p-4 overflow-auto">
                         <div className="stack-v gap-2">
                             <div>Headers</div>
-                            <HeaderStack headerIndex={headerIndex} />
+                            <AssignmentStack assignmentIndex={headerIndex} />
                             <div>Routes</div>
                             <RouteStack
                                 plugin={plugin}
