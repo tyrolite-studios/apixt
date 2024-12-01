@@ -7,8 +7,8 @@ import { Tabs, Tab } from "components/layout"
 import { getPathParams, d } from "core/helper"
 import { EntityIndex } from "core/entity"
 import { EntityStack } from "components/common"
-import { RoutePath } from "../routeSelector/components"
-import { RenderWithAssignments } from "../../components/assignments"
+import { RoutePath } from "plugins/route-selector/components"
+import { RenderWithAssignments } from "entities/assignments"
 
 function HistoryWidget({}) {
     const aContext = useContext(AppContext)
@@ -120,7 +120,7 @@ function History({ close }) {
             action: (index) => {
                 const { request, assignments } =
                     historyIndex.getEntityObject(index)
-                aContext.startContentStream({ request, assignments })
+                aContext.startContentStream(request, assignments)
                 close()
             }
         },

@@ -2,6 +2,7 @@ import { d, isFunction, cloneDeep, without } from "./helper"
 
 class EntityIndex {
     constructor() {
+        this.lastModified = Date.now()
         this.updates = []
         this._allIndices = null
         this.suspendNotifications = false
@@ -26,6 +27,7 @@ class EntityIndex {
     }
 
     notify() {
+        this.lastModified = Date.now()
         if (this.suspendNotifications) {
             return
         }
@@ -448,7 +450,10 @@ class MappingIndex extends EntityIndex {
     }
 
     getModelValue(index, prop) {
-        return this.model[this.getEntityValue(index)][prop]
+        const value = this.getEntityValue(index)
+        if (value === undefined) return
+
+        return this.model[value][prop]
     }
 
     getEntityPropValue(index, prop) {
@@ -507,7 +512,10 @@ class SimpleMappingIndex extends MappingIndex {
     }
 
     getModelValue(index, prop) {
-        return this.model[this.getEntityValue(index)]
+        const value = this.getEntityValue(index)
+        if (value === undefined) return
+
+        return this.model[value]
     }
 
     setModelValue(index, prop, value) {
@@ -520,24 +528,6 @@ class SimpleMappingIndex extends MappingIndex {
     }
 }
 
-class HeadersIndex extends MappingIndex {
-    constructor(model) {
-        super(model, ["type", "headerValue"])
-    }
-}
-
-class QueryIndex extends MappingIndex {
-    constructor(model) {
-        super(model, ["type", "queryValue"])
-    }
-}
-
-class AssignmentIndex extends MappingIndex {
-    constructor(model) {
-        super(model, ["type", "assignmentValue"])
-    }
-}
-
 function extractLcProps(entityIndex, prop, except) {
     const values = entityIndex.getPropValues(prop).map((x) => x.toLowerCase())
     if (!except) return values
@@ -545,12 +535,4 @@ function extractLcProps(entityIndex, prop, except) {
     return without(values, except[prop].toLowerCase())
 }
 
-export {
-    EntityIndex,
-    MappingIndex,
-    SimpleMappingIndex,
-    AssignmentIndex,
-    HeadersIndex,
-    QueryIndex,
-    extractLcProps
-}
+export { EntityIndex, MappingIndex, SimpleMappingIndex, extractLcProps }

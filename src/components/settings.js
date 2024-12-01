@@ -1,10 +1,9 @@
-import { Fragment, useContext, useState, useRef, useMemo } from "react"
+import { useContext, useState, useRef, useMemo } from "react"
 import { PluginRegistry } from "core/plugin"
 import {
     Checkbox,
     FormGrid,
     NumberCells,
-    InputCells,
     RadioCells,
     CheckboxCells,
     FullCell,
@@ -15,20 +14,16 @@ import {
     ColorCells,
     SliderCells
 } from "./form"
-import { useConfirmation, EntityStack } from "./common"
-import { AppContext } from "./context"
-import { Div, Tabs, Tab, Stack, OkCancelLayout, Centered, Icon } from "./layout"
-import { d, isString, cloneDeep } from "core/helper"
-import { useModalWindow } from "./modal"
+import { useConfirmation } from "components/common"
+import { AppContext } from "components/context"
+import { Tabs, Tab, Stack, OkCancelLayout, Centered } from "components/layout"
+import { d, cloneDeep } from "core/helper"
 import themeManager from "core/theme"
-import {
-    MappingIndex,
-    SimpleMappingIndex,
-    extractLcProps
-} from "../core/entity"
-import { ClassNames } from "../core/helper"
-import { ConstantStack } from "entities/constants"
-import { ApiEnvIndex } from "entities/api-envs"
+import { SimpleMappingIndex } from "core/entity"
+import { ConstantStack, ConstantIndex } from "entities/constants"
+import { ApiEnvIndex, ApiEnvStack } from "entities/api-envs"
+import { PluginStack, PluginIndex } from "entities/plugins"
+import { KeyBindingsStack } from "entities/key-bindings"
 
 const root = document.documentElement
 
@@ -59,55 +54,8 @@ const defaultKeyBindings = {
 }
 
 const defaultApiSettings = {
-    apiEnvs: {}
-}
-
-class PluginIndex extends SimpleMappingIndex {
-    constructor(model) {
-        super(model, "active")
-    }
-
-    getEntityProps() {
-        return [...super.getEntityProps(), "name", "description"]
-    }
-
-    getEntityPropValue(index, prop) {
-        if (["name", "description"].includes(prop)) {
-            const id = this.getEntityValue(index)
-            return PluginRegistry.getPlugin(id)[prop]
-        }
-        return super.getEntityPropValue(index, prop)
-    }
-}
-
-function PluginStack({ pluginIndex }) {
-    return (
-        <EntityStack
-            emptyMsg={"No plugins available"}
-            entityIndex={pluginIndex}
-            render={({ index, name, value, description, active }) => (
-                <Stack key={value} gapped className="">
-                    <div className="text-sm">
-                        <Checkbox
-                            tab={false}
-                            value={active}
-                            set={(value) => {
-                                pluginIndex.setEntityPropValue(
-                                    index,
-                                    "active",
-                                    value
-                                )
-                            }}
-                        />
-                    </div>
-                    <div className="stack-v">
-                        <div className="text-sm">{name}</div>
-                        <div className="opacity-50 text-xs">{description}</div>
-                    </div>
-                </Stack>
-            )}
-        />
-    )
+    apiEnvs: {},
+    constants: {}
 }
 
 function PluginsOverview({ pluginIndex }) {
@@ -158,151 +106,7 @@ function About() {
     )
 }
 
-function NewApiEnv({ close, model, save, reserved = [] }) {
-    const [name, setName] = useState(model.name)
-    const [url, setUrl] = useState(model.url)
-    const [cors, setCors] = useState(model.cors ?? true)
-    return (
-        <OkCancelLayout
-            cancel={close}
-            ok={() => save({ name, url, cors })}
-            submit
-        >
-            <FormGrid className="p-4">
-                <InputCells
-                    name="Name:"
-                    value={name}
-                    set={setName}
-                    isValid={(value) => !reserved.includes(value.toLowerCase())}
-                    autoFocus
-                    required
-                />
-                <InputCells name="URL:" value={url} set={setUrl} required />
-                <CheckboxCells name="CORS:" value={cors} set={setCors} />
-            </FormGrid>
-        </OkCancelLayout>
-    )
-}
-
-function ApiEnvStack({ entityIndex }) {
-    const NewEnvModal = useModalWindow()
-
-    const actions = [
-        {
-            action: "add",
-            name: "New",
-            op: {
-                exec: () => {
-                    const model = {
-                        value: crypto.randomUUID(),
-                        name: "",
-                        cors: true,
-                        url: ""
-                    }
-                    const reserved = extractLcProps(entityIndex, "name")
-                    NewEnvModal.open({
-                        model,
-                        reserved,
-                        save: (newModel) => {
-                            entityIndex.setEntityObject({
-                                ...model,
-                                ...newModel
-                            })
-                            NewEnvModal.close()
-                        }
-                    })
-                }
-            }
-        },
-        {
-            action: "edit",
-            op: {
-                exec: (selected) => {
-                    const index = selected[0]
-                    const model = entityIndex.getEntityObject(index)
-                    const reserved = extractLcProps(entityIndex, "name", model)
-                    NewEnvModal.open({
-                        edit: true,
-                        model,
-                        reserved,
-                        save: (newModel) => {
-                            entityIndex.setEntityObject(
-                                {
-                                    ...model,
-                                    ...newModel
-                                },
-                                true
-                            )
-                            NewEnvModal.close()
-                        }
-                    })
-                },
-                can: (selected) => selected.length === 1
-            }
-        },
-        {
-            action: "delete",
-            op: {
-                exec: (selected, setSelected) => {
-                    entityIndex.deleteEntities(selected)
-                    setSelected([])
-                },
-                can: (selected) => selected.length > 0
-            }
-        }
-    ]
-    const itemActions = [
-        {
-            icon: "edit",
-            action: (index) => {
-                const model = entityIndex.getEntityObject(index)
-                const reserved = extractLcProps(entityIndex, "name", model)
-                NewEnvModal.open({
-                    edit: true,
-                    model,
-                    reserved,
-                    save: (newModel) => {
-                        entityIndex.setEntityObject(
-                            {
-                                ...model,
-                                ...newModel
-                            },
-                            true
-                        )
-                        NewEnvModal.close()
-                    }
-                })
-            }
-        }
-    ]
-
-    return (
-        <>
-            <EntityStack
-                emptyMsg={
-                    "No API environments available. Add one by clicking on the new button above"
-                }
-                entityIndex={entityIndex}
-                render={({ name, url }) => (
-                    <Stack vertical key={name} className="">
-                        <div className="text-sm">{name}</div>
-                        <div className="text-app-text text-xs">
-                            URL: <span className="text-app-text/50">{url}</span>
-                        </div>
-                    </Stack>
-                )}
-                actions={actions}
-                itemActions={itemActions}
-            />
-
-            <NewEnvModal.content name="New API environment">
-                <NewApiEnv {...NewEnvModal.props} />
-            </NewEnvModal.content>
-        </>
-    )
-}
-
-function General({ general, setGeneral, apiEnvIndex }) {
+function General({ general, setGeneral, apiEnvIndex, constantIndex }) {
     const aContext = useContext(AppContext)
     const getGeneralSetter = (prop) => {
         return (value) => {
@@ -345,13 +149,16 @@ function General({ general, setGeneral, apiEnvIndex }) {
             />
             <SectionCells name="API environments" />
             <FullCell className="px-2">
-                <ApiEnvStack entityIndex={apiEnvIndex} />
+                <ApiEnvStack
+                    entityIndex={apiEnvIndex}
+                    constantIndex={constantIndex}
+                />
             </FullCell>
 
             <SectionCells name="Constants" />
             <FullCell className="px-2">
                 <ConstantStack
-                    constantIndex={aContext.constantIndex}
+                    constantIndex={constantIndex}
                     apiEnvIndex={apiEnvIndex}
                 />
             </FullCell>
@@ -492,259 +299,6 @@ function Layout({ layout, setLayout }) {
     )
 }
 
-const HotKeySingleKeys = ["Escape", "Enter"]
-const HotKeySkipValues = ["Meta", "Control", "Alt", "Shift"]
-
-function KeyBindingEdit({ action, save, close, mapping = {}, ...props }) {
-    const [hotKey, setHotKey] = useState(null)
-    const recorderRef = useRef(null)
-
-    const onKeyDown = (e) => {
-        let newHotKey = ""
-        let actionKey = ""
-        if (e.metaKey) {
-            newHotKey += "m"
-        } else if (e.ctrlKey) {
-            newHotKey += "c"
-        } else if (e.altKey) {
-            newHotKey += "a"
-        } else if (HotKeySingleKeys.includes(e.key)) {
-            actionKey = e.key
-        }
-        if (newHotKey.length > 0 && e.shiftKey) {
-            newHotKey += "i"
-        }
-        if (newHotKey !== "") {
-            actionKey = newHotKey
-            if (!HotKeySkipValues.includes(e.key)) {
-                actionKey += " " + e.key
-            }
-        }
-
-        if (e.key !== "Tab") {
-            e.preventDefault()
-            e.stopPropagation()
-        } else return
-
-        if (actionKey === hotKey) {
-            return
-        }
-        setHotKey(actionKey !== "" ? actionKey : null)
-    }
-
-    let delAction = null
-    if (hotKey && hotKey !== props.hotKey) {
-        for (let [currAction, actionHotKey] of Object.entries(mapping)) {
-            if (hotKey === actionHotKey) {
-                delAction = currAction
-            }
-        }
-    }
-
-    const isHotKeyOnly = (value) => value.match(/^[mca]i?$/)
-
-    const onKeyUp = (e) => {
-        if (hotKey !== null && isHotKeyOnly(hotKey)) {
-            setHotKey(null)
-        }
-    }
-
-    const okOp = {
-        can: () => hotKey !== null && !isHotKeyOnly(hotKey),
-        exec: () => save(hotKey, delAction)
-    }
-
-    return (
-        <OkCancelLayout ok={okOp.exec} cancel={close}>
-            <Stack className="p-2" vertical>
-                <div className="text-xs text-center">
-                    {'Press HotKey for action "' + action + '":'}
-                </div>
-                <div className="p-2">
-                    <Div
-                        onKeyDown={onKeyDown}
-                        onKeyUp={onKeyUp}
-                        ref={recorderRef}
-                        tab
-                        className="autofocus border border-1 p-2 focus:outline-none focus:ring focus:ring-focus-border"
-                    >
-                        <Keys
-                            className="justify-center"
-                            value={hotKey}
-                            emptyMsg="press key(s)"
-                        />
-                    </Div>
-                </div>
-                {delAction && (
-                    <div className="p-2">
-                        <Stack className="p-2 border">
-                            <div className="p-2">
-                                <Icon name="warning" />
-                            </div>
-                            <div className="p-2">
-                                {`This HotKey is currently assigned to "${delAction}", if you save this assignment gets deleted!`}
-                            </div>
-                        </Stack>
-                    </div>
-                )}
-            </Stack>
-        </OkCancelLayout>
-    )
-}
-
-function Keys({ value, className, emptyMsg = "not assigned" }) {
-    const cls = ClassNames("text-xs", className)
-
-    if (!value) {
-        cls.add("opacity-50 text-center")
-        return <div className={cls.value}>{emptyMsg}</div>
-    }
-
-    const rawKeys = isString(value) ? value.split(" ") : []
-    const keys = []
-    if (rawKeys.length) {
-        let firstKey = rawKeys.shift()
-        if (rawKeys.length > 0) {
-            switch (firstKey) {
-                case "c":
-                    firstKey = "Ctrl"
-                    break
-
-                case "m":
-                    firstKey = "Cmd"
-                    break
-            }
-        }
-        keys.push(firstKey)
-        if (rawKeys.length > 0) keys.push(...rawKeys)
-    }
-    cls.add("stack-h gap-2")
-    return (
-        <Div className={cls.value}>
-            {keys.map((item, i) => (
-                <Fragment key={i}>
-                    {i > 0 && (
-                        <div className="py-1 border-1 border-transparent">
-                            +
-                        </div>
-                    )}
-                    <div className="bg-input-text/80 px-2 py-1 border border-1 border-app-text/50 rounded-lg">
-                        {item}
-                    </div>
-                </Fragment>
-            ))}
-        </Div>
-    )
-}
-
-function KeyBindingsStack({ keyBindingsIndex }) {
-    const EditModal = useModalWindow()
-    const actions = [
-        {
-            action: "edit",
-            op: {
-                exec: (selected) => {
-                    const index = selected[0]
-                    const model = keyBindingsIndex.getEntityObject(index)
-                    EditModal.open({
-                        action: model.value,
-                        mappings: keyBindingsIndex.model,
-                        save: (newKey, delAction) => {
-                            if (delAction) {
-                                const delIndex =
-                                    keyBindingsIndex.getEntityByPropValue(
-                                        "value",
-                                        delAction
-                                    )
-                                keyBindingsIndex.deleteEntity(delIndex)
-                            }
-                            keyBindingsIndex.setEntityPropValue(
-                                index,
-                                "key",
-                                newKey
-                            )
-                            EditModal.close()
-                        }
-                    })
-                },
-                can: (selected) => selected.length === 1
-            }
-        },
-        {
-            action: "delete",
-            op: {
-                exec: (selected) => {
-                    for (const index of selected) {
-                        keyBindingsIndex.setEntityPropValue(index, "key", "")
-                    }
-                },
-                can: (selected) => selected.length > 0
-            }
-        }
-    ]
-    const itemActions = [
-        {
-            icon: "check",
-            action: (index, selected, setSelected) =>
-                selected.includes(index)
-                    ? setSelected(selected.filter((x) => x !== index))
-                    : setSelected([...selected, index])
-        },
-        {
-            icon: "edit",
-            action: (index) => actions[0].op.exec([index])
-        },
-        {
-            icon: "delete",
-            action: (index) => actions[1].op.exec([index])
-        }
-    ]
-
-    return (
-        <>
-            <EntityStack
-                entityIndex={keyBindingsIndex}
-                actions={actions}
-                itemActions={itemActions}
-                render={({ value, key }) => {
-                    const rawKeys = isString(key) ? key.split(" ") : []
-                    const keys = []
-                    if (rawKeys.length) {
-                        let firstKey = rawKeys.shift()
-                        if (rawKeys.length > 0) {
-                            switch (firstKey) {
-                                case "c":
-                                    firstKey = "Ctrl"
-                                    break
-
-                                case "m":
-                                    firstKey = "Cmd"
-                                    break
-                            }
-                        }
-                        keys.push(firstKey)
-                        if (rawKeys.length > 0) keys.push(...rawKeys)
-                    }
-                    return (
-                        <Stack key={value} className="gap-4">
-                            <div className="stack-h text-app-text text-xs gap-2">
-                                <Div className="text-sm px-2" minWidth="68px">
-                                    {value}
-                                </Div>
-
-                                <Keys value={key} />
-                            </div>
-                        </Stack>
-                    )
-                }}
-            />
-            <EditModal.content name="Edit key binding">
-                <KeyBindingEdit {...EditModal.props} />
-            </EditModal.content>
-        </>
-    )
-}
-
 function KeyBindings({ keyBindingsIndex }) {
     return (
         <FormGrid>
@@ -801,14 +355,16 @@ function Settings({ close }) {
         [aContext.plugins]
     )
     const apiEnvIndex = useMemo(
-        () =>
-            new ApiEnvIndex(aContext.apiSettings.apiEnvs)[
-                aContext.apiSettings.apiEnvs
-            ]
+        () => new ApiEnvIndex(cloneDeep(aContext.apiEnvIndex.model)),
+        []
     )
     const keyBindingsIndex = useMemo(
         () => new SimpleMappingIndex(aContext.keyBindings, "key"),
         [aContext.keyBindings]
+    )
+    const constantIndex = useMemo(
+        () => new ConstantIndex(cloneDeep(aContext.constantIndex.model)),
+        []
     )
 
     const backedUpSettings = useRef(null)
@@ -822,6 +378,7 @@ function Settings({ close }) {
                 setTheme(themeManager.defaultTheme)
                 apiEnvIndex.setModel(defaultApiSettings.apiEnvs)
                 pluginIndex.setModel(PluginRegistry.getDefaultStates())
+                constantIndex.setModel(defaultApiSettings.constants)
                 keyBindingsIndex.setModel(defaultKeyBindings)
             }
         })
@@ -832,6 +389,7 @@ function Settings({ close }) {
             layout: { ...layout },
             general: cloneDeep(general),
             apiEnvs: cloneDeep(apiEnvIndex.model),
+            constants: cloneDeep(constantIndex.model),
             plugins: cloneDeep(pluginIndex.model),
             keyBindings: cloneDeep(keyBindingsIndex.model),
             theme: { ...theme }
@@ -872,7 +430,8 @@ function Settings({ close }) {
                         aContext.apiStorage,
                         "settings",
                         {
-                            apiEnvs: apiEnvIndex.model
+                            apiEnvs: apiEnvIndex.model,
+                            constants: constantIndex.model
                         },
                         defaultApiSettings
                     )
@@ -895,6 +454,7 @@ function Settings({ close }) {
                             setTheme(beforeSettings.theme)
                             apiEnvIndex.setModel(beforeSettings.apiEnvs)
                             pluginIndex.setModel(beforeSettings.plugins)
+                            constantIndex.setModel(beforeSettings.constants)
                             keyBindingsIndex.setModel(
                                 beforeSettings.keyBindings
                             )
@@ -908,6 +468,9 @@ function Settings({ close }) {
                             )
                             pluginIndex.setModel(
                                 backedUpSettings.current.plugins
+                            )
+                            constantIndex.setModel(
+                                backedUpSettings.current.constants
                             )
                             keyBindingsIndex.setModel(
                                 backedUpSettings.current.keyBindings
@@ -925,6 +488,7 @@ function Settings({ close }) {
                             general={general}
                             setGeneral={setGeneral}
                             apiEnvIndex={apiEnvIndex}
+                            constantIndex={constantIndex}
                         />
                     </Tab>
 

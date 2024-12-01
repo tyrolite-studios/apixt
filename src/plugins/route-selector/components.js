@@ -5,11 +5,14 @@ import { Input, Textarea } from "components/form"
 import { d, getPathInfo, getResolvedPath, getPathParams } from "core/helper"
 import { Tabs, Tab, OkCancelLayout } from "components/layout"
 import { EntityStack } from "components/common"
-import { FormGrid } from "components/form"
+import { FormGrid, Radio } from "components/form"
 import { isMethodWithRequestBody } from "core/http"
 import { CustomCells } from "components/form"
-import { AssignmentIndex } from "core/entity"
-import { RenderWithAssignments, AssignmentStack } from "components/assignments"
+import {
+    RenderWithAssignments,
+    AssignmentStack,
+    AssignmentIndex
+} from "entities/assignments"
 
 function RoutePath({ path, params = [] }) {
     const parts = path.substring(1).split("/")
@@ -177,7 +180,7 @@ function RouteLauncher({ close, request, assignments = {} }) {
     )
 }
 
-function RouteStack({ close, routeIndex, method, plugin }) {
+function RouteStack({ close, routeIndex, method, plugin, mode }) {
     const aContext = useContext(AppContext)
     const index2lastParams = useMemo(() => {
         const result = {}
@@ -266,14 +269,18 @@ function RouteStack({ close, routeIndex, method, plugin }) {
                 return (
                     <RenderWithAssignments
                         assignments={assignments}
-                        mode={1}
+                        mode={mode}
                         method={method}
                         request={request}
                     >
                         <div key="i1" className="stack-v">
                             <RoutePath
                                 path={item.path}
-                                params={index2lastParams[item.index]}
+                                params={
+                                    mode === 0
+                                        ? []
+                                        : index2lastParams[item.index]
+                                }
                             />
                             <div className="text-xs opacity-50">
                                 {item.methods.join(", ")}
@@ -289,6 +296,11 @@ function RouteStack({ close, routeIndex, method, plugin }) {
 function RouteSelector({ close, plugin }) {
     const aContext = useContext(AppContext)
     const routeIndex = aContext.routeIndex
+    const [mode, setModeRaw] = useState(plugin.getSetting("detailed") ? 1 : 0)
+    const setMode = (mode) => {
+        plugin.updateSetting("detailed", mode === 1)
+        setModeRaw(mode)
+    }
     const methods = useMemo(() => {
         return ["GET", "POST", "HEAD", "PUT", "PATCH", "DELETE"].filter(
             (method) =>
@@ -310,16 +322,33 @@ function RouteSelector({ close, plugin }) {
         }
     }, [])
 
+    const modeOptions = [
+        { id: 0, name: "compact" },
+        { id: 1, name: "detailed" }
+    ]
     return (
         <Tabs persistId="routeSelector">
             {methods.map((method) => (
                 <Tab key={method} active={method === "GET"} name={method}>
                     <div className="p-4 overflow-auto">
                         <div className="stack-v gap-2">
+                            <div className="stack-h h-full">
+                                <div className="auto" />
+                                <Radio
+                                    options={modeOptions}
+                                    value={mode}
+                                    set={setMode}
+                                    gapped={false}
+                                />
+                            </div>
                             <div>Headers</div>
-                            <AssignmentStack assignmentIndex={headerIndex} />
+                            <AssignmentStack
+                                mode={mode}
+                                assignmentIndex={headerIndex}
+                            />
                             <div>Routes</div>
                             <RouteStack
+                                mode={mode}
                                 plugin={plugin}
                                 routeIndex={routeIndex}
                                 method={method}

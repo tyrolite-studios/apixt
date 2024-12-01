@@ -1,4 +1,4 @@
-import "plugins/fakeRequests/plugin"
+import "plugins/fake-requests/plugin"
 import controller from "core/controller"
 import devConfig from "./dev/config.js"
 

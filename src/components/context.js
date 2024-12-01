@@ -7,17 +7,19 @@ import {
 } from "core/http"
 import { useComponentUpdate, useLoadingSpinner } from "./common"
 import { d, getPathInfo, apply, md5 } from "core/helper"
-import { HOOKS, PluginRegistry } from "core/plugin"
+import { PluginRegistry } from "core/plugin"
 import {
     defaultApiSettings,
     defaultGlobalSettings,
     defaultKeyBindings
 } from "./settings"
-import { EntityIndex, AssignmentIndex } from "core/entity"
+import { AssignmentIndex } from "entities/assignments"
+import { RouteIndex } from "entities/routes"
 import { ConstantIndex } from "entities/constants"
+import { ApiEnvIndex } from "entities/api-envs"
 import { useModalWindow } from "./modal"
 import { OkCancelLayout } from "./layout"
-import { Input } from "./form"
+import { Checkbox, Input } from "./form"
 
 const controller = window.controller
 const AppContext = createContext(null)
@@ -87,6 +89,12 @@ function Prompt({ close, prompts, assign }) {
         )
         i++
     }
+    elems.push(
+        <div key="cb" className="stack-h gap-2 text-xs">
+            <Checkbox value={true} />
+            <div className="text-xs">Don't ask again</div>
+        </div>
+    )
 
     return (
         <OkCancelLayout
@@ -115,30 +123,6 @@ function PromptDiv() {
             </PromptModal.content>
         </>
     )
-}
-
-class RouteIndex extends EntityIndex {
-    constructor(routes) {
-        super()
-        this.model = routes
-        this.items = routes.map((route) => route.path)
-    }
-
-    getEntityProps() {
-        return [...super.getEntityProps(), "path", "methods"]
-    }
-
-    getEntityValue(index) {
-        return this.items[index].path
-    }
-
-    getEntityPropValue(index, prop) {
-        if (prop === "path") {
-            return this.model[index].path
-        }
-        if (prop === "methods") return this.model[index].methods
-        return super.getEntityPropValue(index, prop)
-    }
 }
 
 function registerRouteApi({ config }) {
@@ -455,6 +439,8 @@ function registerSettingsApi({ registry, register, apiRef }) {
         apply(newKeyBindings, keyBindings)
         if (!restart) return
 
+        apiRef.current.rebuildApiEnvs()
+        apiRef.current.rebuildConstants()
         apiRef.current.update()
     }
 
@@ -485,11 +471,13 @@ function registerContentApi({ registry, register, apiRef }) {
         registry("apiStorage").getJson("baseHeaders", {})
     )
     register("baseHeaderIndex", baseHeaderIndex)
+
     const getAssignments = (
         section,
         assignments = {},
         defaults = {},
-        prompts
+        prompts,
+        env
     ) => {
         const resolved = {}
         const resolveAssignment = (key, value, type) => {
@@ -499,7 +487,7 @@ function registerContentApi({ registry, register, apiRef }) {
                     break
 
                 case "const":
-                    resolved[key] = apiRef.current.getConstValue(value)
+                    resolved[key] = apiRef.current.getConstValue(value, env)
                     break
 
                 case "prompt":
@@ -530,25 +518,7 @@ function registerContentApi({ registry, register, apiRef }) {
         return { resolved }
     }
 
-    const startContentStream = (
-        request,
-        assignments = {},
-        overwriteHeaders = {}
-    ) => {
-        register("lastRequest", request)
-        register("lastAssignments", assignments)
-        register("lastStatus", null)
-
-        const {
-            treeBuilder,
-            spinner,
-            config,
-            baseHeaderIndex,
-            history,
-            openPrompt,
-            closePrompt
-        } = registry()
-
+    const getResolvedAssignments = (request, assignments = {}, env) => {
         const prompts = {}
         const extracts = {}
 
@@ -563,35 +533,75 @@ function registerContentApi({ registry, register, apiRef }) {
             "query",
             assignments.query,
             defaults.query,
-            prompts
+            prompts,
+            env
         )
         const headersAssignments = getAssignments(
             "headers",
             assignments.headers,
             defaults.headers,
-            prompts
+            prompts,
+            env
         )
         const hasBody = isMethodWithRequestBody(method)
         const bodyAssignments = !hasBody
             ? {}
-            : getAssignments("body", assignments.body, defaults.body, prompts)
+            : getAssignments(
+                  "body",
+                  assignments.body,
+                  defaults.body,
+                  prompts,
+                  env
+              )
+
+        return {
+            queryAssignments,
+            headersAssignments,
+            bodyAssignments,
+            prompts,
+            extracts,
+            hasBody
+        }
+    }
+
+    const startContentStream = (request, assignments, overwriteHeaders) => {
+        register("lastRequest", request)
+        register("lastAssignments", assignments)
+        register("lastStatus", null)
+
+        const {
+            treeBuilder,
+            spinner,
+            config,
+            history,
+            openPrompt,
+            closePrompt
+        } = registry()
+
+        const {
+            hasBody,
+            prompts,
+            extracts,
+            queryAssignments,
+            headersAssignments,
+            bodyAssignments
+        } = getResolvedAssignments(request, assignments)
 
         const fireRequest = (resHeaders, resQuery) => {
             history.push2history(request, assignments)
             treeBuilder.reset()
 
             const query = new URLSearchParams(resQuery).toString()
+            const { headers, body, ...options } = request
             const httpStream = startAbortableApiRequestStream(config.baseUrl, {
-                method,
-                path,
-                query,
                 headers: {
                     ...resHeaders,
                     ...overwriteHeaders,
                     [config.dumpHeader]: "cmd"
                 },
+                query,
                 body: !hasBody
-                    ? ""
+                    ? undefined
                     : JSON.stringify({
                           ...JSON.parse(body),
                           ...bodyAssignments.resolved
@@ -646,7 +656,7 @@ function registerContentApi({ registry, register, apiRef }) {
     }
 
     const restartContentStream = (overwrites = {}) => {
-        const { lastRequest } = registry()
+        const { lastRequest, lastAssignments } = registry()
         if (!lastRequest) return
 
         const { headers, ...options } = lastRequest
@@ -656,7 +666,10 @@ function registerContentApi({ registry, register, apiRef }) {
                 headers: { ...headers, ...overwrites.headers }
             }
         }
-        startContentStream({ ...options, ...overwrites, ...addHeaders })
+        startContentStream(
+            { ...options, ...overwrites, ...addHeaders },
+            lastAssignments
+        )
     }
 
     return {
@@ -670,27 +683,44 @@ function registerContentApi({ registry, register, apiRef }) {
         haltContentStream: (hash) => {
             restartContentStream({ headers: { "Tls-Apixt-Halt": hash } })
         },
-        getRawContentPromise: (baseUrl) => {
-            const { lastRequest } = registry()
+        getEnvContentPromise: (env) => {
+            const { lastRequest, lastAssignments } = registry()
 
-            const { headers = {}, ...options } = lastRequest
-            for (const {
-                value,
-                headerValue,
-                type
-            } of baseHeaderIndex.getEntityObjects()) {
-                if (value in headers) continue
+            const { apiEnvIndex } = apiRef.current
+            const index = apiEnvIndex.getEntityByPropValue("value", env)
+            if (index === undefined) throw Error(`TODO`)
 
-                if (type === "fix") {
-                    headers[value] = headerValue
-                }
+            const { url, name } = apiEnvIndex.getEntityObject(index)
+            const {
+                hasBody,
+                prompts,
+                extracts,
+                queryAssignments,
+                headersAssignments,
+                bodyAssignments
+            } = getResolvedAssignments(lastRequest, lastAssignments, env)
+
+            const fireRequest = (resHeaders, resQuery) => {
+                const query = new URLSearchParams(resQuery).toString()
+                const { headers, body, ...options } = lastRequest
+                const httpStream = startAbortableApiBodyRequest(url, {
+                    ...options,
+                    headers: resHeaders,
+                    query,
+                    body: !hasBody
+                        ? undefined
+                        : JSON.stringify({
+                              ...JSON.parse(body),
+                              ...bodyAssignments.resolved
+                          }),
+                    expect: () => true
+                })
+                return httpStream
             }
-
-            return startAbortableApiBodyRequest(baseUrl, {
-                headers,
-                ...options,
-                expect: () => true
-            })
+            return fireRequest(
+                headersAssignments.resolved,
+                queryAssignments.resolved
+            )
         },
         clearContent: () => {
             const { treeBuilder } = registry()
@@ -800,24 +830,26 @@ function registerEventManagementApi({ registry, register }) {
     }
 }
 
-function registerConstantsApi({ registry, register }) {
-    const { apiStorage } = registry()
+function registerConstantsApi({ registry }) {
+    const { apiSettings } = registry()
 
-    const constants = apiStorage.getJson("constants", {
-        u88hwenbweuqw: {
-            name: "Dev User Token",
-            constValue: "42683e2f-bacb-4e1a-a60c-73b15c67624b",
-            envVars: {}
-        }
-    })
-    const constantIndex = new ConstantIndex(constants)
+    const constantIndex = new ConstantIndex(apiSettings.constants)
     const getConstName = (id) => {
         const index = constantIndex.getEntityByPropValue("value", id)
         return constantIndex.getEntityPropValue(index, "name")
     }
-    const getConstValue = (id) => {
+    const getConstValue = (id, env) => {
         const index = constantIndex.getEntityByPropValue("value", id)
-        return constantIndex.getEntityPropValue(index, "constValue")
+        if (index === undefined) return
+
+        const entity = constantIndex.getEntityObject(index)
+
+        const { constValue, envValues } = entity
+        if (!env) return constValue
+
+        const envValue = envValues[env]
+
+        return envValue !== undefined ? envValue : constValue
     }
     const getConstOptions = () => {
         const options = []
@@ -827,11 +859,49 @@ function registerConstantsApi({ registry, register }) {
         }
         return options
     }
+    const rebuildConstants = () => {
+        const { apiSettings } = registry()
+        constantIndex.setModel(apiSettings.constants)
+    }
     return {
         constantIndex,
         getConstName,
         getConstValue,
-        getConstOptions
+        getConstOptions,
+        rebuildConstants
+    }
+}
+
+function registerApiEnvApi({ registry }) {
+    const { apiSettings } = registry()
+    const apiEnvIndex = new ApiEnvIndex(apiSettings.apiEnvs)
+
+    const getApiEnvName = (id) => {
+        const index = apiEnvIndex.getEntityByPropValue("value", id)
+        if (index === undefined) return
+
+        return apiEnvIndex.getEntityPropValue(index, "name")
+    }
+    const getApiEnvOptions = (except = []) => {
+        const options = []
+        const envs = apiEnvIndex.getEntityObjects()
+        for (const { value, name } of envs) {
+            if (except.includes(value)) continue
+
+            options.push({ id: value, name })
+        }
+        return options
+    }
+    const rebuildApiEnvs = () => {
+        const { apiSettings } = registry()
+        apiEnvIndex.setModel(apiSettings.apiEnvs)
+    }
+
+    return {
+        apiEnvIndex,
+        getApiEnvName,
+        getApiEnvOptions,
+        rebuildApiEnvs
     }
 }
 
@@ -943,6 +1013,7 @@ function AppCtx({ config, children }) {
             ...registerModalApi(registration),
             ...registerHotkeyApi(registration),
             ...registerConstantsApi(registration),
+            ...registerApiEnvApi(registration),
 
             config: registry("config"),
             version: registry("version"),

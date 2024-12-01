@@ -1,9 +1,9 @@
-import { useMemo, useState, useContext, useEffect } from "react"
+import { useMemo, useState, useContext } from "react"
 import { useModalWindow } from "components/modal"
 import { AppContext } from "components/context"
 import { d, without } from "core/helper"
 import { OkCancelLayout } from "components/layout"
-import { EntityStack } from "components/common"
+import { EntityStack, useUpdateOnEntityIndexChanges } from "components/common"
 import { FormGrid } from "components/form"
 import { isMethodWithRequestBody } from "core/http"
 import {
@@ -14,8 +14,15 @@ import {
     Button
 } from "components/form"
 import { ClassNames } from "core/helper"
-import { Icon } from "./layout"
+import { Icon } from "../components/layout"
 import { ConstantManagerWindow } from "entities/constants"
+import { MappingIndex } from "core/entity"
+
+class AssignmentIndex extends MappingIndex {
+    constructor(model) {
+        super(model, ["type", "assignmentValue"])
+    }
+}
 
 function getNonDefaultAssignments(assignments, mode) {
     if (!assignments || mode === 0) return []
@@ -45,21 +52,35 @@ function AssignmentBox({
     value,
     defaulted = false,
     className,
+    env,
     vertical = false
 }) {
     const aContext = useContext(AppContext)
+    useUpdateOnEntityIndexChanges(aContext.constantIndex)
 
     const boxName = ["const", "prompt"].includes(type) ? type : undefined
     const cls = ClassNames("", className)
     cls.addIf(vertical, "stack-v", "stack-h")
 
-    const resolved = type === "const" ? aContext.getConstName(value) : value
+    const resolved =
+        type === "const" ? aContext.getConstName(value, env) : value
+
+    const boxCls = ClassNames("px-1 text-xs")
+    boxCls.addIf(
+        resolved === undefined,
+        "text-warning-bg bg-warning-text/50",
+        "text-input-bg bg-input-text/50"
+    )
     const right = boxName ? (
         <div className="stack-h">
-            <div className="px-1 text-input-bg bg-input-text/50 text-xs">
-                {boxName}
+            <div className={boxCls.value}>{boxName}</div>
+            <div className="px-1">
+                {resolved === undefined ? (
+                    <span className="opacity-50">{"<invalid>"}</span>
+                ) : (
+                    resolved
+                )}
             </div>
-            <div className="px-1">{resolved}</div>
         </div>
     ) : (
         <div>{type === "ignore" ? <Icon name="block" /> : resolved}</div>
@@ -105,7 +126,7 @@ function RenderWithAssignments({
     request,
     method,
     mode,
-    assignments
+    assignments = {}
 }) {
     const { headers, query, body } = getAllNonDefaultAssignments(
         assignments,
@@ -125,10 +146,19 @@ function RenderWithAssignments({
     if (headers.length || query.length || body.length) {
         elems.push(
             <div key="i2" className="stack-v gap-2 p-1">
-                <AssignmentsInfo entity="Query" assignments={query} />
-                <AssignmentsInfo entity="Headers" assignments={headers} />
+                <AssignmentsInfo
+                    mode={mode}
+                    entity="Query"
+                    assignments={query}
+                />
+                <AssignmentsInfo
+                    mode={mode}
+                    entity="Headers"
+                    assignments={headers}
+                />
                 {isMethodWithRequestBody(method) && (
                     <AssignmentsInfo
+                        mode={mode}
                         entity="Body"
                         assignments={[...basicBody, ...body]}
                     />
@@ -173,9 +203,7 @@ function AssignmentEditForm({
         )
         return types
     })
-    const constantOptions = useMemo(() => {
-        return aContext.getConstOptions()
-    }, [])
+    const constantOptions = aContext.getConstOptions()
 
     const [value, setValue] = useState(model.value)
     const [type, setType] = useState(model.type)
@@ -256,6 +284,7 @@ function AssignmentEditForm({
                     </CustomCells>
                 )}
             </FormGrid>
+
             <ConstantModal.content>
                 <ConstantManagerWindow {...ConstantModal.props} />
             </ConstantModal.content>
@@ -263,7 +292,7 @@ function AssignmentEditForm({
     )
 }
 
-function AssignmentStack({ assignmentIndex, defaultsModel }) {
+function AssignmentStack({ assignmentIndex, defaultsModel, mode }) {
     const EditModal = useModalWindow()
 
     const allValues = assignmentIndex
@@ -371,4 +400,4 @@ function AssignmentStack({ assignmentIndex, defaultsModel }) {
     )
 }
 
-export { RenderWithAssignments, AssignmentStack }
+export { RenderWithAssignments, AssignmentStack, AssignmentIndex }

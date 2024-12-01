@@ -88,7 +88,7 @@ const startAbortableApiBodyRequest = (
             `Trying to start body request with unsupported method "${method}"`
         )
 
-    const request = startAbortableApiRequest(baseUrl, {
+    return startAbortableApiRequest(baseUrl, {
         method,
         ...options,
         thenChain: (promise) =>
@@ -97,8 +97,6 @@ const startAbortableApiBodyRequest = (
                 body: await response.text()
             }))
     })
-
-    return request
 }
 
 const startAbortableArrayStream = (

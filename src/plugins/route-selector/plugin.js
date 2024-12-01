@@ -19,6 +19,12 @@ class Plugin extends AbstractPlugin {
         return true
     }
 
+    get defaultSettings() {
+        return {
+            detailed: false
+        }
+    }
+
     init() {
         this.addHeaderButton({ id: "selector", name: "Routes..." })
         this.openEditorHandler = null

@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState } from "react"
+import { useContext, useEffect, useState, useRef } from "react"
 import { useModalWindow } from "components/modal"
 import { AppContext } from "components/context"
 import * as jsondiffpatch from "jsondiffpatch"
@@ -94,22 +94,30 @@ function JsonDiffWindow({ plugin }) {
     const DiffWindow = useModalWindow()
     const MismatchWindow = useModalWindow()
     const spinner = useLoadingSpinner()
+    const lastIds = useRef()
+
     useEffect(() => {
-        for (const [name, details] of Object.entries(
-            aContext.apiSettings.apiEnvs
-        )) {
+        const apiEnvs = aContext.apiEnvIndex.getEntityObjects()
+
+        if (lastIds.current) {
+            plugin.deleteBlockButtons(lastIds.current)
+        }
+        lastIds.current = []
+        for (const { name, value } of apiEnvs) {
             const id = `diff ${name}`
+            lastIds.current.push(id)
             plugin.addBlockButton({
                 id,
                 name: `Diff ${name}`,
-                isActive: ({ mime, tags = [], name }) =>
+                isActive: ({ mime, tags = [] }) =>
                     tags.includes("api.response") &&
                     mime &&
-                    mime.endsWith("json")
+                    mime.endsWith("json"),
+                overwrite: true
             })
             plugin.setButtonHandler(id, async ({ content }) => {
                 try {
-                    const request = aContext.getRawContentPromise(details.url)
+                    const request = aContext.getEnvContentPromise(value)
                     spinner.start(request.fetchPromise, request.abort)
                     const { status, body } = await request.fetchPromise
 
@@ -128,7 +136,7 @@ function JsonDiffWindow({ plugin }) {
                 }
             })
         }
-    }, [])
+    }, [aContext.apiEnvIndex.lastModified])
 
     return (
         <>

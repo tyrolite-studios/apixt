@@ -1,4 +1,3 @@
-import { Button } from "components/form"
 import { d } from "core/helper"
 
 const implement = (name) => {
@@ -12,6 +11,7 @@ class AbstractPlugin {
         this._blockButtons = []
         this._buttonHandler = {}
         this._contentHandler = []
+        this._settings = undefined
 
         this.init()
     }
@@ -58,6 +58,16 @@ class AbstractPlugin {
         })
     }
 
+    deleteBlockButtons(ids) {
+        const blockButtons = []
+        for (const button of this._blockButtons) {
+            if (ids.includes(button.id)) continue
+
+            blockButtons.push(button)
+        }
+        this._blockButtons = blockButtons
+    }
+
     addBlockButton({ isActive = () => true, ...props }) {
         this.assertButtonProps(
             props,
@@ -100,8 +110,51 @@ class AbstractPlugin {
         PluginRegistry.updateApp()
     }
 
+    get settings() {
+        if (this._settings === false) return
+
+        if (this._settings === undefined) this._settings = this.loadSettings()
+
+        return this._settings
+    }
+
+    loadSettings() {
+        const defaults = this.defaultSettings
+        if (defaults === undefined) return false
+
+        return {
+            ...defaults,
+            ...PluginRegistry.getApiStorage().getJson(this.settingsId, {})
+        }
+    }
+
+    storeSettings() {
+        if (!this.settings) return
+
+        PluginRegistry.getApiStorage().setJson(this.settingsId, this._settings)
+    }
+
+    getSetting(name) {
+        if (!this.settings || this.settings[name] === undefined)
+            throw Error(`Plugin ${this.name} has no setting "${name}"`)
+
+        return this.settings[name]
+    }
+
+    updateSetting(name, value) {
+        if (!this.settings || this.settings[name] === undefined)
+            throw Error(`Plugin ${this.name} has no setting "${name}"`)
+
+        this.settings[name] = value
+        this.storeSettings()
+    }
+
     get id() {
         implement("id")
+    }
+
+    get settingsId() {
+        return `plugin.${this.id}.settings`
     }
 
     get name() {
@@ -110,6 +163,10 @@ class AbstractPlugin {
 
     get description() {
         return ""
+    }
+
+    get defaultSettings() {
+        return
     }
 
     get defaultActive() {
@@ -189,6 +246,10 @@ const PluginRegistry = {
 
     setContext(value) {
         ctx = value
+    },
+
+    getApiStorage() {
+        return ctx.apiStorage
     },
 
     updateApp() {

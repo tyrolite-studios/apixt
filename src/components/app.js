@@ -5,11 +5,11 @@ import { Content } from "./content"
 import { PluginRegistry } from "core/plugin"
 import { d } from "core/helper"
 import "plugins/history/plugin"
-import "plugins/routeSelector/plugin"
-import "plugins/syntaxHighlighter/plugin"
+import "plugins/route-selector/plugin"
+import "plugins/syntax-highlighter/plugin"
 import "plugins/halt/plugin"
-import "plugins/requestBuilder/plugin"
-import "plugins/jsondiff/plugin"
+import "plugins/request-builder/plugin"
+import "plugins/json-diff/plugin"
 
 function Footer() {
     const aContext = useContext(AppContext)
