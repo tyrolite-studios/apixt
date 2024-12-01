@@ -117,7 +117,8 @@ function JsonDiffWindow({ plugin }) {
             })
             plugin.setButtonHandler(id, async ({ content }) => {
                 try {
-                    const request = aContext.getEnvContentPromise(value)
+                    const request = await aContext.getEnvContentPromise(value)
+
                     spinner.start(request.fetchPromise, request.abort)
                     const { status, body } = await request.fetchPromise
 

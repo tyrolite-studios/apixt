@@ -6,7 +6,7 @@ import {
     isMethodWithRequestBody
 } from "core/http"
 import { useComponentUpdate, useLoadingSpinner } from "./common"
-import { d, getPathInfo, apply, md5 } from "core/helper"
+import { d, getPathInfo, apply, md5, isObject } from "core/helper"
 import { PluginRegistry } from "core/plugin"
 import {
     defaultApiSettings,
@@ -58,7 +58,14 @@ function SpinnerDiv() {
     return <>{LoadingSpinner.Modal}</>
 }
 
+let rememberPrompts = true
+
 function Prompt({ close, prompts, assign }) {
+    const [remember, setRememberRaw] = useState(rememberPrompts)
+    const setRemember = (value) => {
+        rememberPrompts = value
+        setRememberRaw(value)
+    }
     const [inputs, setInputs] = useState(() => {
         const values = []
         while (values.length < prompts.length) {
@@ -91,7 +98,7 @@ function Prompt({ close, prompts, assign }) {
     }
     elems.push(
         <div key="cb" className="stack-h gap-2 text-xs">
-            <Checkbox value={true} />
+            <Checkbox value={remember} set={setRemember} />
             <div className="text-xs">Don't ask again</div>
         </div>
     )
@@ -474,11 +481,13 @@ function registerContentApi({ registry, register, apiRef }) {
 
     const getAssignments = (
         section,
-        assignments = {},
-        defaults = {},
+        allAssignments,
+        allDefaults,
         prompts,
         env
     ) => {
+        const assignments = allAssignments[section] ?? {}
+        const defaults = allDefaults[section] ?? {}
         const resolved = {}
         const resolveAssignment = (key, value, type) => {
             switch (type) {
@@ -487,10 +496,14 @@ function registerContentApi({ registry, register, apiRef }) {
                     break
 
                 case "const":
-                    resolved[key] = apiRef.current.getConstValue(value, env)
+                    const constValue = apiRef.current.getConstValue(value, env)
+                    if (constValue !== undefined) {
+                        resolved[key] = constValue
+                    }
                     break
 
                 case "prompt":
+                    // TODO write to resolved if dont ask again was checked and last prompt has key
                     if (prompts[value] === undefined) {
                         prompts[value] = { key, targets: [] }
                     }
@@ -515,7 +528,7 @@ function registerContentApi({ registry, register, apiRef }) {
                 resolveAssignment(key, assignmentValue, type)
             }
         }
-        return { resolved }
+        return resolved
     }
 
     const getResolvedAssignments = (request, assignments = {}, env) => {
@@ -525,34 +538,30 @@ function registerContentApi({ registry, register, apiRef }) {
         const { path, method, body, ...options } = request
 
         const pathMatch = apiRef.current.getMatchingRoutePath(path, method)
+
+        // TODO get the defaults from an RequestDefaultsIndex
         const defaults = pathMatch
             ? { headers: apiRef.current.getBaseHeaderIndex().model }
             : {}
 
         const queryAssignments = getAssignments(
             "query",
-            assignments.query,
-            defaults.query,
+            assignments,
+            defaults,
             prompts,
             env
         )
         const headersAssignments = getAssignments(
             "headers",
-            assignments.headers,
-            defaults.headers,
+            assignments,
+            defaults,
             prompts,
             env
         )
         const hasBody = isMethodWithRequestBody(method)
         const bodyAssignments = !hasBody
             ? {}
-            : getAssignments(
-                  "body",
-                  assignments.body,
-                  defaults.body,
-                  prompts,
-                  env
-              )
+            : getAssignments("body", assignments, defaults, prompts, env)
 
         return {
             queryAssignments,
@@ -564,19 +573,36 @@ function registerContentApi({ registry, register, apiRef }) {
         }
     }
 
-    const startContentStream = (request, assignments, overwriteHeaders) => {
-        register("lastRequest", request)
-        register("lastAssignments", assignments)
-        register("lastStatus", null)
+    const getResolvedBody = (body, assignments, headers) => {
+        if (!Object.keys(assignments).length) return body
 
-        const {
-            treeBuilder,
-            spinner,
-            config,
-            history,
-            openPrompt,
-            closePrompt
-        } = registry()
+        let contentType = ""
+        for (const [key, value] of Object.entries(headers)) {
+            if (key.toLocaleLowerCase() === "content-type") {
+                contentType = value
+                break
+            }
+        }
+        if (!contentType.endsWith("/json")) return body
+
+        const json = {}
+        if (body !== "") {
+            try {
+                json = JSON.parse(body)
+            } catch (e) {
+                return body
+            }
+        }
+        if (!isObject(json)) return body
+
+        return JSON.stringify({
+            ...json,
+            ...assignments
+        })
+    }
+
+    const doRequest = (fireRequest, request, assignments, env) => {
+        const { openPrompt, closePrompt } = registry()
 
         const {
             hasBody,
@@ -585,29 +611,102 @@ function registerContentApi({ registry, register, apiRef }) {
             queryAssignments,
             headersAssignments,
             bodyAssignments
-        } = getResolvedAssignments(request, assignments)
+        } = getResolvedAssignments(request, assignments, env)
 
-        const fireRequest = (resHeaders, resQuery) => {
+        const promptEntries = Object.entries(prompts)
+        if (promptEntries.length) {
+            const promise = new Promise((resolve, reject) => {
+                openPrompt({
+                    prompts: promptEntries,
+                    assign: (values) => {
+                        const headers = {}
+                        const query = {}
+                        const body = {}
+                        let i = 0
+                        while (i < promptEntries.length) {
+                            const [, assignments] = promptEntries[i]
+
+                            const value = values[i]
+                            const { key, targets } = assignments
+                            for (const target of targets) {
+                                if (target === "headers") {
+                                    headers[key] = value
+                                } else if (target === "query") {
+                                    query[key] = value
+                                } else if (target === "body") {
+                                    body[key] = value
+                                }
+                            }
+                            i++
+                        }
+                        resolve(
+                            fireRequest(
+                                { ...headersAssignments, ...headers },
+                                { ...queryAssignments, ...query },
+                                { ...bodyAssignments, ...body }
+                            )
+                        )
+                        closePrompt()
+                    }
+                })
+            })
+            return promise
+        } else {
+            return fireRequest(
+                headersAssignments,
+                queryAssignments,
+                bodyAssignments
+            )
+        }
+    }
+
+    const getResolvedRequestObject = (
+        request,
+        resQuery,
+        resHeaders,
+        resBody,
+        overwriteHeaders = {}
+    ) => {
+        const query = new URLSearchParams(resQuery).toString()
+        const { headers, body, ...options } = request
+
+        const finalHeaders = {
+            ...resHeaders,
+            ...overwriteHeaders
+        }
+        return {
+            headers: finalHeaders,
+            query,
+            body: !isMethodWithRequestBody(request.method)
+                ? undefined
+                : getResolvedBody(body, resBody, finalHeaders),
+            ...options
+        }
+    }
+
+    const startContentStream = (request, assignments, overwriteHeaders) => {
+        register("lastRequest", request)
+        register("lastAssignments", assignments)
+        register("lastStatus", null)
+
+        const { treeBuilder, spinner, config, history } = registry()
+
+        const fireRequest = (resHeaders, resQuery, resBody) => {
             history.push2history(request, assignments)
             treeBuilder.reset()
 
-            const query = new URLSearchParams(resQuery).toString()
-            const { headers, body, ...options } = request
-            const httpStream = startAbortableApiRequestStream(config.baseUrl, {
-                headers: {
-                    ...resHeaders,
-                    ...overwriteHeaders,
-                    [config.dumpHeader]: "cmd"
-                },
-                query,
-                body: !hasBody
-                    ? undefined
-                    : JSON.stringify({
-                          ...JSON.parse(body),
-                          ...bodyAssignments.resolved
-                      }),
-                ...options
-            })
+            const options = getResolvedRequestObject(
+                request,
+                resQuery,
+                resHeaders,
+                resBody,
+                { ...overwriteHeaders, [config.dumpHeader]: "cmd" }
+            )
+            const httpStream = startAbortableApiRequestStream(
+                config.baseUrl,
+                d(options)
+            )
+
             register("streamAbort", httpStream.abort)
             const promise = treeBuilder
                 .processStream(httpStream)
@@ -620,39 +719,7 @@ function registerContentApi({ registry, register, apiRef }) {
                 treeBuilder.abort()
             })
         }
-
-        const promptEntries = Object.entries(prompts)
-        if (promptEntries.length) {
-            openPrompt({
-                prompts: promptEntries,
-                assign: (values) => {
-                    const headers = {}
-                    const query = {}
-                    let i = 0
-                    while (i < promptEntries.length) {
-                        const [, assignments] = promptEntries[i]
-
-                        const value = values[i]
-                        const { key, targets } = assignments
-                        for (const target of targets) {
-                            if (target === "headers") {
-                                headers[key] = value
-                            } else if (target === "query") {
-                                query[key] = value
-                            }
-                        }
-                        i++
-                    }
-                    fireRequest(
-                        { ...headersAssignments.resolved, ...headers },
-                        { ...queryAssignments.resolved, ...query }
-                    )
-                    closePrompt()
-                }
-            })
-        } else {
-            fireRequest(headersAssignments.resolved, queryAssignments.resolved)
-        }
+        doRequest(fireRequest, request, assignments)
     }
 
     const restartContentStream = (overwrites = {}) => {
@@ -688,39 +755,26 @@ function registerContentApi({ registry, register, apiRef }) {
 
             const { apiEnvIndex } = apiRef.current
             const index = apiEnvIndex.getEntityByPropValue("value", env)
-            if (index === undefined) throw Error(`TODO`)
+            if (index === undefined)
+                throw Error(`The environment does not exist any more`)
 
             const { url, name } = apiEnvIndex.getEntityObject(index)
-            const {
-                hasBody,
-                prompts,
-                extracts,
-                queryAssignments,
-                headersAssignments,
-                bodyAssignments
-            } = getResolvedAssignments(lastRequest, lastAssignments, env)
 
-            const fireRequest = (resHeaders, resQuery) => {
-                const query = new URLSearchParams(resQuery).toString()
-                const { headers, body, ...options } = lastRequest
+            const fireRequest = (resHeaders, resQuery, resBody) => {
+                const options = getResolvedRequestObject(
+                    lastRequest,
+                    resQuery,
+                    resHeaders,
+                    resBody
+                )
+
                 const httpStream = startAbortableApiBodyRequest(url, {
                     ...options,
-                    headers: resHeaders,
-                    query,
-                    body: !hasBody
-                        ? undefined
-                        : JSON.stringify({
-                              ...JSON.parse(body),
-                              ...bodyAssignments.resolved
-                          }),
                     expect: () => true
                 })
                 return httpStream
             }
-            return fireRequest(
-                headersAssignments.resolved,
-                queryAssignments.resolved
-            )
+            return doRequest(fireRequest, lastRequest, lastAssignments)
         },
         clearContent: () => {
             const { treeBuilder } = registry()

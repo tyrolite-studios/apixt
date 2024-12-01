@@ -47,7 +47,7 @@ PluginRegistry.add(new MyPlugin())
 
 Afterwards import the plugin on top of `src/components/app.js` and then it should already show up in the settings section of the API extender:
 ```
-import "plugins/myPlugin/plugin"
+import "plugins/my-plugin/plugin"
 ```
 
 In the plugin directory you can of course add other files besides `plugin.js` but the following ones are recommended

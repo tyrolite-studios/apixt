@@ -223,12 +223,20 @@ function RouteStack({ close, routeIndex, method, plugin, mode }) {
                 close()
                 const { path } = routeIndex.getEntityObject(index)
                 const pathInfo = getPathInfo(path)
+                /*
+                
+                TODO  check this...
+
                 if (pathInfo.varCount === 0) {
-                    aContext.startContentStream({ path, method })
+                    aContext.startContentStream({ path, method }, {})
                     return
                 }
+                */
                 const params = index2lastParams[index]
-                if (pathInfo.varCount > params.length) {
+                if (
+                    pathInfo.varCount > 0 &&
+                    pathInfo.varCount > params.length
+                ) {
                     const pathParams = []
                     while (pathParams.length < pathInfo.count)
                         pathParams.push("")
@@ -251,6 +259,7 @@ function RouteStack({ close, routeIndex, method, plugin, mode }) {
                     aContext.startContentStream(last.request, last.assignments)
                     return
                 }
+                // TODO fire basic request
             }
         }
     ]

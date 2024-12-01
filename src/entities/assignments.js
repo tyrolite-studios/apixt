@@ -132,14 +132,17 @@ function RenderWithAssignments({
         assignments,
         mode
     )
+    // TODO print raw body if not json
     const basicBody = []
     if (isMethodWithRequestBody(method) && request.body) {
-        const parsed = JSON.parse(request.body)
-        if (parsed !== undefined) {
-            for (const [name, value] of Object.entries(parsed)) {
-                basicBody.push({ type: "set", name, value })
+        try {
+            const parsed = JSON.parse(request.body)
+            if (isObject(parsed)) {
+                for (const [name, value] of Object.entries(parsed)) {
+                    basicBody.push({ type: "set", name, value })
+                }
             }
-        }
+        } catch (e) {}
     }
     const elems = []
     elems.push(children)
