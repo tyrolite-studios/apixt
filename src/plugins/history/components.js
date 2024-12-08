@@ -75,12 +75,15 @@ class HistoryIndex extends EntityIndex {
             ...super.getEntityProps(),
             "timestamp",
             "request",
-            "assignments"
+            "assignments",
+            "bodyType"
         ]
     }
 
     getEntityPropValue(index, prop) {
-        if (["timestamp", "request", "assignments"].includes(prop)) {
+        if (
+            ["timestamp", "request", "assignments", "bodyType"].includes(prop)
+        ) {
             return this.model[index][prop]
         }
         return super.getEntityPropValue(index, prop)
@@ -155,6 +158,7 @@ function History({ close }) {
                                 timestamp,
                                 request,
                                 assignments,
+                                bodyType,
                                 hash
                             }) => {
                                 const pathInfo = aContext.getMatchingRoutePath(
@@ -170,6 +174,7 @@ function History({ close }) {
                                         mode={1}
                                         method={method}
                                         request={request}
+                                        bodyType={bodyType}
                                         assignments={assignments}
                                         className="w-full"
                                     >

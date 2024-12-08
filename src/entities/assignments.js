@@ -1,7 +1,7 @@
 import { useMemo, useState, useContext } from "react"
 import { useModalWindow } from "components/modal"
 import { AppContext } from "components/context"
-import { d, without } from "core/helper"
+import { d, isObject, without } from "core/helper"
 import { OkCancelLayout } from "components/layout"
 import { EntityStack, useUpdateOnEntityIndexChanges } from "components/common"
 import { FormGrid } from "components/form"
@@ -121,10 +121,22 @@ function AssignmentsInfo({ entity, assignments }) {
     )
 }
 
+function getAssignmentFor(key, assignments, object = {}) {
+    for (const [assignmentKey, assignment] of Object.entries(assignments)) {
+        if (key !== assignmentKey.toLowerCase()) continue
+
+        return assignment.type === "set" ? assignment.value : undefined
+    }
+    const value = object[key]
+
+    return value
+}
+
 function RenderWithAssignments({
     children,
     request,
     method,
+    bodyType,
     mode,
     assignments = {}
 }) {
@@ -132,17 +144,27 @@ function RenderWithAssignments({
         assignments,
         mode
     )
-    // TODO print raw body if not json
     const basicBody = []
+    let rawBody = null
+    let invalidBody = false
     if (isMethodWithRequestBody(method) && request.body) {
-        try {
-            const parsed = JSON.parse(request.body)
-            if (isObject(parsed)) {
-                for (const [name, value] of Object.entries(parsed)) {
-                    basicBody.push({ type: "set", name, value })
+        if (bodyType && bodyType.endsWith("json")) {
+            try {
+                const parsed = JSON.parse(request.body)
+                if (isObject(parsed)) {
+                    for (const [name, value] of Object.entries(parsed)) {
+                        basicBody.push({ type: "set", name, value })
+                    }
+                } else {
+                    rawBody = request.body
                 }
+            } catch (e) {
+                rawBody = request.body
+                invalidBody = true
             }
-        } catch (e) {}
+        } else {
+            rawBody = request.body
+        }
     }
     const elems = []
     elems.push(children)
@@ -159,7 +181,18 @@ function RenderWithAssignments({
                     entity="Headers"
                     assignments={headers}
                 />
-                {isMethodWithRequestBody(method) && (
+                {isMethodWithRequestBody(method) && !!rawBody && (
+                    <div className="stack-h gap-2 text-xs">
+                        <div className="truncate">Body:</div>
+                        {invalidBody && (
+                            <div className="px-1 text-warning-bg bg-warning-text/50">
+                                Invalid
+                            </div>
+                        )}
+                        <div className="opacity-50">{rawBody}</div>
+                    </div>
+                )}
+                {isMethodWithRequestBody(method) && !rawBody && (
                     <AssignmentsInfo
                         mode={mode}
                         entity="Body"
@@ -207,6 +240,7 @@ function AssignmentEditForm({
         return types
     })
     const constantOptions = aContext.getConstOptions()
+    const requestsOptions = aContext.getRequestOptions()
 
     const [value, setValue] = useState(model.value)
     const [type, setType] = useState(model.type)
@@ -247,7 +281,7 @@ function AssignmentEditForm({
                     set={setType}
                     options={typeOptions}
                 />
-                {!["ignore", "default", "const"].includes(type) && (
+                {!["ignore", "default", "const", "extract"].includes(type) && (
                     <InputCells
                         name={type === "prompt" ? "Question" : "Value"}
                         value={assignmentValue}
@@ -266,8 +300,20 @@ function AssignmentEditForm({
                                 set={setAssignmentValue}
                             />
                             <Button
-                                icon="edit"
+                                icon="build"
                                 onPressed={() => ConstantModal.open()}
+                            />
+                        </div>
+                    </CustomCells>
+                )}
+                {type === "extract" && (
+                    <CustomCells name="Extract">
+                        <div className="stack-h gap-2">
+                            <Select
+                                required
+                                options={requestsOptions}
+                                value={assignmentValue}
+                                set={setAssignmentValue}
                             />
                         </div>
                     </CustomCells>

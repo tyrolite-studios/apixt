@@ -21,6 +21,7 @@ import { d, cloneDeep } from "core/helper"
 import themeManager from "core/theme"
 import { SimpleMappingIndex } from "core/entity"
 import { ConstantStack, ConstantIndex } from "entities/constants"
+import { ApiIndex, ApiStack } from "entities/apis"
 import { ApiEnvIndex, ApiEnvStack } from "entities/api-envs"
 import { PluginStack, PluginIndex } from "entities/plugins"
 import { KeyBindingsStack } from "entities/key-bindings"
@@ -55,7 +56,9 @@ const defaultKeyBindings = {
 
 const defaultApiSettings = {
     apiEnvs: {},
-    constants: {}
+    apis: {},
+    constants: {},
+    requests: {}
 }
 
 function PluginsOverview({ pluginIndex }) {
@@ -106,7 +109,13 @@ function About() {
     )
 }
 
-function General({ general, setGeneral, apiEnvIndex, constantIndex }) {
+function General({
+    general,
+    setGeneral,
+    apiIndex,
+    apiEnvIndex,
+    constantIndex
+}) {
     const aContext = useContext(AppContext)
     const getGeneralSetter = (prop) => {
         return (value) => {
@@ -161,6 +170,11 @@ function General({ general, setGeneral, apiEnvIndex, constantIndex }) {
                     constantIndex={constantIndex}
                     apiEnvIndex={apiEnvIndex}
                 />
+            </FullCell>
+
+            <SectionCells name="External APIs" />
+            <FullCell className="px-2">
+                <ApiStack apiIndex={apiIndex} apiEnvIndex={apiEnvIndex} />
             </FullCell>
         </FormGrid>
     )
@@ -347,12 +361,16 @@ function Settings({ close }) {
         setThemeRaw(newTheme)
     }
     const [general, setGeneral] = useState(() => {
-        const { apiEnvs, ...other } = aContext.globalSettings
+        const { apiEnvs, apis, ...other } = aContext.globalSettings
         return cloneDeep(other)
     })
     const pluginIndex = useMemo(
         () => new PluginIndex(aContext.plugins),
         [aContext.plugins]
+    )
+    const apiIndex = useMemo(
+        () => new ApiIndex(cloneDeep(aContext.apiIndex.model)),
+        []
     )
     const apiEnvIndex = useMemo(
         () => new ApiEnvIndex(cloneDeep(aContext.apiEnvIndex.model)),
@@ -377,6 +395,7 @@ function Settings({ close }) {
                 setLayout(defaultSettings.layout)
                 setTheme(themeManager.defaultTheme)
                 apiEnvIndex.setModel(defaultApiSettings.apiEnvs)
+                apiIndex.setModel(defaultApiSettings.apis)
                 pluginIndex.setModel(PluginRegistry.getDefaultStates())
                 constantIndex.setModel(defaultApiSettings.constants)
                 keyBindingsIndex.setModel(defaultKeyBindings)
@@ -388,6 +407,7 @@ function Settings({ close }) {
         return {
             layout: { ...layout },
             general: cloneDeep(general),
+            apis: cloneDeep(apiIndex.model),
             apiEnvs: cloneDeep(apiEnvIndex.model),
             constants: cloneDeep(constantIndex.model),
             plugins: cloneDeep(pluginIndex.model),
@@ -430,6 +450,7 @@ function Settings({ close }) {
                         aContext.apiStorage,
                         "settings",
                         {
+                            apis: apiIndex.model,
                             apiEnvs: apiEnvIndex.model,
                             constants: constantIndex.model
                         },
@@ -452,6 +473,7 @@ function Settings({ close }) {
                             setGeneral(beforeSettings.general)
                             setLayout(beforeSettings.layout)
                             setTheme(beforeSettings.theme)
+                            apiIndex.setModel(beforeSettings.apis)
                             apiEnvIndex.setModel(beforeSettings.apiEnvs)
                             pluginIndex.setModel(beforeSettings.plugins)
                             constantIndex.setModel(beforeSettings.constants)
@@ -463,6 +485,7 @@ function Settings({ close }) {
                             setGeneral(backedUpSettings.current.general)
                             setLayout(backedUpSettings.current.layout)
                             setTheme(backedUpSettings.current.theme)
+                            apiIndex.setModel(backedUpSettings.current.apis)
                             apiEnvIndex.setModel(
                                 backedUpSettings.current.apiEnvs
                             )
@@ -487,6 +510,7 @@ function Settings({ close }) {
                         <General
                             general={general}
                             setGeneral={setGeneral}
+                            apiIndex={apiIndex}
                             apiEnvIndex={apiEnvIndex}
                             constantIndex={constantIndex}
                         />

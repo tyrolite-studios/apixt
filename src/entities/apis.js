@@ -1,21 +1,19 @@
-import { useState, useMemo, useContext } from "react"
-import { FormGrid, InputCells, CustomCells } from "components/form"
-import { EntityStack, useUpdateOnEntityIndexChanges } from "components/common"
-import { OkCancelLayout, Icon } from "components/layout"
-import { useModalWindow } from "components/modal"
+import { useContext, useMemo, useState } from "react"
 import { MappingIndex, extractLcProps } from "core/entity"
-import { d } from "core/helper"
 import { AppContext } from "components/context"
-import { ApiEnvIndex } from "entities/api-envs"
+import { EntityStack, useUpdateOnEntityIndexChanges } from "components/common"
+import { useModalWindow } from "components/modal"
+import { OkCancelLayout, Icon } from "components/layout"
+import { FormGrid, InputCells, CustomCells } from "components/form"
 import { EnvOverrideIndex, EnvOverrideStack } from "./env-override"
 
-class ConstantIndex extends MappingIndex {
+class ApiIndex extends MappingIndex {
     constructor(model) {
-        super(model, ["name", "constValue", "envValues"])
+        super(model, ["name", "url", "envValues"])
     }
 }
 
-function ConstantForm({
+function ApiForm({
     close,
     model,
     apiEnvIndex,
@@ -29,7 +27,7 @@ function ConstantForm({
         [model.envValues]
     )
     const [name, setName] = useState(model.name)
-    const [constValue, setConstValue] = useState(model.constValue)
+    const [url, setUrl] = useState(model.url)
 
     return (
         <OkCancelLayout
@@ -39,7 +37,7 @@ function ConstantForm({
                 save({
                     ...model,
                     name,
-                    constValue,
+                    url,
                     envValues: overrideIndex.model
                 })
             }
@@ -54,12 +52,12 @@ function ConstantForm({
                     isValid={(value) => !reserved.includes(value.toLowerCase())}
                 />
                 <InputCells
-                    name="Value:"
+                    name="Url:"
                     autoFocus={edit}
-                    value={constValue}
-                    set={setConstValue}
+                    value={url}
+                    set={setUrl}
                 />
-                <CustomCells name="Env overrides">
+                <CustomCells name="Env overrides:">
                     <EnvOverrideStack
                         value2envName={value2envName}
                         apiEnvIndex={apiEnvIndex}
@@ -71,9 +69,9 @@ function ConstantForm({
     )
 }
 
-function ConstantStack({ constantIndex, apiEnvIndex }) {
+function ApiStack({ apiIndex, apiEnvIndex }) {
     useUpdateOnEntityIndexChanges(apiEnvIndex)
-    const NewConstModal = useModalWindow()
+    const NewApiModal = useModalWindow()
 
     const value2envName = {}
     const apiEnvs = apiEnvIndex.getEntityObjects()
@@ -92,15 +90,15 @@ function ConstantStack({ constantIndex, apiEnvIndex }) {
                         value: crypto.randomUUID(),
                         envValues: {}
                     }
-                    const reserved = extractLcProps(constantIndex, "name")
-                    NewConstModal.open({
+                    const reserved = extractLcProps(apiIndex, "name")
+                    NewApiModal.open({
                         reserved,
                         value2envName,
                         apiEnvIndex,
                         model,
                         save: (newModel) => {
-                            constantIndex.setEntityObject(newModel)
-                            NewConstModal.close()
+                            apiIndex.setEntityObject(newModel)
+                            NewApiModal.close()
                         }
                     })
                 }
@@ -110,7 +108,7 @@ function ConstantStack({ constantIndex, apiEnvIndex }) {
             action: "delete",
             op: {
                 exec: (selected, setSelected) => {
-                    constantIndex.deleteEntities(selected)
+                    apiIndex.deleteEntities(selected)
                     setSelected([])
                 },
                 can: (selected) => selected.length > 0
@@ -121,20 +119,20 @@ function ConstantStack({ constantIndex, apiEnvIndex }) {
         {
             icon: "edit",
             action: (index) => {
-                const model = constantIndex.getEntityObject(index)
-                const reserved = extractLcProps(constantIndex, "name", model)
-                NewConstModal.open({
+                const model = apiIndex.getEntityObject(index)
+                const reserved = extractLcProps(apiIndex, "name", model)
+                NewApiModal.open({
                     edit: true,
                     reserved,
                     model,
                     value2envName,
                     apiEnvIndex,
                     save: (newModel) => {
-                        constantIndex.setEntityObject(
+                        apiIndex.setEntityObject(
                             { ...model, ...newModel },
                             true
                         )
-                        NewConstModal.close()
+                        NewApiModal.close()
                     }
                 })
             }
@@ -142,22 +140,21 @@ function ConstantStack({ constantIndex, apiEnvIndex }) {
         {
             icon: "delete",
             action: (index) => {
-                constantIndex.deleteEntity(index)
+                apiIndex.deleteEntity(index)
             }
         }
     ]
     return (
         <>
             <EntityStack
-                entityIndex={constantIndex}
-                emptyMsg="No constants available"
+                entityIndex={apiIndex}
                 actions={actions}
                 itemActions={itemActions}
-                render={({ name, constValue, envValues }) => (
+                render={({ name, url, envValues }) => (
                     <div className="stack-v gap-2">
                         <div className="stack-v">
                             <div className="text-xs opacity-50">{name}:</div>
-                            <div className="text-sm">{constValue}</div>
+                            <div className="text-sm">{url}</div>
                         </div>
                         {!!envValues && Object.keys(envValues).length > 0 && (
                             <div className="stack-h">
@@ -185,27 +182,26 @@ function ConstantStack({ constantIndex, apiEnvIndex }) {
                 )}
             />
 
-            <NewConstModal.content name="New Constant">
-                <ConstantForm {...NewConstModal.props} />
-            </NewConstModal.content>
+            <NewApiModal.content name="New external API">
+                <ApiForm {...NewApiModal.props} />
+            </NewApiModal.content>
         </>
     )
 }
 
-function ConstantManagerWindow({ close }) {
+function ApiManagerWindow({ close }) {
     const aContext = useContext(AppContext)
 
-    const apiEnvIndex = new ApiEnvIndex(aContext.apiSettings.apiEnvs)
     return (
         <OkCancelLayout cancel={close} ok={close}>
             <div className="p-4">
-                <ConstantStack
-                    apiEnvIndex={apiEnvIndex}
-                    constantIndex={aContext.constantIndex}
+                <ApiStack
+                    apiIndex={aContext.apiIndex}
+                    apiEnvIndex={aContext.apiEnvIndex}
                 />
             </div>
         </OkCancelLayout>
     )
 }
 
-export { ConstantStack, ConstantIndex, ConstantManagerWindow }
+export { ApiIndex, ApiStack, ApiManagerWindow }

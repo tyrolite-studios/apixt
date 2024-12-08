@@ -75,10 +75,7 @@ function ErrorBlock({ msg }) {
             <div className="stack-h gap-2 full-h">
                 <div># Error: {msg}</div>
                 <div className="auto" />
-                <Button
-                    name="Retry"
-                    onPressed={aContext.restartContentStream}
-                />
+                <Button name="Retry" onPressed={aContext.retryContentStream} />
                 <Button name="Clear" onPressed={aContext.clearContent} />
             </div>
         </div>
@@ -92,10 +89,7 @@ function StatusBlock() {
             <div className="stack-h gap-2 full-h">
                 <div># Aborted</div>
                 <div className="auto" />
-                <Button
-                    name="Retry"
-                    onPressed={aContext.restartContentStream}
-                />
+                <Button name="Retry" onPressed={aContext.retryContentStream} />
                 <Button name="Clear" onPressed={aContext.clearContent} />
             </div>
         </div>

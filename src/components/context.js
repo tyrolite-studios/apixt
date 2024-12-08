@@ -16,7 +16,9 @@ import {
 import { AssignmentIndex } from "entities/assignments"
 import { RouteIndex } from "entities/routes"
 import { ConstantIndex } from "entities/constants"
+import { ApiIndex } from "entities/apis"
 import { ApiEnvIndex } from "entities/api-envs"
+import { RequestIndex } from "entities/requests"
 import { useModalWindow } from "./modal"
 import { OkCancelLayout } from "./layout"
 import { Checkbox, Input } from "./form"
@@ -59,6 +61,8 @@ function SpinnerDiv() {
 }
 
 let rememberPrompts = true
+const lastAnswers = {}
+let rememberAnswers = {}
 
 function Prompt({ close, prompts, assign }) {
     const [remember, setRememberRaw] = useState(rememberPrompts)
@@ -69,7 +73,9 @@ function Prompt({ close, prompts, assign }) {
     const [inputs, setInputs] = useState(() => {
         const values = []
         while (values.length < prompts.length) {
-            values.push("")
+            const [question] = prompts[values.length]
+            const lastAnswer = lastAnswers[question]
+            values.push(lastAnswer ?? "")
         }
         return values
     })
@@ -102,12 +108,21 @@ function Prompt({ close, prompts, assign }) {
             <div className="text-xs">Don't ask again</div>
         </div>
     )
-
     return (
         <OkCancelLayout
             cancel={close}
             submit={true}
             ok={() => {
+                let i = 0
+                while (i < inputs.length) {
+                    const question = prompts[i][0]
+                    const answer = inputs[i]
+                    lastAnswers[question] = answer
+                    if (rememberPrompts) {
+                        rememberAnswers[question] = answer
+                    }
+                    i++
+                }
                 assign(inputs)
             }}
         >
@@ -453,6 +468,13 @@ function registerSettingsApi({ registry, register, apiRef }) {
 
     rebuildSettings(false)
 
+    const persistApiSettings = () => {
+        registry("apiStorage").setJson(
+            "settings",
+            d(apiRef.current.apiSettings, "<- STORE")
+        )
+    }
+
     return {
         apiSettings: registry("apiSettings"),
         globalSettings: registry("globalSettings"),
@@ -461,7 +483,8 @@ function registerSettingsApi({ registry, register, apiRef }) {
         rebuildSettings,
         globalStorage: registry("globalStorage"),
         apiStorage: registry("apiStorage"),
-        tempStorage: registry("tempStorage")
+        tempStorage: registry("tempStorage"),
+        persistApiSettings
     }
 }
 
@@ -472,6 +495,7 @@ function registerContentApi({ registry, register, apiRef }) {
     register("treeBuilder", treeBuilder)
     register("lastStatus", null)
     register("lastAssignments", null)
+    register("lastOverwriteHeaders", {})
     register("streamAbort", null)
 
     const baseHeaderIndex = new AssignmentIndex(
@@ -503,7 +527,6 @@ function registerContentApi({ registry, register, apiRef }) {
                     break
 
                 case "prompt":
-                    // TODO write to resolved if dont ask again was checked and last prompt has key
                     if (prompts[value] === undefined) {
                         prompts[value] = { key, targets: [] }
                     }
@@ -527,6 +550,11 @@ function registerContentApi({ registry, register, apiRef }) {
             } else {
                 resolveAssignment(key, assignmentValue, type)
             }
+        }
+        for (const [key, assignment] of Object.entries(defaults)) {
+            if (resolved[key] !== undefined) continue
+            const { type, assignmentValue } = assignment
+            resolveAssignment(key, assignmentValue, type)
         }
         return resolved
     }
@@ -601,6 +629,27 @@ function registerContentApi({ registry, register, apiRef }) {
         })
     }
 
+    const assignAnswers = (promptEntries, values, headers, query, body) => {
+        let i = 0
+        while (i < promptEntries.length) {
+            const [, assignments] = promptEntries[i]
+
+            const value = values[i]
+            const { key, targets } = assignments
+            for (const target of targets) {
+                if (target === "headers") {
+                    headers[key] = value
+                } else if (target === "query") {
+                    query[key] = value
+                } else if (target === "body") {
+                    body[key] = value
+                }
+            }
+            i++
+        }
+        return { headers, query, body }
+    }
+
     const doRequest = (fireRequest, request, assignments, env) => {
         const { openPrompt, closePrompt } = registry()
 
@@ -613,32 +662,39 @@ function registerContentApi({ registry, register, apiRef }) {
             bodyAssignments
         } = getResolvedAssignments(request, assignments, env)
 
-        const promptEntries = Object.entries(prompts)
+        let promptEntries = Object.entries(prompts)
+        const headers = {}
+        const query = {}
+        const body = {}
+        if (promptEntries.length && rememberPrompts) {
+            const newEntries = []
+            const preEntries = []
+            const preValues = []
+            for (const item of promptEntries) {
+                const answer = rememberAnswers[item[0]]
+                if (answer) {
+                    preEntries.push(item)
+                    preValues.push(answer)
+                } else {
+                    newEntries.push(item)
+                }
+            }
+            assignAnswers(preEntries, preValues, headers, query, body)
+            promptEntries = newEntries
+        }
+
         if (promptEntries.length) {
             const promise = new Promise((resolve, reject) => {
                 openPrompt({
                     prompts: promptEntries,
                     assign: (values) => {
-                        const headers = {}
-                        const query = {}
-                        const body = {}
-                        let i = 0
-                        while (i < promptEntries.length) {
-                            const [, assignments] = promptEntries[i]
-
-                            const value = values[i]
-                            const { key, targets } = assignments
-                            for (const target of targets) {
-                                if (target === "headers") {
-                                    headers[key] = value
-                                } else if (target === "query") {
-                                    query[key] = value
-                                } else if (target === "body") {
-                                    body[key] = value
-                                }
-                            }
-                            i++
-                        }
+                        assignAnswers(
+                            promptEntries,
+                            values,
+                            headers,
+                            query,
+                            body
+                        )
                         resolve(
                             fireRequest(
                                 { ...headersAssignments, ...headers },
@@ -653,9 +709,9 @@ function registerContentApi({ registry, register, apiRef }) {
             return promise
         } else {
             return fireRequest(
-                headersAssignments,
-                queryAssignments,
-                bodyAssignments
+                { ...headersAssignments, ...headers },
+                { ...queryAssignments, ...query },
+                { ...bodyAssignments, ...body }
             )
         }
     }
@@ -684,17 +740,19 @@ function registerContentApi({ registry, register, apiRef }) {
         }
     }
 
-    const startContentStream = (request, assignments, overwriteHeaders) => {
+    const startContentStream = (
+        request,
+        assignments,
+        overwriteHeaders = {}
+    ) => {
         register("lastRequest", request)
         register("lastAssignments", assignments)
+        register("lastOverwriteHeaders", overwriteHeaders)
         register("lastStatus", null)
 
         const { treeBuilder, spinner, config, history } = registry()
 
         const fireRequest = (resHeaders, resQuery, resBody) => {
-            history.push2history(request, assignments)
-            treeBuilder.reset()
-
             const options = getResolvedRequestObject(
                 request,
                 resQuery,
@@ -702,9 +760,22 @@ function registerContentApi({ registry, register, apiRef }) {
                 resBody,
                 { ...overwriteHeaders, [config.dumpHeader]: "cmd" }
             )
+            let bodyType
+            if (isMethodWithRequestBody(request.method)) {
+                for (const [name, value] of Object.entries(
+                    options.headers ?? {}
+                )) {
+                    if (name.toLowerCase() !== "content-type") continue
+                    bodyType = value
+                    break
+                }
+            }
+            history.push2history(request, assignments, bodyType)
+            treeBuilder.reset()
+
             const httpStream = startAbortableApiRequestStream(
                 config.baseUrl,
-                d(options)
+                options
             )
 
             register("streamAbort", httpStream.abort)
@@ -722,33 +793,63 @@ function registerContentApi({ registry, register, apiRef }) {
         doRequest(fireRequest, request, assignments)
     }
 
-    const restartContentStream = (overwrites = {}) => {
+    const reloadContentStream = () => {
         const { lastRequest, lastAssignments } = registry()
         if (!lastRequest) return
 
-        const { headers, ...options } = lastRequest
-        let addHeaders = {}
-        if (headers && overwrites.headers) {
-            addHeaders = {
-                headers: { ...headers, ...overwrites.headers }
-            }
-        }
-        startContentStream(
-            { ...options, ...overwrites, ...addHeaders },
-            lastAssignments
-        )
+        startContentStream(lastRequest, lastAssignments)
+    }
+
+    const restartContentStream = (overwrites) => {
+        const { lastRequest, lastAssignments } = registry()
+        if (!lastRequest) return
+
+        startContentStream(lastRequest, lastAssignments, overwrites)
+    }
+
+    const retryContentStream = () => {
+        const { lastRequest, lastAssignments, lastOverwriteHeaders } =
+            registry()
+        if (!lastRequest) return
+
+        startContentStream(lastRequest, lastAssignments, lastOverwriteHeaders)
     }
 
     return {
         treeBuilder: registry("treeBuilder"),
         startContentStream,
         restartContentStream,
+        reloadContentStream,
+        retryContentStream,
         abortContentStream: () => {
             const { streamAbort } = registry()
             if (streamAbort) streamAbort()
         },
         haltContentStream: (hash) => {
             restartContentStream({ headers: { "Tls-Apixt-Halt": hash } })
+        },
+        fetchApiResponse: (request, assignments) => {
+            const { api } = request
+            const { getApiUrl } = apiRef.current
+
+            const fireRequest = (resHeaders, resQuery, resBody) => {
+                const options = getResolvedRequestObject(
+                    request,
+                    resQuery,
+                    resHeaders,
+                    resBody
+                )
+
+                const url = getApiUrl(api)
+                d("->", url, options)
+                const httpStream = startAbortableApiBodyRequest(url, {
+                    ...options,
+                    expect: () => true
+                })
+                return httpStream
+            }
+
+            doRequest(fireRequest, request, assignments)
         },
         getEnvContentPromise: (env) => {
             const { lastRequest, lastAssignments } = registry()
@@ -781,7 +882,13 @@ function registerContentApi({ registry, register, apiRef }) {
             treeBuilder.reset()
         },
         getLastStatus: () => registry("lastStatus"),
-        getBaseHeaderIndex: () => registry("baseHeaderIndex")
+        getBaseHeaderIndex: () => registry("baseHeaderIndex"),
+        hasPromptAnswers: () => {
+            return rememberPrompts && !!Object.keys(rememberAnswers).length
+        },
+        clearPromptAnswers: () => {
+            rememberAnswers = {}
+        }
     }
 }
 
@@ -926,10 +1033,61 @@ function registerConstantsApi({ registry }) {
     }
 }
 
-function registerApiEnvApi({ registry }) {
+function registerRequestsApi({ registry, apiRef }) {
     const { apiSettings } = registry()
+    const requestIndex = new RequestIndex(apiSettings.requests)
+    requestIndex.addListener(() => {
+        apiSettings.requests = requestIndex.model
+        apiRef.current.persistApiSettings()
+    })
+    const getRequestOptions = () => {
+        const items = requestIndex.getEntityObjects()
+        const options = []
+        for (const { name, value } of items) {
+            options.push({ id: value, name })
+        }
+        return options
+    }
+    const getRequestName = (id) => {
+        const index = requestIndex.getEntityByPropValue("value", id)
+        if (index === undefined) return
+
+        return requestIndex.getEntityPropValue(index, "name")
+    }
+    return {
+        requestIndex,
+        getRequestName,
+        getRequestOptions
+    }
+}
+
+function registerApiEnvApi({ registry, apiRef }) {
+    const { apiSettings } = registry()
+    const apiIndex = new ApiIndex(apiSettings.apis)
     const apiEnvIndex = new ApiEnvIndex(apiSettings.apiEnvs)
 
+    const getApiName = (id) => {
+        const index = apiIndex.getEntityByPropValue("value", id)
+        if (index === undefined) return
+
+        return apiIndex.getEntityPropValue(index, "name")
+    }
+    const getApiUrl = (id) => {
+        const index = apiIndex.getEntityByPropValue("value", id)
+        if (index === undefined) return
+
+        return apiIndex.getEntityPropValue(index, "url")
+    }
+    const getApiOptions = (except = []) => {
+        const options = [{ id: "0", name: "Current" }]
+        const envs = apiIndex.getEntityObjects()
+        for (const { value, name } of envs) {
+            if (except.includes(value)) continue
+
+            options.push({ id: value, name })
+        }
+        return options
+    }
     const getApiEnvName = (id) => {
         const index = apiEnvIndex.getEntityByPropValue("value", id)
         if (index === undefined) return
@@ -949,9 +1107,14 @@ function registerApiEnvApi({ registry }) {
     const rebuildApiEnvs = () => {
         const { apiSettings } = registry()
         apiEnvIndex.setModel(apiSettings.apiEnvs)
+        apiIndex.setModel(apiSettings.apis)
     }
 
     return {
+        apiIndex,
+        getApiName,
+        getApiUrl,
+        getApiOptions,
         apiEnvIndex,
         getApiEnvName,
         getApiEnvOptions,
@@ -970,7 +1133,7 @@ function registerHistoryApi({ registry, register }) {
         }
     }
 
-    const push2history = (request, assignments) => {
+    const push2history = (request, assignments, bodyType) => {
         const hash = md5(request)
         let i = 0
         while (i < history.length && history[i].hash !== hash) i++
@@ -981,6 +1144,7 @@ function registerHistoryApi({ registry, register }) {
         history.unshift({
             timestamp: Date.now(),
             request,
+            bodyType,
             assignments,
             hash
         })
@@ -1014,12 +1178,13 @@ function registerHistoryApi({ registry, register }) {
     const getLastRouteMatch = (method, pathInfo) => {
         const matchExpr = new RegExp(pathInfo.regexp)
 
-        for (const { request, assignments } of history) {
+        for (const { request, assignments, bodyType } of history) {
             const matches = matchExpr.exec(request.path)
             if (matches !== null && request.method === method)
                 return {
                     request,
-                    assignments
+                    assignments,
+                    bodyType
                 }
         }
     }
@@ -1068,6 +1233,7 @@ function AppCtx({ config, children }) {
             ...registerHotkeyApi(registration),
             ...registerConstantsApi(registration),
             ...registerApiEnvApi(registration),
+            ...registerRequestsApi(registration),
 
             config: registry("config"),
             version: registry("version"),

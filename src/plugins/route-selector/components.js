@@ -13,6 +13,7 @@ import {
     AssignmentStack,
     AssignmentIndex
 } from "entities/assignments"
+import { useComponentUpdate } from "../../components/common"
 
 function RoutePath({ path, params = [] }) {
     const parts = path.substring(1).split("/")
@@ -56,6 +57,7 @@ function getDefaultedAssignments(assignments, defaults) {
 
 function RouteLauncher({ close, request, assignments = {} }) {
     const aContext = useContext(AppContext)
+    const update = useComponentUpdate()
 
     const { method } = request
     const pathInfo = useMemo(() => {
@@ -144,7 +146,20 @@ function RouteLauncher({ close, request, assignments = {} }) {
     }
 
     return (
-        <OkCancelLayout cancel={close} ok={launch}>
+        <OkCancelLayout
+            cancel={close}
+            ok={launch}
+            secondaryButtons={[
+                {
+                    name: "Clear Prompts",
+                    onPressed: () => {
+                        aContext.clearPromptAnswers()
+                        update()
+                    },
+                    disabled: !aContext.hasPromptAnswers()
+                }
+            ]}
+        >
             <FormGrid>
                 <CustomCells name="Path:">
                     <div className="stack-h gap-1">{routeElems}</div>
@@ -273,13 +288,14 @@ function RouteStack({ close, routeIndex, method, plugin, mode }) {
             }
             render={(item) => {
                 const match = index2lastRouteMatch[item.index] ?? {}
-                const { assignments = {}, request = {} } = match
+                const { assignments = {}, request = {}, bodyType } = match
 
                 return (
                     <RenderWithAssignments
                         assignments={assignments}
                         mode={mode}
                         method={method}
+                        bodyType={bodyType}
                         request={request}
                     >
                         <div key="i1" className="stack-v">
