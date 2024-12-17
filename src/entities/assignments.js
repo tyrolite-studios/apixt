@@ -17,10 +17,46 @@ import { ClassNames } from "core/helper"
 import { Icon } from "../components/layout"
 import { ConstantManagerWindow } from "entities/constants"
 import { MappingIndex } from "core/entity"
+import { extractLcProps } from "../core/entity"
 
 class AssignmentIndex extends MappingIndex {
     constructor(model) {
         super(model, ["type", "assignmentValue"])
+    }
+
+    syncToDefaults(defaults) {
+        const defaultKeys = defaults
+            ? Object.keys(defaults).map((x) => x.toLowerCase())
+            : []
+
+        const indices = []
+        let i = 0
+        while (i < this.length) {
+            switch (this.getEntityPropValue(i, "type")) {
+                case "ignore":
+                    const lcKey = this.getEntityPropValue(
+                        i,
+                        "value"
+                    ).toLowerCase()
+                    if (defaultKeys.includes(lcKey)) break
+
+                case "default":
+                    indices.push(i)
+                    break
+            }
+            i++
+        }
+        this.deleteEntities(indices)
+        if (!defaults) return
+
+        const lcKeys = extractLcProps(this, "value")
+        const add = []
+        for (const key of Object.keys(defaults)) {
+            if (lcKeys.includes(key.toLowerCase())) continue
+
+            add.push({ value: key, type: "default", assignmentValue: "" })
+        }
+        this.setEntityObjects(add)
     }
 }
 
@@ -341,19 +377,22 @@ function AssignmentEditForm({
     )
 }
 
-function AssignmentStack({ assignmentIndex, defaultsModel, mode }) {
+function AssignmentStack({ assignmentIndex, defaultsModel = {}, matcher }) {
     const EditModal = useModalWindow()
-
-    const allValues = assignmentIndex
-        .getPropValues("value")
-        .map((x) => x.toLowerCase())
+    const defaultLcKeys = Object.keys(defaultsModel).map((x) => x.toLowerCase())
+    const lc2default = {}
+    for (const key of Object.keys(defaultsModel)) {
+        lc2default[key.toLowerCase()] = key
+    }
+    const checkDefaults = !!matcher
 
     const actions = [
         {
             icon: "add",
-            name: "New",
+            name: "Add",
             op: {
                 exec: () => {
+                    const allLcKeys = extractLcProps(assignmentIndex, "value")
                     EditModal.open({
                         defaultsModel,
                         model: {
@@ -361,9 +400,33 @@ function AssignmentStack({ assignmentIndex, defaultsModel, mode }) {
                             type: "set",
                             assignmentValue: ""
                         },
-                        reserved: allValues,
+                        reserved: checkDefaults
+                            ? without(allLcKeys, defaultLcKeys)
+                            : allLcKeys,
                         store: (newModel) => {
-                            assignmentIndex.setEntityObject(newModel)
+                            const lcValue = newModel.value.toLowerCase()
+                            if (
+                                checkDefaults &&
+                                defaultLcKeys.includes(lcValue)
+                            ) {
+                                // let's update the default instead...
+                                const index =
+                                    assignmentIndex.getEntityByPropValue(
+                                        "value",
+                                        lc2default[lcValue]
+                                    )
+                                const oldModel =
+                                    assignmentIndex.getEntityObject(index)
+                                oldModel.assignmentValue =
+                                    newModel.assignmentValue
+                                oldModel.type = newModel.type
+                                assignmentIndex.setEntityObject(
+                                    { ...oldModel },
+                                    true
+                                )
+                            } else {
+                                assignmentIndex.setEntityObject(newModel)
+                            }
                             EditModal.close()
                         }
                     })
@@ -381,7 +444,7 @@ function AssignmentStack({ assignmentIndex, defaultsModel, mode }) {
                     defaultsModel,
                     model,
                     edit: true,
-                    reserved: without(allValues, model.value.toLowerCase()),
+                    reserved: extractLcProps(assignmentIndex, "value", model),
                     store: (newModel) => {
                         assignmentIndex.setEntityObject(
                             { ...model, ...newModel },
@@ -416,6 +479,8 @@ function AssignmentStack({ assignmentIndex, defaultsModel, mode }) {
                 entityIndex={assignmentIndex}
                 actions={actions}
                 itemActions={itemActions}
+                compact
+                matcher={matcher}
                 render={(item) => {
                     const defaultAssignment =
                         item.type === "default" &&

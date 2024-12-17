@@ -1,4 +1,5 @@
 import { isString, d, isInt, isArray } from "./helper"
+import { CMD } from "core/tree"
 
 const isMethodWithRequestBody = (method) =>
     ["POST", "PUT", "PATCH"].includes(method.toUpperCase())
@@ -53,11 +54,14 @@ const startAbortableApiRequest = (
 
 const startAbortableApiRequestStream = (
     baseUrl,
-    { responseStream, ...options }
+    { responseStream, api, ...options }
 ) => {
     if (responseStream) {
         const { status, lines, interval } = responseStream
         return startAbortableArrayStream(lines, interval, status)
+    }
+    if (api) {
+        return startAbortableRequestResponse(baseUrl, options)
     }
     const request = startAbortableApiRequest(baseUrl, {
         ...options,
@@ -140,6 +144,85 @@ const startAbortableArrayStream = (
             }
         }
     }
+}
+
+const startAbortableRequestResponse = (
+    baseUrl,
+    { method, path, query, ...options }
+) => {
+    const controller = new AbortController()
+
+    let url =
+        (baseUrl.endsWith("/")
+            ? baseUrl.substring(0, baseUrl.length - 1)
+            : baseUrl) + path
+
+    if (query) url += "?" + query
+
+    const request = {
+        status: null,
+        abort: controller.abort,
+        fetchPromise: fetch(url, {
+            method,
+            signal: controller.signal,
+            ...options
+        }).then(async (response) => {
+            const contentType = response.headers.get("content-type") ?? ""
+            const [mime] = contentType.split(";")
+            const lines = [
+                { cmd: CMD.OPEN_SECTION, name: "HttpRequest" },
+                { cmd: CMD.OPEN_SECTION_DETAILS },
+                {
+                    cmd: CMD.ADD_CODE_BLOCK,
+                    name: "Http Header",
+                    content:
+                        "<pre>" +
+                        Object.entries(response.headers)
+                            .map(([name, value]) => `${name}: ${value}`)
+                            .join("\n") +
+                        "</pre>"
+                },
+                { cmd: CMD.CLOSE_SECTION_DETAILS },
+                {
+                    cmd: CMD.ADD_CODE_BLOCK,
+                    name: "Http Response",
+                    tags: ["api.response"],
+                    content: await response.text(),
+                    mime,
+                    footer: {
+                        Status: response.status,
+                        "Content-Type": contentType
+                    },
+                    isError: response.status >= 400
+                },
+                { cmd: CMD.CLOSE_SECTION },
+                { cmd: CMD.END }
+            ]
+            const encoder = new TextEncoder()
+            const stream = new ReadableStream({
+                start(controller) {
+                    while (lines.length) {
+                        let line = lines.shift()
+                        controller.enqueue(
+                            encoder.encode(
+                                (isString(line) ? line : JSON.stringify(line)) +
+                                    "\n"
+                            )
+                        )
+                    }
+                    controller.close()
+                },
+                cancel() {
+                    clearInterval(timeout)
+                }
+            })
+
+            request.status = response.status
+
+            return stream.getReader()
+        })
+    }
+    return request
 }
 
 export {

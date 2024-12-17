@@ -158,6 +158,19 @@ class EntityIndex {
         return null
     }
 
+    getEntitiesByPropValue(prop, value) {
+        const found = []
+        let i = 0
+        const iMax = this.length
+        while (i < iMax) {
+            if (this.getEntityPropValue(i, prop) === value) {
+                found.push(i)
+            }
+            i++
+        }
+        return found
+    }
+
     getValueTemplate() {
         return this.valueTemplate
     }
@@ -440,8 +453,8 @@ class MappingIndex extends EntityIndex {
     }
 
     setModel(model, notify = true) {
-        this.model = model
-        this.items = [...Object.keys(model)]
+        this.model = model ?? {}
+        this.items = [...Object.keys(this.model)]
         if (notify) this.notify()
     }
 

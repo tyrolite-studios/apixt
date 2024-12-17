@@ -19,11 +19,22 @@ class Plugin extends AbstractPlugin {
         return true
     }
 
+    setOpenEditor(value) {
+        this.openEditorHandler = value
+    }
+
+    openEditor(props) {
+        if (!this.openEditorHandler) return
+
+        this.openEditorHandler(props)
+    }
+
     init() {
         this.addHeaderButton({
             id: "builder",
             name: "Request..."
         })
+        this.openEditorHandler = null
     }
 
     getWindows(props) {

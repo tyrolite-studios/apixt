@@ -16,9 +16,10 @@ import {
 import { AssignmentIndex } from "entities/assignments"
 import { RouteIndex } from "entities/routes"
 import { ConstantIndex } from "entities/constants"
-import { ApiIndex } from "entities/apis"
+import { ApiIndex, APIS } from "entities/apis"
 import { ApiEnvIndex } from "entities/api-envs"
 import { RequestIndex } from "entities/requests"
+import { RequestAssignmentsIndex } from "entities/request-assignments"
 import { useModalWindow } from "./modal"
 import { OkCancelLayout } from "./layout"
 import { Checkbox, Input } from "./form"
@@ -469,10 +470,11 @@ function registerSettingsApi({ registry, register, apiRef }) {
     rebuildSettings(false)
 
     const persistApiSettings = () => {
-        registry("apiStorage").setJson(
-            "settings",
-            d(apiRef.current.apiSettings, "<- STORE")
-        )
+        registry("apiStorage").setJson("settings", apiRef.current.apiSettings)
+    }
+    const setApiSetting = (name, value) => {
+        apiRef.current.apiSettings[name] = value
+        persistApiSettings()
     }
 
     return {
@@ -484,7 +486,8 @@ function registerSettingsApi({ registry, register, apiRef }) {
         globalStorage: registry("globalStorage"),
         apiStorage: registry("apiStorage"),
         tempStorage: registry("tempStorage"),
-        persistApiSettings
+        persistApiSettings,
+        setApiSetting
     }
 }
 
@@ -563,15 +566,9 @@ function registerContentApi({ registry, register, apiRef }) {
         const prompts = {}
         const extracts = {}
 
-        const { path, method, body, ...options } = request
+        const { method } = request
 
-        const pathMatch = apiRef.current.getMatchingRoutePath(path, method)
-
-        // TODO get the defaults from an RequestDefaultsIndex
-        const defaults = pathMatch
-            ? { headers: apiRef.current.getBaseHeaderIndex().model }
-            : {}
-
+        const defaults = apiRef.current.getDefaults(request.defaults)
         const queryAssignments = getAssignments(
             "query",
             assignments,
@@ -654,7 +651,6 @@ function registerContentApi({ registry, register, apiRef }) {
         const { openPrompt, closePrompt } = registry()
 
         const {
-            hasBody,
             prompts,
             extracts,
             queryAssignments,
@@ -752,13 +748,18 @@ function registerContentApi({ registry, register, apiRef }) {
 
         const { treeBuilder, spinner, config, history } = registry()
 
+        const isCurrentApi = request.api === APIS.OPTION.CURRENT
+
         const fireRequest = (resHeaders, resQuery, resBody) => {
             const options = getResolvedRequestObject(
                 request,
                 resQuery,
                 resHeaders,
                 resBody,
-                { ...overwriteHeaders, [config.dumpHeader]: "cmd" }
+                {
+                    ...overwriteHeaders,
+                    [config.dumpHeader]: isCurrentApi ? "cmd" : undefined
+                }
             )
             let bodyType
             if (isMethodWithRequestBody(request.method)) {
@@ -774,7 +775,9 @@ function registerContentApi({ registry, register, apiRef }) {
             treeBuilder.reset()
 
             const httpStream = startAbortableApiRequestStream(
-                config.baseUrl,
+                isCurrentApi
+                    ? config.baseUrl
+                    : apiRef.current.getApiUrl(request.api),
                 options
             )
 
@@ -1061,12 +1064,53 @@ function registerRequestsApi({ registry, apiRef }) {
     }
 }
 
+function registerDefaultsApi({ registry, apiRef }) {
+    const { apiSettings } = registry()
+    const defaultsIndex = new RequestAssignmentsIndex(apiSettings.defaults)
+    defaultsIndex.addListener(() => {
+        apiSettings.defaults = defaultsIndex.model
+        apiRef.current.persistApiSettings()
+    })
+    const getDefaultsOptions = () => {
+        const items = defaultsIndex.getEntityObjects()
+        const options = [{ id: "", name: "<None>" }]
+        for (const { name, value } of items) {
+            options.push({ id: value, name })
+        }
+        return options
+    }
+    const getDefaultsName = (id) => {
+        const index = defaultsIndex.getEntityByPropValue("value", id)
+        if (index === undefined) return
+
+        return defaultsIndex.getEntityPropValue(index, "name")
+    }
+    const getDefaults = (id) => {
+        const index = defaultsIndex.getEntityByPropValue("value", id)
+        if (index === undefined) return {}
+
+        return defaultsIndex.getEntityObject(index)
+    }
+    return {
+        defaultsIndex,
+        getDefaultsName,
+        getDefaults,
+        getDefaultsOptions
+    }
+}
+
 function registerApiEnvApi({ registry, apiRef }) {
     const { apiSettings } = registry()
     const apiIndex = new ApiIndex(apiSettings.apis)
+    apiIndex.addListener(() => {
+        apiSettings.apis = apiIndex.model
+        apiRef.current.persistApiSettings()
+    })
     const apiEnvIndex = new ApiEnvIndex(apiSettings.apiEnvs)
 
     const getApiName = (id) => {
+        if (id === APIS.OPTION.CURRENT) return "Current"
+
         const index = apiIndex.getEntityByPropValue("value", id)
         if (index === undefined) return
 
@@ -1079,7 +1123,7 @@ function registerApiEnvApi({ registry, apiRef }) {
         return apiIndex.getEntityPropValue(index, "url")
     }
     const getApiOptions = (except = []) => {
-        const options = [{ id: "0", name: "Current" }]
+        const options = [{ id: APIS.OPTION.CURRENT, name: "Current" }]
         const envs = apiIndex.getEntityObjects()
         for (const { value, name } of envs) {
             if (except.includes(value)) continue
@@ -1234,6 +1278,7 @@ function AppCtx({ config, children }) {
             ...registerConstantsApi(registration),
             ...registerApiEnvApi(registration),
             ...registerRequestsApi(registration),
+            ...registerDefaultsApi(registration),
 
             config: registry("config"),
             version: registry("version"),

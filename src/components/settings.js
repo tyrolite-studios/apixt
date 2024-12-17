@@ -25,6 +25,7 @@ import { ApiIndex, ApiStack } from "entities/apis"
 import { ApiEnvIndex, ApiEnvStack } from "entities/api-envs"
 import { PluginStack, PluginIndex } from "entities/plugins"
 import { KeyBindingsStack } from "entities/key-bindings"
+import { REQUEST_DEFAULTS } from "../entities/request-assignments"
 
 const root = document.documentElement
 
@@ -58,7 +59,10 @@ const defaultApiSettings = {
     apiEnvs: {},
     apis: {},
     constants: {},
-    requests: {}
+    requests: {},
+    defaults: {},
+    preselectedDefaults: REQUEST_DEFAULTS.OPTION.NONE,
+    showDefaults: true
 }
 
 function PluginsOverview({ pluginIndex }) {

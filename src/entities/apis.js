@@ -4,8 +4,20 @@ import { AppContext } from "components/context"
 import { EntityStack, useUpdateOnEntityIndexChanges } from "components/common"
 import { useModalWindow } from "components/modal"
 import { OkCancelLayout, Icon } from "components/layout"
-import { FormGrid, InputCells, CustomCells } from "components/form"
+import {
+    FormGrid,
+    InputCells,
+    CustomCells,
+    Select,
+    ButtonGroup
+} from "components/form"
 import { EnvOverrideIndex, EnvOverrideStack } from "./env-override"
+
+const APIS = {
+    OPTION: {
+        CURRENT: "0"
+    }
+}
 
 class ApiIndex extends MappingIndex {
     constructor(model) {
@@ -69,39 +81,86 @@ function ApiForm({
     )
 }
 
-function ApiStack({ apiIndex, apiEnvIndex }) {
-    useUpdateOnEntityIndexChanges(apiEnvIndex)
-    const NewApiModal = useModalWindow()
-
+function useApiForm(apiIndex, apiEnvIndex) {
+    const FormModal = useModalWindow()
     const value2envName = {}
     const apiEnvs = apiEnvIndex.getEntityObjects()
     for (const { value, name } of apiEnvs) {
         value2envName[value] = name
     }
+
+    const editByModel = (model) => {
+        FormModal.open({
+            model,
+            edit: true,
+            reserved: extractLcProps(apiIndex, "name", model),
+            value2envName,
+            apiEnvIndex,
+            save: (newModel) => {
+                apiIndex.setEntityObject(
+                    {
+                        ...model,
+                        ...newModel
+                    },
+                    true
+                )
+                FormModal.close()
+            }
+        })
+    }
+    const editByIndex = (index) => {
+        const model = apiIndex.getEntityObject(index)
+        editByModel(model)
+    }
+    return {
+        canEdit: (id) => ![APIS.OPTION.CURRENT].includes(id),
+        editByValue: (value) => {
+            const index = apiIndex.getEntityByPropValue("value", value)
+            return editByIndex(index)
+        },
+        addNew: () => {
+            const model = {
+                name: "",
+                url: "",
+                value: crypto.randomUUID(),
+                envValues: {}
+            }
+            const reserved = extractLcProps(apiIndex, "name")
+            FormModal.open({
+                reserved,
+                value2envName,
+                apiEnvIndex,
+                model,
+                save: (newModel) => {
+                    apiIndex.setEntityObject(newModel)
+                    FormModal.close()
+                }
+            })
+        },
+        value2envName,
+        editByIndex,
+        editByModel,
+        ApiFormModal: (
+            <FormModal.content>
+                <ApiForm {...FormModal.props} />
+            </FormModal.content>
+        )
+    }
+}
+
+function ApiStack({ apiIndex, apiEnvIndex }) {
+    useUpdateOnEntityIndexChanges(apiEnvIndex)
+    const { ApiFormModal, addNew, editByIndex, value2envName } = useApiForm(
+        apiIndex,
+        apiEnvIndex
+    )
+
     const actions = [
         {
             action: "add",
             name: "New",
             op: {
-                exec: () => {
-                    const model = {
-                        name: "",
-                        constValue: "",
-                        value: crypto.randomUUID(),
-                        envValues: {}
-                    }
-                    const reserved = extractLcProps(apiIndex, "name")
-                    NewApiModal.open({
-                        reserved,
-                        value2envName,
-                        apiEnvIndex,
-                        model,
-                        save: (newModel) => {
-                            apiIndex.setEntityObject(newModel)
-                            NewApiModal.close()
-                        }
-                    })
-                }
+                exec: addNew
             }
         },
         {
@@ -118,24 +177,7 @@ function ApiStack({ apiIndex, apiEnvIndex }) {
     const itemActions = [
         {
             icon: "edit",
-            action: (index) => {
-                const model = apiIndex.getEntityObject(index)
-                const reserved = extractLcProps(apiIndex, "name", model)
-                NewApiModal.open({
-                    edit: true,
-                    reserved,
-                    model,
-                    value2envName,
-                    apiEnvIndex,
-                    save: (newModel) => {
-                        apiIndex.setEntityObject(
-                            { ...model, ...newModel },
-                            true
-                        )
-                        NewApiModal.close()
-                    }
-                })
-            }
+            action: editByIndex
         },
         {
             icon: "delete",
@@ -182,14 +224,12 @@ function ApiStack({ apiIndex, apiEnvIndex }) {
                 )}
             />
 
-            <NewApiModal.content name="New external API">
-                <ApiForm {...NewApiModal.props} />
-            </NewApiModal.content>
+            {ApiFormModal}
         </>
     )
 }
 
-function ApiManagerWindow({ close }) {
+function ApiManager({ close }) {
     const aContext = useContext(AppContext)
 
     return (
@@ -204,4 +244,47 @@ function ApiManagerWindow({ close }) {
     )
 }
 
-export { ApiIndex, ApiStack, ApiManagerWindow }
+function ApiSelect({ api, setApi, apiIndex, apiEnvIndex }) {
+    const aContext = useContext(AppContext)
+    const ApiManagerModal = useModalWindow()
+    const { ApiFormModal, editByValue, canEdit } = useApiForm(
+        apiIndex,
+        apiEnvIndex
+    )
+    const buttons = [
+        {
+            icon: "edit",
+            disabled: !canEdit(api),
+            onPressed: () => editByValue(api)
+        },
+        {
+            icon: "build",
+            onPressed: () => {
+                ApiManagerModal.open({
+                    apiIndex
+                })
+            }
+        }
+    ]
+    return (
+        <>
+            <div className="stack-h gap-2 items-center">
+                <div className="text-xs">API:</div>
+                <Select
+                    options={aContext.getApiOptions()}
+                    value={api}
+                    set={setApi}
+                />
+                <ButtonGroup buttons={buttons} />
+            </div>
+
+            {ApiFormModal}
+
+            <ApiManagerModal.content>
+                <ApiManager {...ApiManagerModal.props} />
+            </ApiManagerModal.content>
+        </>
+    )
+}
+
+export { ApiIndex, ApiStack, ApiManager, ApiSelect, APIS }

@@ -476,6 +476,7 @@ function Select({
     required,
     full,
     empty,
+    emptyMsg,
     autoFocus,
     onMouseDown,
     onKeyDown,
@@ -518,7 +519,7 @@ function Select({
         const found = id == tmpValue
         if (found) hasFound = true
         elems.push(
-            <option key={id} checked={found} value={id}>
+            <option key={id} value={id}>
                 {name}
             </option>
         )
@@ -530,7 +531,9 @@ function Select({
         const found = isNull(tmpValue)
         if (found) hasFound = true
         elems.unshift(
-            <option key="" checked={tmpValue === null} value=""></option>
+            <option key="" checked={tmpValue === null} value="">
+                {emptyMsg}
+            </option>
         )
     }
     if (!hasFound) {
@@ -554,7 +557,7 @@ function Select({
         <select
             className={cls.value}
             required={required}
-            defaultValue={tmpValue}
+            value={tmpValue}
             onMouseDown={!interactive ? (e) => e.preventDefault() : onMouseDown}
             onKeyDown={
                 !interactive

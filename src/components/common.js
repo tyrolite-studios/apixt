@@ -304,6 +304,7 @@ function useFocusManager({
 
     const autoFocus = (e) => {
         if (!mounted.current) return
+
         setCatchFocus(false)
         const newTabIndex =
             lastTabIndex !== undefined
@@ -919,17 +920,105 @@ const action2icon = {
 const getActionName = (action) => action2name[action] ?? action
 const getActionIcon = (action) => action2icon[action] ?? action
 
+function EntityPicker({
+    className,
+    itemClassName,
+    entityIndex,
+    pick,
+    matcher,
+    emptyMsg = "No items available",
+    wrap = true,
+    sized = true,
+    styled = true,
+    colored = true,
+    bordered = true,
+    divided = true,
+    padded = true,
+    render = (item) => item.name
+}) {
+    const update = useUpdateOnEntityIndexChanges(entityIndex)
+
+    const [active, setActive] = useState(0)
+    const { matches } = entityIndex.getView({ match: matcher })
+    const items = entityIndex.getEntityObjects(matches)
+
+    const stackRef = useRef(null)
+
+    const { focusItem, hasFocus, attr, tabIndex, ...focus } = useFocusManager({
+        setActive: (index) => {
+            pick(items[index])
+        },
+        update,
+        active: -1,
+        deselect: true,
+        divRef: stackRef,
+        count: items.length,
+        handleSpace: true
+    })
+
+    const cls = ClassNames("stack-v", className)
+    cls.addIf(styled && colored, "bg-input-bg text-input-text")
+    cls.addIf(styled && bordered, "border")
+    cls.addIf(styled && bordered && colored, "border-input-border")
+    cls.addIf(styled && divided, "divide-y")
+    cls.addIf(styled && divided && colored, "divide-input-border")
+
+    let i = 0
+    const elems = []
+    for (const item of items) {
+        const isFocused = hasFocus && i === tabIndex
+
+        const itemCls = new ClassNames(
+            "focus:outline-none focus:ring focus:ring-inset focus:ring-focus-border focus:border-0 hover:brightness-110",
+            itemClassName
+        )
+        itemCls.addIf(styled && sized, "text-sm")
+        itemCls.addIf(styled && padded, "p-2")
+        itemCls.addIf(!wrap, "truncate")
+        itemCls.addIf(styled && colored, "bg-input-bg text-input-text")
+
+        const itemAttr = focus.itemAttr(i)
+        itemAttr.style = {
+            cursor: "pointer"
+        }
+        if (isFocused) {
+            itemAttr.style.zIndex = 40
+        }
+        let elem = (
+            <Div key={item.index} className={itemCls.value} {...itemAttr}>
+                {render(item)}
+            </Div>
+        )
+        elems.push(elem)
+        i++
+    }
+    elems.push(
+        <div key={-1} className="auto bg-black/10">
+            {items.length === 0 && (
+                <Centered className="opacity-50 text-xs">{emptyMsg}</Centered>
+            )}
+        </div>
+    )
+
+    return (
+        <Div ref={stackRef} className={cls.value} {...attr}>
+            {elems}
+        </Div>
+    )
+}
+
 function EntityStack({
     entityIndex,
     emptyMsg,
     actions = [],
     itemActions = [],
     matcher,
+    compact,
     render = (item) => item.name
 }) {
     const stackRef = useRef()
     const [selected, setSelected] = useState([])
-    const update = useUpdateOnEntityIndexChanges(entityIndex)
+    useUpdateOnEntityIndexChanges(entityIndex)
 
     const actionBtns = []
     const hotKeys = {}
@@ -945,6 +1034,8 @@ function EntityStack({
     }
     useHotKeys(stackRef, hotKeys)
 
+    const isCompact = compact && entityIndex.length === 0
+
     return (
         <Div
             ref={stackRef}
@@ -954,33 +1045,41 @@ function EntityStack({
                 <ButtonGroup buttons={actionBtns} />
             </div>
 
-            <Stack vertical className="text-app-text overflow-auto max-h-max">
-                <EntityList
-                    full
-                    entityIndex={entityIndex}
-                    selected={selected}
-                    setSelected={setSelected}
-                    itemActions={itemActions}
-                    emptyMsg={emptyMsg}
-                    matcher={matcher}
-                    render={render}
-                />
-            </Stack>
+            {!isCompact && (
+                <Stack
+                    vertical
+                    className="text-app-text overflow-auto max-h-max"
+                >
+                    <EntityList
+                        full
+                        entityIndex={entityIndex}
+                        selected={selected}
+                        setSelected={setSelected}
+                        itemActions={itemActions}
+                        emptyMsg={emptyMsg}
+                        matcher={matcher}
+                        compact={compact}
+                        render={render}
+                    />
+                </Stack>
+            )}
 
-            <div className="bg-header-bg/25 p-1 text-app-text/75 text-xs">
-                <span className="text-app-text/50">Items:</span>{" "}
-                <span>{entityIndex.length}</span>
-                {selected.length > 0 && (
-                    <>
-                        {" "}
-                        <span className="text-app-text/50">
+            {!(compact || isCompact) && (
+                <div className="bg-header-bg/25 p-1 text-app-text/75 text-xs">
+                    <span className="text-app-text/50">Items:</span>{" "}
+                    <span>{entityIndex.length}</span>
+                    {selected.length > 0 && (
+                        <>
                             {" "}
-                            / Marked:
-                        </span>{" "}
-                        {selected.length}
-                    </>
-                )}
-            </div>
+                            <span className="text-app-text/50">
+                                {" "}
+                                / Marked:
+                            </span>{" "}
+                            {selected.length}
+                        </>
+                    )}
+                </div>
+            )}
         </Div>
     )
 }
@@ -996,6 +1095,7 @@ function EntityList({
     selected,
     setSelected,
     itemActions,
+    compact,
     wrap = true,
     bordered = true,
     divided = true,
@@ -1045,7 +1145,7 @@ function EntityList({
         active,
         deselect: true,
         divRef: stackRef,
-        count: entityIndex.length,
+        count: entities.length,
         handleSpace: true
     })
     if (itemActions) {
@@ -1203,6 +1303,8 @@ function EntityList({
         i++
     }
 
+    if (compact && !elems.length) return
+
     return (
         <div ref={stackRef} className={cls.value} {...attr} {...divAttr}>
             {elems.length ? (
@@ -1339,5 +1441,6 @@ export {
     ColorBox,
     EntityList,
     EntityStack,
+    EntityPicker,
     FocusMatrix
 }

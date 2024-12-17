@@ -93,6 +93,7 @@ class HistoryIndex extends EntityIndex {
 function History({ close }) {
     const aContext = useContext(AppContext)
     const routePlugin = PluginRegistry.getActivePlugin("routeSelector")
+    const requestPlugin = PluginRegistry.getActivePlugin("requestBuilder")
     const historyIndex = useMemo(() => {
         return new HistoryIndex(aContext.history)
     }, [])
@@ -114,6 +115,8 @@ function History({ close }) {
                 )
                 if (pathInfo) {
                     routePlugin.openEditor({ request, assignments })
+                } else {
+                    requestPlugin.openEditor({ request, assignments })
                 }
                 close()
             }

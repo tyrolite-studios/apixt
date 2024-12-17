@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useContext } from "react"
+import { useEffect, useMemo, useContext, useRef } from "react"
 import { useModalWindow } from "components/modal"
 import { isMethodWithRequestBody } from "core/http"
 import {
@@ -12,7 +12,13 @@ import {
     InputCells,
     CustomCells
 } from "components/form"
-import { KeyValueEditor, HighlightKeys, JsonTextarea } from "components/common"
+import {
+    KeyValueEditor,
+    HighlightKeys,
+    JsonTextarea,
+    EntityPicker,
+    useUpdateOnEntityIndexChanges
+} from "components/common"
 import { useState } from "react"
 import { isValidJson, cloneDeep, d } from "core/helper"
 import { PathInput } from "./path-input"
@@ -20,65 +26,113 @@ import { headerContentTypes, requestHeaderOptions } from "./helper"
 import { OkCancelLayout, Tab, Tabs } from "components/layout"
 import { AssignmentIndex, AssignmentStack } from "entities/assignments"
 import { AppContext } from "components/context"
-import { ApiManagerWindow } from "entities/apis"
-import { RequestStack, SaveRequestForm, RequestPicker } from "entities/requests"
+import { SaveRequestForm } from "entities/requests"
 import { extractLcProps } from "core/entity"
+import { ClassNames } from "core/helper"
+import { RequestAssingmentsPickerCells } from "entities/request-assignments"
+import { APIS, ApiSelect } from "entities/apis"
+import { SimpleRoutePath } from "entities/routes"
 
 const emptyValue = "<Enter Value>"
 
 const httpMethodOptions = [
     { id: "POST", name: "POST" },
     { id: "GET", name: "GET" },
+    { id: "OPTIONS", name: "OPTIONS" },
+    { id: "PATCH", name: "PATH" },
     { id: "DELETE", name: "DELETE" },
     { id: "PUT", name: "PUT" },
     { id: "HEAD", name: "HEAD" }
 ]
 
-function RequestBuilder({ close }) {
+function getDefaultlessClone(model) {
+    if (!model) return model
+
+    const obj = {}
+    for (const [key, value] of Object.entries(model)) {
+        if (value.type === "default") continue
+
+        obj[key] = cloneDeep(value)
+    }
+    return obj
+}
+
+function RequestBuilder({ close, request, assignments }) {
     const aContext = useContext(AppContext)
     const SaveAsModal = useModalWindow()
+    useUpdateOnEntityIndexChanges(aContext.defaultsIndex)
 
     const [active, setActive] = useState("")
-    const [api, setApi] = useState("0")
-    const [method, setMethod] = useState("POST")
-    const [path, setPath] = useState("")
-    const [body, setBody] = useState("")
-    const queryAssignmentIndex = useMemo(() => new AssignmentIndex({}), [])
-    const headersAssignmentIndex = useMemo(() => new AssignmentIndex({}), [])
-    const bodyAssignmentIndex = useMemo(() => new AssignmentIndex({}), [])
+    const [api, setApi] = useState(request?.api ?? APIS.OPTION.CURRENT)
+    const [method, setMethod] = useState(request?.method ?? "GET")
+    const [path, setPath] = useState(request?.path ?? "/")
+    const [body, setBody] = useState(request?.body ?? "")
+    const [defaults, setDefaults] = useState(
+        request?.defaults ?? aContext.apiSettings.preselectedDefaults
+    )
+    const [showDefaults, setShowDefaultsRaw] = useState(
+        aContext.apiSettings.showDefaults
+    )
+    const setShowDefaults = (value) => {
+        aContext.setApiSetting("showDefaults", value)
+        setShowDefaultsRaw(value)
+    }
+    const queryAssignmentIndex = useMemo(
+        () => new AssignmentIndex(assignments?.query ?? {}),
+        []
+    )
+    const headersAssignmentIndex = useMemo(
+        () => new AssignmentIndex(assignments?.headers ?? {}),
+        []
+    )
+    const bodyAssignmentIndex = useMemo(
+        () => new AssignmentIndex(assignments?.body ?? {}),
+        []
+    )
+    const defaultsModel = useMemo(() => {
+        return aContext.getDefaults(defaults)
+    }, [defaults, aContext.defaultsIndex.lastModified, active])
+
+    useEffect(() => {
+        const { query, headers, body } = defaultsModel
+        queryAssignmentIndex.syncToDefaults(query)
+        headersAssignmentIndex.syncToDefaults(headers)
+        bodyAssignmentIndex.syncToDefaults(body)
+    }, [defaultsModel])
 
     const hasBody = isMethodWithRequestBody(method)
 
     const startRequest = () => {
         const request = {
+            api,
             method,
+            defaults,
             path,
-            body,
-            api: api !== "0" ? api : undefined
+            body
         }
         const assignments = {
-            query: queryAssignmentIndex.model,
-            headers: headersAssignmentIndex.model,
-            body: hasBody ? bodyAssignmentIndex.model : undefined
+            query: getDefaultlessClone(queryAssignmentIndex.model),
+            headers: getDefaultlessClone(headersAssignmentIndex.model),
+            body: hasBody
+                ? getDefaultlessClone(bodyAssignmentIndex.model)
+                : undefined
         }
-        if (request.api) {
-            aContext.fetchApiResponse(request, assignments)
-        } else {
-            aContext.startContentStream(request, assignments)
-        }
+        aContext.startContentStream(request, assignments)
         close()
     }
 
     const load = (model) => {
         const { request, assignments } = model
-        setActive(model.value)
-        setApi(model.api)
+        setActive(model.value ?? "")
+        setApi(request.api)
         setMethod(request.method)
         setPath(request.path)
         setBody(request.body)
         queryAssignmentIndex.setModel(assignments.query)
         headersAssignmentIndex.setModel(assignments.headers)
         bodyAssignmentIndex.setModel(assignments.body)
+        setDefaults(request.defaults)
+        aContext.defaultsIndex.notify()
     }
 
     const launcherParams = {
@@ -90,6 +144,11 @@ function RequestBuilder({ close }) {
         setPath,
         body,
         setBody,
+        defaults,
+        setDefaults,
+        defaultsModel,
+        showDefaults,
+        setShowDefaults,
         queryAssignmentIndex,
         headersAssignmentIndex,
         bodyAssignmentIndex
@@ -100,19 +159,48 @@ function RequestBuilder({ close }) {
             name: "New",
             onPressed: () => {
                 setActive("")
-                setApi("0")
-                setMethod("POST")
+                setMethod("GET")
                 setPath("/")
                 setBody("")
+                setDefaults(aContext.apiSettings.preselectedDefaults)
                 queryAssignmentIndex.setModel({})
                 headersAssignmentIndex.setModel({})
                 bodyAssignmentIndex.setModel({})
+                aContext.defaultsIndex.notify()
             }
         },
         {
             name: "Save",
             disabled: active === "",
-            onPressed: () => d("Save")
+            onPressed: () => {
+                const requestIndex = aContext.requestIndex
+                const index = requestIndex.getEntityByPropValue("value", active)
+                const model = requestIndex.getEntityObject(index)
+                requestIndex.setEntityObject(
+                    {
+                        ...model,
+                        request: cloneDeep({
+                            api,
+                            defaults,
+                            method,
+                            path,
+                            body
+                        }),
+                        assignments: {
+                            query: getDefaultlessClone(
+                                queryAssignmentIndex.model
+                            ),
+                            headers: getDefaultlessClone(
+                                headersAssignmentIndex.model
+                            ),
+                            body: isMethodWithRequestBody(method)
+                                ? getDefaultlessClone(bodyAssignmentIndex.model)
+                                : undefined
+                        }
+                    },
+                    true
+                )
+            }
         },
         {
             name: "Save As...",
@@ -121,64 +209,164 @@ function RequestBuilder({ close }) {
                     model: { name: "" },
                     reserved: extractLcProps(aContext.requestIndex, "name"),
                     save: ({ name }) => {
+                        const value = crypto.randomUUID()
                         aContext.requestIndex.setEntityObject({
-                            value: crypto.randomUUID(),
+                            value,
                             name,
-                            api,
                             request: {
+                                api,
+                                defaults,
                                 method,
                                 path,
                                 body
                             },
                             assignments: {
-                                query: cloneDeep(queryAssignmentIndex.model),
-                                headers: cloneDeep(
+                                query: getDefaultlessClone(
+                                    queryAssignmentIndex.model
+                                ),
+                                headers: getDefaultlessClone(
                                     headersAssignmentIndex.model
                                 ),
-                                body: cloneDeep(bodyAssignmentIndex.model)
+                                body: isMethodWithRequestBody(method)
+                                    ? getDefaultlessClone(
+                                          bodyAssignmentIndex.model
+                                      )
+                                    : undefined
                             }
                         })
+                        setActive(value)
                         SaveAsModal.close()
                     }
                 })
             }
         }
     ]
+    const requestCls = ClassNames("px-2 auto")
+    requestCls.addIf(
+        active !== "",
+        "bg-active-bg text-active-text py-1 border border-header-border text-xs",
+        "opacity-50 text-sm"
+    )
     return (
         <OkCancelLayout scroll={false} cancel={close} ok={startRequest}>
             <>
-                <div className="stack-h w-full h-full divide-x divide-header-border">
-                    <div className="h-full stack-v divide-y divide-header-border">
-                        <div className="stack-v p-2 gap-2">
-                            <ButtonGroup buttons={buttons} />
-                            <div>
-                                {active === ""
-                                    ? "New Request"
-                                    : aContext.getRequestName(active)}
-                            </div>
+                <div className="w-full h-full divide-x divide-header-border stack-h overflow-hidden">
+                    <div className="stack-v h-full overflow-hidden">
+                        <div className="stack-h gap-2 p-2">
+                            <ApiSelect
+                                api={api}
+                                setApi={setApi}
+                                apiIndex={aContext.apiIndex}
+                                apiEnvIndex={aContext.apiEnvIndex}
+                            />
                         </div>
-                        <Tabs>
+
+                        <Tabs className="overflow-hidden">
                             <Tab name="Stored" active>
                                 <div className="p-2 h-full">
-                                    <RequestStack
+                                    <EntityPicker
                                         className="h-full"
-                                        requestIndex={aContext.requestIndex}
-                                        load={load}
+                                        entityIndex={aContext.requestIndex}
+                                        pick={load}
+                                        matcher={(idx) =>
+                                            aContext.requestIndex.getEntityPropValue(
+                                                idx,
+                                                "request"
+                                            ).api === api
+                                        }
+                                        render={({ name, request }) => (
+                                            <div className="stack-v">
+                                                <div className="text-sm">
+                                                    {name}
+                                                </div>
+                                                <div className="text-xs opacity-50">
+                                                    {request.method}{" "}
+                                                    {request.path}
+                                                </div>
+                                            </div>
+                                        )}
                                     />
                                 </div>
                             </Tab>
                             <Tab name="History">
                                 <div className="p-2 h-full">
-                                    <RequestPicker
+                                    <EntityPicker
+                                        className="h-full"
                                         pick={load}
-                                        requestIndex={aContext.requestIndex}
+                                        entityIndex={aContext.requestIndex}
+                                        matcher={(idx) =>
+                                            aContext.requestIndex.getEntityPropValue(
+                                                idx,
+                                                "request"
+                                            ).api === api
+                                        }
+                                        render={({ request }) => (
+                                            <div className="stack-v">
+                                                <div className="text-xs opacity-50">
+                                                    {request.method}{" "}
+                                                    {request.path}
+                                                </div>
+                                            </div>
+                                        )}
+                                    />
+                                </div>
+                            </Tab>
+                            <Tab name="Routes">
+                                <div className="p-2 h-full">
+                                    <EntityPicker
+                                        className="h-full"
+                                        pick={({ path, methods, api }) => {
+                                            load({
+                                                request: {
+                                                    api,
+                                                    path,
+                                                    defaults:
+                                                        aContext.apiSettings
+                                                            .preselectedDefaults,
+                                                    method: methods[0],
+                                                    body: ""
+                                                },
+                                                assignments: {}
+                                            })
+                                        }}
+                                        entityIndex={aContext.routeIndex}
+                                        matcher={(idx) =>
+                                            aContext.routeIndex.getEntityPropValue(
+                                                idx,
+                                                "api"
+                                            ) === api
+                                        }
+                                        render={({ path, methods }) => (
+                                            <div className="stack-v text-xs">
+                                                <SimpleRoutePath path={path} />
+                                                <div className="opacity-50">
+                                                    {methods.join(", ")}
+                                                </div>
+                                            </div>
+                                        )}
                                     />
                                 </div>
                             </Tab>
                         </Tabs>
                     </div>
-                    <div className="overflow-y-auto auto">
-                        <RequestLauncher {...launcherParams} />
+
+                    <div className="stack-v auto h-full">
+                        <div className="px-2 pt-2 w-full">
+                            <div className="stack-h items-center w-full gap-2 bg-header-bg/25 p-1 border border-header-border/50">
+                                <div className={requestCls.value}>
+                                    {active === ""
+                                        ? "New Request..."
+                                        : aContext.getRequestName(active)}
+                                </div>
+                                <ButtonGroup buttons={buttons} />
+                            </div>
+                        </div>
+
+                        <div className="stack-v auto h-full overflow-hidden">
+                            <div className="overflow-y-auto auto">
+                                <RequestLauncher {...launcherParams} />
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -191,54 +379,66 @@ function RequestBuilder({ close }) {
 }
 
 const RequestLauncher = ({
-    api,
-    setApi,
     method,
     setMethod,
     path,
     setPath,
     body,
     setBody,
+    defaults,
+    setDefaults,
+    showDefaults,
+    setShowDefaults,
+    defaultsModel = {},
     queryAssignmentIndex,
     headersAssignmentIndex,
     bodyAssignmentIndex
 }) => {
     const aContext = useContext(AppContext)
-    const ApiManagerModal = useModalWindow()
     const hasBody = isMethodWithRequestBody(method)
+    const getMatcher = (entityIndex) => {
+        if (showDefaults) return
+
+        return (index) =>
+            entityIndex.getEntityPropValue(index, "type") !== "default"
+    }
+
     return (
-        <div className="auto">
+        <div className="auto overflow-hidden">
             <FormGrid>
-                <CustomCells name="API">
-                    <div className="stack-h gap-2">
-                        <Select
-                            options={aContext.getApiOptions()}
-                            value={api}
-                            set={setApi}
-                        />
-                        <Button
-                            icon="build"
-                            onPressed={() =>
-                                ApiManagerModal.open({
-                                    apiIndex: aContext.apiIndex,
-                                    apiEnvIndex: aContext.apiEnvIndex
-                                })
-                            }
-                        />
-                    </div>
-                </CustomCells>
                 <SelectCells
-                    name="Method"
+                    name="Method:"
                     options={httpMethodOptions}
                     value={method}
                     set={setMethod}
                 />
-                <InputCells name="Path" value={path} set={setPath} />
+                <InputCells
+                    name="Path:"
+                    value={path}
+                    set={setPath}
+                    className="w-full"
+                />
+                <RequestAssingmentsPickerCells
+                    name="Defaults:"
+                    requestAssignmentsIndex={aContext.defaultsIndex}
+                    value={defaults}
+                    set={setDefaults}
+                    visibility={showDefaults}
+                    setVisibility={setShowDefaults}
+                />
                 <CustomCells name="Query:">
-                    <AssignmentStack assignmentIndex={queryAssignmentIndex} />
+                    <AssignmentStack
+                        assignmentIndex={queryAssignmentIndex}
+                        defaultsModel={defaultsModel.query}
+                        matcher={getMatcher(queryAssignmentIndex)}
+                    />
                 </CustomCells>
                 <CustomCells name="Headers:">
-                    <AssignmentStack assignmentIndex={headersAssignmentIndex} />
+                    <AssignmentStack
+                        assignmentIndex={headersAssignmentIndex}
+                        defaultsModel={defaultsModel.headers}
+                        matcher={getMatcher(headersAssignmentIndex)}
+                    />
                 </CustomCells>
                 {hasBody && (
                     <CustomCells name="Body:">
@@ -249,15 +449,13 @@ const RequestLauncher = ({
                             </div>
                             <AssignmentStack
                                 assignmentIndex={bodyAssignmentIndex}
+                                defaultsModel={defaultsModel.body}
+                                matcher={getMatcher(bodyAssignmentIndex)}
                             />
                         </div>
                     </CustomCells>
                 )}
             </FormGrid>
-
-            <ApiManagerModal.content>
-                <ApiManagerWindow {...ApiManagerModal.props} />
-            </ApiManagerModal.content>
         </div>
     )
 }
@@ -498,11 +696,12 @@ function RequestBuilderWindow({ plugin }) {
         plugin.setButtonHandler("builder", () => {
             RequestBuilderModal.open({})
         })
+        plugin.setOpenEditor(RequestBuilderModal.open)
     }, [])
 
     return (
         <RequestBuilderModal.content
-            name="Query Builder"
+            name="Request Builder"
             width="900px"
             height="500px"
         >
