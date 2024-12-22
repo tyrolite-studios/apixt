@@ -1,39 +1,39 @@
 import { useEffect, useMemo, useContext, useRef } from "react"
 import { useModalWindow } from "components/modal"
-import { isMethodWithRequestBody } from "core/http"
+import { isMethodWithRequestBody, getParsedQueryString } from "core/http"
 import {
-    Select,
-    Button,
     ButtonGroup,
-    Input,
-    Textarea,
     FormGrid,
     SelectCells,
+    Input,
+    Button,
+    RadioCells,
     InputCells,
     CustomCells
 } from "components/form"
 import {
-    KeyValueEditor,
-    HighlightKeys,
-    JsonTextarea,
     EntityPicker,
-    useUpdateOnEntityIndexChanges
+    BodyTextarea,
+    useUpdateOnEntityIndexChanges,
+    useCallAfterwards
 } from "components/common"
 import { useState } from "react"
-import { isValidJson, cloneDeep, d } from "core/helper"
-import { PathInput } from "./path-input"
-import { headerContentTypes, requestHeaderOptions } from "./helper"
 import { OkCancelLayout, Tab, Tabs } from "components/layout"
-import { AssignmentIndex, AssignmentStack } from "entities/assignments"
+import {
+    AssignmentIndex,
+    AssignmentStack,
+    extractContentTypeFromAssignments
+} from "entities/assignments"
 import { AppContext } from "components/context"
 import { SaveRequestForm } from "entities/requests"
 import { extractLcProps } from "core/entity"
-import { ClassNames } from "core/helper"
+import { ClassNames, d, cloneDeep } from "core/helper"
 import { RequestAssingmentsPickerCells } from "entities/request-assignments"
 import { APIS, ApiSelect } from "entities/apis"
 import { SimpleRoutePath } from "entities/routes"
-
-const emptyValue = "<Enter Value>"
+import { HistoryEntryPicker } from "entities/history-entry"
+import { Checkbox } from "../../components/form"
+import { without } from "../../core/helper"
 
 const httpMethodOptions = [
     { id: "POST", name: "POST" },
@@ -44,6 +44,229 @@ const httpMethodOptions = [
     { id: "PUT", name: "PUT" },
     { id: "HEAD", name: "HEAD" }
 ]
+
+const pathMatchRegexp = /^https?\:\/\/[^\/]+(\/.*)$/
+const urlInputRegexp = /^https?:\/\/[^\/]+$/
+
+const strategyOptions = [
+    { id: "new", name: "New Request" },
+    { id: "add", name: "Add to request" }
+]
+
+function ImportForm({ save, close }) {
+    const aContext = useContext(AppContext)
+
+    const [url, setUrlRaw] = useState("")
+    const [hasApi, setHasApi] = useState("")
+    const [hasPath, setHasPath] = useState("")
+    const [hasQuery, setHasQuery] = useState("")
+    const [assignments, setAssignments] = useState({})
+    const [importApi, setImportApi] = useState(true)
+    const [importPath, setImportPath] = useState(true)
+    const [importQuery, setImportQuery] = useState(true)
+    const [skipKeys, setSkipKeys] = useState([])
+    const [strategy, setStrategy] = useState("new")
+
+    const getSkipQueryKey = (key) => {
+        return !skipKeys.includes(key)
+    }
+
+    const getSkipQueryKeySetter = (key) => {
+        return (value) =>
+            setSkipKeys(value ? without(skipKeys, key) : [...skipKeys, key])
+    }
+
+    const apis = useMemo(() => {
+        return [
+            { id: "0", url: aContext.config.baseUrl, name: "current" },
+            aContext.apiIndex.getEntityObjects()
+        ]
+    }, [])
+
+    const setUrl = (value) => {
+        const [urlWithoutHash] = value.split("#")
+        let [apiAndPath, foundQuery = ""] = urlWithoutHash.split("?")
+        if (!foundQuery && apiAndPath.indexOf("=") > -1) {
+            foundQuery = apiAndPath
+            apiAndPath = ""
+        }
+
+        if (foundQuery) {
+            setAssignments(getParsedQueryString(foundQuery))
+        }
+
+        let foundApi = ""
+        let foundPath = apiAndPath
+        if (apiAndPath) {
+            for (const api of apis) {
+                if (!apiAndPath.startsWith(api.url)) continue
+
+                foundApi = api
+                foundPath = apiAndPath.substring(api.url.length)
+                break
+            }
+            if (!foundApi) {
+                const matches = pathMatchRegexp.exec(apiAndPath)
+                if (matches !== null) {
+                    foundPath = matches[1]
+                } else {
+                    const subMatches = urlInputRegexp.exec(foundPath)
+                    if (
+                        subMatches !== null ||
+                        "https://".startsWith(foundPath) ||
+                        "http://".startsWith(foundPath)
+                    ) {
+                        foundPath = ""
+                    }
+                }
+            }
+        }
+        setHasApi(foundApi)
+        setHasPath(foundPath)
+        setHasQuery(foundQuery)
+
+        setUrlRaw(value)
+    }
+
+    const importUrl = () => {
+        const result = { strategy }
+        if (hasApi && importApi) {
+            result.api = hasApi.value
+        }
+        if (hasPath && importPath) {
+            result.path = hasPath
+        }
+        if (hasQuery && importQuery) {
+            const notSkipped = {}
+            let hasValues = false
+            for (const key of Object.keys(assignments)) {
+                if (skipKeys.includes(key)) continue
+
+                hasValues = true
+                notSkipped[key] = assignments[key]
+            }
+            if (hasValues) {
+                result.assignments = notSkipped
+            }
+        }
+        save(result)
+    }
+
+    return (
+        <OkCancelLayout submit ok={importUrl} cancel={close}>
+            <div className="p-2">
+                <FormGrid>
+                    <RadioCells
+                        name="Import:"
+                        value={strategy}
+                        set={setStrategy}
+                        options={strategyOptions}
+                    />
+                    <InputCells
+                        name="URL:"
+                        value={url}
+                        set={setUrl}
+                        autoFocus
+                        required={url === ""}
+                        className="w-full"
+                    />
+                    <CustomCells name="Selection:">
+                        <div className="stack-v gap-2 divide-y divide-header-border">
+                            {hasApi !== "" && (
+                                <div className="stack-h gap-2 text-xs p-2">
+                                    <div className="stack-h gap-2">
+                                        <Checkbox
+                                            value={importApi}
+                                            set={setImportApi}
+                                        />
+                                        API:
+                                    </div>
+                                    <div
+                                        className={
+                                            "text-sm" +
+                                            (importApi ? "" : " opacity-30")
+                                        }
+                                    >
+                                        {hasApi.name}
+                                    </div>
+                                </div>
+                            )}
+
+                            {hasPath !== "" && (
+                                <div className="stack-h gap-2 text-xs p-2">
+                                    <div className="stack-h gap-2">
+                                        <Checkbox
+                                            value={importPath}
+                                            set={setImportPath}
+                                        />
+                                        Path:
+                                    </div>
+                                    <div
+                                        className={
+                                            "text-sm" +
+                                            (importPath ? "" : " opacity-30")
+                                        }
+                                    >
+                                        {hasPath}
+                                    </div>
+                                </div>
+                            )}
+
+                            {hasQuery !== "" && (
+                                <div className="stack-h gap-2 text-xs p-2">
+                                    <div className="stack-h gap-2">
+                                        <Checkbox
+                                            value={importQuery}
+                                            set={setImportQuery}
+                                        />
+                                        Query:
+                                    </div>
+                                    <div className="stack-v text-sm gap-2">
+                                        {Object.entries(assignments).map(
+                                            ([name, value]) => (
+                                                <div
+                                                    key={name}
+                                                    className="stack-h gap-2"
+                                                >
+                                                    <Checkbox
+                                                        disabled={!importQuery}
+                                                        value={getSkipQueryKey(
+                                                            name
+                                                        )}
+                                                        set={getSkipQueryKeySetter(
+                                                            name
+                                                        )}
+                                                    />
+                                                    <div className="stack-v">
+                                                        <div className="opacity-50 text-xs">
+                                                            {name}:
+                                                        </div>
+                                                        <div
+                                                            className={
+                                                                importQuery &&
+                                                                getSkipQueryKey(
+                                                                    name
+                                                                )
+                                                                    ? ""
+                                                                    : "opacity-30"
+                                                            }
+                                                        >
+                                                            {value}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </CustomCells>
+                </FormGrid>
+            </div>
+        </OkCancelLayout>
+    )
+}
 
 function getDefaultlessClone(model) {
     if (!model) return model
@@ -60,11 +283,13 @@ function getDefaultlessClone(model) {
 function RequestBuilder({ close, request, assignments }) {
     const aContext = useContext(AppContext)
     const SaveAsModal = useModalWindow()
+    const ImportModal = useModalWindow()
     useUpdateOnEntityIndexChanges(aContext.defaultsIndex)
+    const callAfterwards = useCallAfterwards()
 
     const [active, setActive] = useState("")
-    const [api, setApi] = useState(request?.api ?? APIS.OPTION.CURRENT)
-    const [method, setMethod] = useState(request?.method ?? "GET")
+    const [api, setApi] = useState(request?.api ?? aContext.getLastApiId())
+    const [method, setMethod] = useState(request?.method ?? "POST")
     const [path, setPath] = useState(request?.path ?? "/")
     const [body, setBody] = useState(request?.body ?? "")
     const [defaults, setDefaults] = useState(
@@ -85,22 +310,62 @@ function RequestBuilder({ close, request, assignments }) {
         () => new AssignmentIndex(assignments?.headers ?? {}),
         []
     )
+    useUpdateOnEntityIndexChanges(headersAssignmentIndex)
     const bodyAssignmentIndex = useMemo(
         () => new AssignmentIndex(assignments?.body ?? {}),
         []
     )
+    const syncedRef = useRef(false)
     const defaultsModel = useMemo(() => {
+        syncedRef.current = false
         return aContext.getDefaults(defaults)
     }, [defaults, aContext.defaultsIndex.lastModified, active])
 
-    useEffect(() => {
+    if (!syncedRef.current) {
         const { query, headers, body } = defaultsModel
         queryAssignmentIndex.syncToDefaults(query)
         headersAssignmentIndex.syncToDefaults(headers)
         bodyAssignmentIndex.syncToDefaults(body)
-    }, [defaultsModel])
-
+        syncedRef.current = true
+    }
     const hasBody = isMethodWithRequestBody(method)
+
+    const bodyType = useMemo(() => {
+        if (hasBody) {
+            let contentType = extractContentTypeFromAssignments(
+                headersAssignmentIndex.model
+            )
+            if (contentType === null) {
+                contentType = extractContentTypeFromAssignments(
+                    defaultsModel.headers
+                )
+            }
+            if (!contentType) {
+                // TODO try to extract first body type from history
+                contentType = ""
+            }
+
+            if (contentType.endsWith("/json")) return "json"
+            if (contentType.endsWith("/xml")) return "xml"
+            if (contentType.endsWith("/html")) return "html"
+        }
+        return "text"
+    }, [hasBody, headersAssignmentIndex.lastModified, defaultsModel])
+
+    const loadedMode = useRef(request?.inputMode)
+    const lastBodyTypeMode = aContext.getLastBodyTypeMode(bodyType)
+    const [inputMode, setInputMode] = useState(lastBodyTypeMode)
+    if (loadedMode.current && lastBodyTypeMode != loadedMode.current) {
+        callAfterwards(
+            setBody,
+            aContext.doBodyConversion(
+                body,
+                loadedMode.current,
+                lastBodyTypeMode
+            )
+        )
+        loadedMode.current = null
+    }
 
     const startRequest = () => {
         const request = {
@@ -108,7 +373,8 @@ function RequestBuilder({ close, request, assignments }) {
             method,
             defaults,
             path,
-            body
+            body,
+            inputMode: hasBody ? inputMode : undefined
         }
         const assignments = {
             query: getDefaultlessClone(queryAssignmentIndex.model),
@@ -127,11 +393,14 @@ function RequestBuilder({ close, request, assignments }) {
         setApi(request.api)
         setMethod(request.method)
         setPath(request.path)
+
         setBody(request.body)
         queryAssignmentIndex.setModel(assignments.query)
         headersAssignmentIndex.setModel(assignments.headers)
         bodyAssignmentIndex.setModel(assignments.body)
         setDefaults(request.defaults)
+        loadedMode.current = request.inputMode
+        syncedRef.current = false
         aContext.defaultsIndex.notify()
     }
 
@@ -144,6 +413,9 @@ function RequestBuilder({ close, request, assignments }) {
         setPath,
         body,
         setBody,
+        inputMode,
+        setInputMode,
+        bodyType,
         defaults,
         setDefaults,
         defaultsModel,
@@ -167,6 +439,54 @@ function RequestBuilder({ close, request, assignments }) {
                 headersAssignmentIndex.setModel({})
                 bodyAssignmentIndex.setModel({})
                 aContext.defaultsIndex.notify()
+            }
+        },
+        {
+            name: "Import",
+            onPressed: () => {
+                ImportModal.open({
+                    save: (model) => {
+                        if (model.path) {
+                            setPath(model.path)
+                        }
+                        const add = model.strategy === "add"
+                        if (model.assignments) {
+                            const newModel = {}
+                            for (const [
+                                value,
+                                assignmentValue
+                            ] of Object.entries(model.assignments)) {
+                                newModel[value] = {
+                                    type: "set",
+                                    assignmentValue
+                                }
+                            }
+                            queryAssignmentIndex.setModel(
+                                add
+                                    ? {
+                                          ...queryAssignmentIndex.model,
+                                          ...newModel
+                                      }
+                                    : newModel
+                            )
+                        }
+                        if (!add) {
+                            if (model.api) {
+                                setApi(model.api)
+                            }
+                            setActive("")
+                            setMethod("GET")
+                            setBody("")
+                            setDefaults(
+                                aContext.apiSettings.preselectedDefaults
+                            )
+                            headersAssignmentIndex.setModel({})
+                            bodyAssignmentIndex.setModel({})
+                            aContext.defaultsIndex.notify()
+                        }
+                        ImportModal.close()
+                    }
+                })
             }
         },
         {
@@ -248,7 +568,13 @@ function RequestBuilder({ close, request, assignments }) {
         "opacity-50 text-sm"
     )
     return (
-        <OkCancelLayout scroll={false} cancel={close} ok={startRequest}>
+        <OkCancelLayout
+            scroll={false}
+            cancel={close}
+            submit
+            ok={startRequest}
+            okLabel="Launch"
+        >
             <>
                 <div className="w-full h-full divide-x divide-header-border stack-h overflow-hidden">
                     <div className="stack-v h-full overflow-hidden">
@@ -290,24 +616,15 @@ function RequestBuilder({ close, request, assignments }) {
                             </Tab>
                             <Tab name="History">
                                 <div className="p-2 h-full">
-                                    <EntityPicker
+                                    <HistoryEntryPicker
                                         className="h-full"
-                                        pick={load}
-                                        entityIndex={aContext.requestIndex}
-                                        matcher={(idx) =>
-                                            aContext.requestIndex.getEntityPropValue(
-                                                idx,
-                                                "request"
-                                            ).api === api
+                                        pick={({ request, assignments }) =>
+                                            load({ request, assignments })
                                         }
-                                        render={({ request }) => (
-                                            <div className="stack-v">
-                                                <div className="text-xs opacity-50">
-                                                    {request.method}{" "}
-                                                    {request.path}
-                                                </div>
-                                            </div>
-                                        )}
+                                        api={api}
+                                        historyEntryIndex={
+                                            aContext.historyEntryIndex
+                                        }
                                     />
                                 </div>
                             </Tab>
@@ -373,6 +690,10 @@ function RequestBuilder({ close, request, assignments }) {
                 <SaveAsModal.content>
                     <SaveRequestForm {...SaveAsModal.props} />
                 </SaveAsModal.content>
+
+                <ImportModal.content>
+                    <ImportForm {...ImportModal.props} />
+                </ImportModal.content>
             </>
         </OkCancelLayout>
     )
@@ -384,6 +705,9 @@ const RequestLauncher = ({
     path,
     setPath,
     body,
+    bodyType,
+    inputMode,
+    setInputMode,
     setBody,
     defaults,
     setDefaults,
@@ -412,12 +736,17 @@ const RequestLauncher = ({
                     value={method}
                     set={setMethod}
                 />
-                <InputCells
-                    name="Path:"
-                    value={path}
-                    set={setPath}
-                    className="w-full"
-                />
+                <CustomCells name="Path:">
+                    <div className="stack-h gap-2 w-full">
+                        <Input
+                            name="Path:"
+                            value={path}
+                            set={setPath}
+                            className="w-full"
+                        />
+                        <Button name="Params" disabled={true} />
+                    </div>
+                </CustomCells>
                 <RequestAssingmentsPickerCells
                     name="Defaults:"
                     requestAssignmentsIndex={aContext.defaultsIndex}
@@ -443,7 +772,16 @@ const RequestLauncher = ({
                 {hasBody && (
                     <CustomCells name="Body:">
                         <div className="stack-v">
-                            <Textarea value={body} set={setBody} />
+                            {bodyType !== "pending" && (
+                                <BodyTextarea
+                                    value={body}
+                                    set={setBody}
+                                    mode={inputMode}
+                                    setMode={setInputMode}
+                                    rows={10}
+                                    type={bodyType}
+                                />
+                            )}
                             <div className="text-xs py-2">
                                 Auto-Assignments:
                             </div>
@@ -457,235 +795,6 @@ const RequestLauncher = ({
                 )}
             </FormGrid>
         </div>
-    )
-}
-
-const RequestBuilder2 = ({ close }) => {
-    const [method, setMethodRaw] = useState("POST")
-    const [path, setPath] = useState("")
-    const [headers, setHeaders] = useState({
-        values: {
-            "Content-Type": {
-                value: "application/json",
-                type: "string",
-                suggestions: headerContentTypes
-            },
-            "Content-Length": {
-                value: 50,
-                type: "number",
-                min: 0
-            },
-            "X-mx-Header": {
-                value: "blabla",
-                type: "string"
-            }
-        },
-        suggestions: Object.keys(requestHeaderOptions)
-    })
-    const [body, setBody] = useState("")
-    const [bodyValue, setBodyValue] = useState("")
-    const [bodyDisabled, setBodyDisabled] = useState(false)
-    const [isJson, setIsJson] = useState(true)
-    const [jsonIsValid, setJsonIsValid] = useState(false)
-    const [headersVisible, setHeadersVisible] = useState(false)
-
-    const setMethod = (selectedMethod) => {
-        setMethodRaw(selectedMethod)
-        enableOptions(selectedMethod)
-    }
-
-    const removeCurrentOptions = () => {
-        setBodyDisabled(true)
-        //...
-    }
-
-    const enableOptions = (selectedMethod) => {
-        removeCurrentOptions()
-        if (selectedMethod === "POST") {
-            setBodyDisabled(false)
-        }
-        //...
-    }
-
-    const handleSubmit = () => {
-        const emptyHeaders = Object.keys(headers.values).filter(
-            (header) => headers.values[header] === emptyValue
-        )
-        for (const header of emptyHeaders) {
-            delete headers.values[header]
-        }
-
-        const requestParams = {
-            method,
-            headers: headers.values,
-            body
-        }
-        console.log("Submitting request:", requestParams)
-        if (!method || !path || Object.keys(headers).length === 0) {
-            console.error(
-                "missing " + (!method ? "method" : !path ? "path" : "headers")
-            )
-        } else {
-            //URL NOCH RICHTIG MACHEN
-            const request = new Request("/" + path, requestParams)
-            fetch(request)
-                .then((response) => {
-                    if (response.status === 200) {
-                        console.log("success")
-                    } else {
-                        throw new Error("Something went wrong on API server!")
-                    }
-                })
-                .catch((error) => {
-                    console.error(error)
-                })
-        }
-    }
-
-    return (
-        <OkCancelLayout
-            cancel={close}
-            ok={() => d("SUBMIT", { method, headers, body })}
-        >
-            <div className="h-full p-4 flex flex-col gap-y-4">
-                <div className="stack-h w-full text-white flex flex-row justify-normal items-center gap-4 text-sm">
-                    {/* Method selection */}
-                    <Select
-                        options={httpMethodOptions}
-                        value={method}
-                        set={setMethod}
-                    />
-                    {/* Path */}
-                    <div className="auto stack-h items-center gap-2">
-                        <div className="text-app-text">Path: </div>
-                        <Input
-                            value={path}
-                            set={setPath}
-                            autoFocus
-                            className="auto"
-                        />
-                        {/* <PathInput sendPathToParent={handlePathChange} /> */}
-                    </div>
-                </div>
-                {/* Header */}
-                <div>
-                    <div className="text-app-text flex justify-between items-center">
-                        <span>Header</span>
-                        <button
-                            className="text-sm text-white p-1"
-                            onClick={() => setHeadersVisible(!headersVisible)}
-                        >
-                            {headersVisible ? "Hide" : "Show"}
-                        </button>
-                    </div>
-                    {headersVisible ? (
-                        <KeyValueEditor
-                            object={headers}
-                            sendObjectToParent={(newHeaders) =>
-                                setHeaders(newHeaders)
-                            }
-                        />
-                    ) : (
-                        <div className="text-white bg-gray-700 p-2 rounded text-sm text-left">
-                            <span className="truncate block overflow-hidden whitespace-nowrap">
-                                <HighlightKeys obj={headers.values} />
-                            </span>
-                        </div>
-                    )}
-                </div>
-                {/* Body */}
-                {!bodyDisabled ? (
-                    <div className="flex flex-col">
-                        <div className="flex justify-between items-center">
-                            <div className="flex">
-                                <ButtonGroup
-                                    gapped={false}
-                                    buttons={[
-                                        {
-                                            name: "JSON",
-                                            activated: true,
-                                            value: isJson,
-                                            className:
-                                                "not_py-0 not_px-2 py-2 px-4",
-                                            onPressed: () => {
-                                                isJson ? null : setIsJson(true)
-                                                setJsonIsValid(
-                                                    isValidJson(bodyValue)
-                                                )
-                                                setBody(bodyValue)
-                                            }
-                                        },
-                                        {
-                                            name: "Raw",
-                                            activated: false,
-                                            value: isJson,
-                                            className:
-                                                "not_py-0 not_px-2 py-2 px-4",
-                                            onPressed: () => {
-                                                !isJson
-                                                    ? null
-                                                    : setIsJson(false)
-                                                setBody(bodyValue)
-                                            }
-                                        }
-                                    ]}
-                                />
-                            </div>
-                            {isJson ? (
-                                <div className="text-sm p-1">
-                                    {jsonIsValid || body === "" ? (
-                                        <div className="text-green-700">
-                                            Valid Body
-                                        </div>
-                                    ) : (
-                                        <div className="text-red-700">
-                                            Invalid Body
-                                        </div>
-                                    )}
-                                </div>
-                            ) : null}
-                        </div>
-                        <div>
-                            {isJson ? (
-                                <JsonTextarea
-                                    sendJsonValidityToParent={(valid) =>
-                                        setJsonIsValid(valid)
-                                    }
-                                    sendTextareaValueToParent={(val) => {
-                                        setBody(val)
-                                        setBodyValue(val)
-                                    }}
-                                    value={bodyValue}
-                                />
-                            ) : (
-                                <textarea
-                                    className="block p-2.5 w-full text-sm text-gray-900 bg-gray-50 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
-                                    placeholder="Enter text"
-                                    onChange={(e) => {
-                                        setBody(e.target.value)
-                                        setBodyValue(e.target.value)
-                                    }}
-                                    value={bodyValue}
-                                />
-                            )}
-                        </div>
-                    </div>
-                ) : null}
-                {/* Submit button */}
-                {method &&
-                path &&
-                Object.keys(headers.values).length !== 0 &&
-                (method === "post" && isJson
-                    ? jsonIsValid || body === ""
-                    : true) ? (
-                    <Button
-                        onPressed={handleSubmit}
-                        mode="active"
-                        label="Submit"
-                    />
-                ) : null}
-            </div>
-        </OkCancelLayout>
     )
 }
 

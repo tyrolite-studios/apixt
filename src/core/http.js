@@ -7,6 +7,44 @@ const isMethodWithRequestBody = (method) =>
 const isMethodWithResponseBody = (method) =>
     !["HEAD", "OPTIONS"].includes(method)
 
+const getParsedQueryString = (queryString) => {
+    const params = new URLSearchParams(queryString)
+    const result = {}
+
+    for (const [key, value] of params.entries()) {
+        const keys = key.split(/[\[\]]+/).filter((k) => k) // Zerlege Schlüssel wie "x[]" oder "address[city]"
+        let current = result
+
+        keys.forEach((k, index) => {
+            if (index === keys.length - 1) {
+                // Letzter Schlüssel: Wert zuweisen
+                if (k === "") {
+                    // Array-Schlüssel ("x[]")
+                    if (!Array.isArray(current)) {
+                        current = []
+                        result[keys[0]] = current // Aktualisiere die Referenz im Hauptobjekt
+                    }
+                    current.push(value)
+                } else {
+                    if (current[k] === undefined) {
+                        current[k] = value
+                    } else if (Array.isArray(current[k])) {
+                        current[k].push(value)
+                    } else {
+                        current[k] = [current[k], value]
+                    }
+                }
+            } else {
+                // Stelle sicher, dass die Struktur existiert
+                if (!current[k]) current[k] = {}
+                current = current[k]
+            }
+        })
+    }
+
+    return result
+}
+
 const startAbortableApiRequest = (
     baseUrl,
     {
@@ -230,5 +268,6 @@ export {
     startAbortableApiRequestStream,
     startAbortableApiRequest,
     isMethodWithRequestBody,
-    isMethodWithResponseBody
+    isMethodWithResponseBody,
+    getParsedQueryString
 }

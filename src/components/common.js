@@ -1,7 +1,7 @@
-import { useRef, useState, useEffect, useContext } from "react"
+import { useRef, useState, useEffect, useContext, useMemo } from "react"
 import { useModalWindow } from "./modal"
 import { ClassNames, isValidJson, clamp, d } from "core/helper"
-import { Button, ButtonGroup, AutoCompleteInput } from "./form"
+import { Button, ButtonGroup, AutoCompleteInput, Radio, Textarea } from "./form"
 import { Centered, Div, Stack, Icon, OkCancelLayout } from "./layout"
 import { AppContext } from "./context"
 
@@ -11,9 +11,11 @@ function useComponentUpdate() {
     const updateRef = useRef(null)
     updateRef.current = updates
     return () => {
-        if (mounted.current) {
-            setUpdates(!updateRef.current)
-        }
+        requestAnimationFrame(() => {
+            if (mounted.current) {
+                setUpdates(!updateRef.current)
+            }
+        })
     }
 }
 
@@ -956,7 +958,7 @@ function EntityPicker({
         handleSpace: true
     })
 
-    const cls = ClassNames("stack-v", className)
+    const cls = ClassNames("stack-v overflow-auto", className)
     cls.addIf(styled && colored, "bg-input-bg text-input-text")
     cls.addIf(styled && bordered, "border")
     cls.addIf(styled && bordered && colored, "border-input-border")
@@ -1419,6 +1421,65 @@ function FocusMatrix({}) {
     )
 }
 
+function BodyTextarea({ type, value, set, mode, setMode, ...props }) {
+    const aContext = useContext(AppContext)
+    const callAfterwards = useCallAfterwards()
+
+    const modeOptions = aContext.getModeOptionsForBodyType(type)
+    const setModeRaw = (newMode) => {
+        set(aContext.doBodyConversion(value, mode, newMode))
+        setMode(newMode)
+    }
+    const setModeManual = (newMode) => {
+        aContext.setLastBodyTypeMode(type, newMode)
+        setModeRaw(newMode)
+    }
+    const lastType = useRef(type)
+    const checkCls = ClassNames(
+        "stack-h text-xs items-center gap-1 px-2 border"
+    )
+    const isValid = useMemo(() => {
+        return aContext.isValidBody(mode, value)
+    }, [value, mode])
+    checkCls.addIf(
+        isValid,
+        "border-ok-text bg-ok-bg text-ok-text",
+        "border-warning-text bg-warning-bg text-warning-text"
+    )
+
+    if (!aContext.hasBodyTypeMode(type, mode) || type !== lastType.current) {
+        lastType.current = type
+        callAfterwards(setModeRaw, aContext.getLastBodyTypeMode(type))
+    }
+    const iconName = isValid ? "check" : "close"
+    const format = () => {
+        set(aContext.getFormatedBody(mode, value))
+    }
+    return (
+        <div className="stack-v full-w">
+            <div className="stack-h full-w p-1 gap-2">
+                <div className="auto">
+                    <Radio
+                        options={modeOptions}
+                        value={mode}
+                        set={setModeManual}
+                    />
+                </div>
+                {!!value && aContext.hasBodyValidator(mode) && (
+                    <div className={checkCls.value}>
+                        <div>
+                            <Icon name={iconName} />
+                        </div>
+                        <div>{aContext.getBodyModeName(mode)}</div>
+                    </div>
+                )}
+                <Button name="Format" disabled={!isValid} onPressed={format} />
+            </div>
+            <Textarea value={value} set={set} {...props} />
+        </div>
+    )
+}
+
 export {
     useComponentUpdate,
     useMounted,
@@ -1442,5 +1503,6 @@ export {
     EntityList,
     EntityStack,
     EntityPicker,
-    FocusMatrix
+    FocusMatrix,
+    BodyTextarea
 }

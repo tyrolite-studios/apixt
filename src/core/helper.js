@@ -528,6 +528,14 @@ function md5(inputString) {
     return rh(a) + rh(b) + rh(c) + rh(d)
 }
 
+const sortAsc = (a, b) => (a === b ? 0 : a > b ? 1 : -1)
+const sortDesc = (a, b) => (a === b ? 0 : a < b ? 1 : -1)
+
+const formatDate = (timestamp) =>
+    `${new Date(timestamp).toLocaleTimeString()} ${new Date(
+        timestamp
+    ).toLocaleDateString()}`
+
 export {
     d,
     isNull,
@@ -553,5 +561,8 @@ export {
     cloneDeep,
     apply,
     rgb2hex,
-    md5
+    md5,
+    sortAsc,
+    sortDesc,
+    formatDate
 }

@@ -403,7 +403,7 @@ class EntityIndex {
 
         this.setItems(newItems)
         if (updates.length) {
-            this.doUpdates(updates, true)
+            this.doUpdates(d(updates), true)
         }
         this.suspendNotifications = false
         this.notify()

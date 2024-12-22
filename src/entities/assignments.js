@@ -25,20 +25,24 @@ class AssignmentIndex extends MappingIndex {
     }
 
     syncToDefaults(defaults) {
-        const defaultKeys = defaults
-            ? Object.keys(defaults).map((x) => x.toLowerCase())
-            : []
-
+        const lcKey2defaultKey = {}
+        const defaultKeys = []
+        for (const key of defaults ? Object.keys(defaults) : []) {
+            const lcKey = key.toLowerCase()
+            defaultKeys.push(lcKey)
+            lcKey2defaultKey[lcKey] = key
+        }
         const indices = []
         let i = 0
         while (i < this.length) {
+            const lcKey = this.getEntityPropValue(i, "value").toLowerCase()
+            const hasDefault = defaultKeys.includes(lcKey)
+            if (hasDefault) {
+                this.setEntityPropValue(i, "value", lcKey2defaultKey[lcKey])
+            }
             switch (this.getEntityPropValue(i, "type")) {
                 case "ignore":
-                    const lcKey = this.getEntityPropValue(
-                        i,
-                        "value"
-                    ).toLowerCase()
-                    if (defaultKeys.includes(lcKey)) break
+                    if (hasDefault) break
 
                 case "default":
                     indices.push(i)
@@ -58,6 +62,26 @@ class AssignmentIndex extends MappingIndex {
         }
         this.setEntityObjects(add)
     }
+}
+
+function extractContentTypeFromAssignments(assignments) {
+    if (!assignments) return
+
+    let contentType = undefined
+    for (const [name, assignment] of Object.entries(assignments)) {
+        if (name.toLocaleLowerCase() !== "content-type") continue
+
+        const { type, assignmentValue } = assignment
+        if (type === "set") {
+            contentType = assignmentValue
+        } else if (type === "default") {
+            contentType = null
+        } else if (type === "ignore") {
+            contentType = "raw"
+        }
+        break
+    }
+    return contentType
 }
 
 function getNonDefaultAssignments(assignments, mode) {
@@ -514,4 +538,9 @@ function AssignmentStack({ assignmentIndex, defaultsModel = {}, matcher }) {
     )
 }
 
-export { RenderWithAssignments, AssignmentStack, AssignmentIndex }
+export {
+    RenderWithAssignments,
+    AssignmentStack,
+    AssignmentIndex,
+    extractContentTypeFromAssignments
+}

@@ -251,6 +251,10 @@ function ApiSelect({ api, setApi, apiIndex, apiEnvIndex }) {
         apiIndex,
         apiEnvIndex
     )
+    const setApiManual = (value) => {
+        aContext.setApiSetting("lastApiId", value)
+        setApi(value)
+    }
     const buttons = [
         {
             icon: "edit",
@@ -273,7 +277,7 @@ function ApiSelect({ api, setApi, apiIndex, apiEnvIndex }) {
                 <Select
                     options={aContext.getApiOptions()}
                     value={api}
-                    set={setApi}
+                    set={setApiManual}
                 />
                 <ButtonGroup buttons={buttons} />
             </div>

@@ -4,9 +4,8 @@ import { PluginRegistry } from "core/plugin"
 import { Button } from "components/form"
 import { AppContext } from "components/context"
 import { Tabs, Tab } from "components/layout"
-import { getPathParams, d } from "core/helper"
-import { EntityIndex } from "core/entity"
-import { EntityStack } from "components/common"
+import { getPathParams, formatDate, d } from "core/helper"
+import { EntityStack, EntityPicker } from "components/common"
 import { RoutePath } from "plugins/route-selector/components"
 import { RenderWithAssignments } from "entities/assignments"
 
@@ -15,7 +14,10 @@ function HistoryWidget({}) {
     const routePlugin = PluginRegistry.getActivePlugin("routeSelector")
 
     const elems = []
-    for (const { request, assignments } of aContext.history) {
+    for (const {
+        request,
+        assignments
+    } of aContext.historyEntryIndex.getEntityObjects()) {
         if (elems.length > 10) break
 
         elems.push(
@@ -63,42 +65,13 @@ function HistoryWidget({}) {
     )
 }
 
-class HistoryIndex extends EntityIndex {
-    constructor(model) {
-        super()
-        this.model = model
-        this.items = model.map((item) => item.hash)
-    }
-
-    getEntityProps() {
-        return [
-            ...super.getEntityProps(),
-            "timestamp",
-            "request",
-            "assignments",
-            "bodyType"
-        ]
-    }
-
-    getEntityPropValue(index, prop) {
-        if (
-            ["timestamp", "request", "assignments", "bodyType"].includes(prop)
-        ) {
-            return this.model[index][prop]
-        }
-        return super.getEntityPropValue(index, prop)
-    }
-}
-
 function History({ close }) {
     const aContext = useContext(AppContext)
     const routePlugin = PluginRegistry.getActivePlugin("routeSelector")
     const requestPlugin = PluginRegistry.getActivePlugin("requestBuilder")
-    const historyIndex = useMemo(() => {
-        return new HistoryIndex(aContext.history)
-    }, [])
+    const historyEntryIndex = aContext.historyEntryIndex
     const methods = []
-    for (const { method } of historyIndex.getPropValues("request")) {
+    for (const { method } of historyEntryIndex.getPropValues("request")) {
         if (!method || methods.includes(method)) continue
 
         methods.push(method)
@@ -108,7 +81,7 @@ function History({ close }) {
             icon: "edit",
             action: (index) => {
                 const { request, assignments = {} } =
-                    historyIndex.getEntityObject(index)
+                    historyEntryIndex.getEntityObject(index)
                 const pathInfo = aContext.getMatchingRoutePath(
                     request.path,
                     request.method
@@ -125,19 +98,26 @@ function History({ close }) {
             icon: "east",
             action: (index) => {
                 const { request, assignments } =
-                    historyIndex.getEntityObject(index)
+                    historyEntryIndex.getEntityObject(index)
                 aContext.startContentStream(request, assignments)
                 close()
             }
         },
-        { icon: "delete", action: (index) => d(index) }
+        {
+            icon: "delete",
+            action: (index) => historyEntryIndex.deleteEntity(index)
+        }
     ]
     const actions = [
         {
             name: "Delete",
             icon: "delete",
             op: {
-                exec: () => d("xxx")
+                exec: (selected, setSelected) => {
+                    historyEntryIndex.deleteEntities(selected)
+                    setSelected([])
+                },
+                can: (selected) => selected.length > 0
             }
         }
     ]
@@ -148,9 +128,9 @@ function History({ close }) {
                 <Tab key={method} name={method} active={method === methods[0]}>
                     <div className="p-4">
                         <EntityStack
-                            entityIndex={historyIndex}
+                            entityIndex={historyEntryIndex}
                             matcher={(index) =>
-                                historyIndex.getEntityPropValue(
+                                historyEntryIndex.getEntityPropValue(
                                     index,
                                     "request"
                                 ).method === method
@@ -162,7 +142,7 @@ function History({ close }) {
                                 request,
                                 assignments,
                                 bodyType,
-                                hash
+                                value
                             }) => {
                                 const pathInfo = aContext.getMatchingRoutePath(
                                     request.path,
@@ -173,7 +153,7 @@ function History({ close }) {
                                     : []
                                 return (
                                     <RenderWithAssignments
-                                        key={hash}
+                                        key={value}
                                         mode={1}
                                         method={method}
                                         request={request}
@@ -195,12 +175,7 @@ function History({ close }) {
                                                 {!pathInfo && request.path}
                                             </div>
                                             <div className="opacity-50 text-xs">
-                                                {new Date(
-                                                    timestamp
-                                                ).toLocaleDateString()}{" "}
-                                                {new Date(
-                                                    timestamp
-                                                ).toLocaleTimeString()}
+                                                {formatDate(timestamp)}
                                             </div>
                                         </div>
                                     </RenderWithAssignments>

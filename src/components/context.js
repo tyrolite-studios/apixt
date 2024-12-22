@@ -23,6 +23,7 @@ import { RequestAssignmentsIndex } from "entities/request-assignments"
 import { useModalWindow } from "./modal"
 import { OkCancelLayout } from "./layout"
 import { Checkbox, Input } from "./form"
+import { HistoryEntryIndex } from "entities/history-entry"
 
 const controller = window.controller
 const AppContext = createContext(null)
@@ -390,7 +391,6 @@ function registerHotkeyApi({ registry, register }) {
             }
             return false
         },
-
         getHandlerForActionKey: (actionKey, elem) => {
             const { elemKeyBindings, hotKeyActions } = registry()
             if (elemKeyBindings.length === 0) {
@@ -412,7 +412,6 @@ function registerHotkeyApi({ registry, register }) {
 
             return handler ? handler : null
         },
-
         hotKeyActions: registry("hotKeyActions")
     }
 }
@@ -598,7 +597,8 @@ function registerContentApi({ registry, register, apiRef }) {
         }
     }
 
-    const getResolvedBody = (body, assignments, headers) => {
+    const getResolvedBody = (rawBody, inputMode, assignments, headers) => {
+        const body = apiRef.current.getResolvedBodyForMode(inputMode, rawBody)
         if (!Object.keys(assignments).length) return body
 
         let contentType = ""
@@ -720,7 +720,7 @@ function registerContentApi({ registry, register, apiRef }) {
         overwriteHeaders = {}
     ) => {
         const query = new URLSearchParams(resQuery).toString()
-        const { headers, body, ...options } = request
+        const { headers, body, inputMode, ...options } = request
 
         const finalHeaders = {
             ...resHeaders,
@@ -731,7 +731,7 @@ function registerContentApi({ registry, register, apiRef }) {
             query,
             body: !isMethodWithRequestBody(request.method)
                 ? undefined
-                : getResolvedBody(body, resBody, finalHeaders),
+                : getResolvedBody(body, inputMode, resBody, finalHeaders),
             ...options
         }
     }
@@ -746,7 +746,9 @@ function registerContentApi({ registry, register, apiRef }) {
         register("lastOverwriteHeaders", overwriteHeaders)
         register("lastStatus", null)
 
-        const { treeBuilder, spinner, config, history } = registry()
+        const { treeBuilder, spinner, config } = registry()
+
+        const historyEntryIndex = apiRef.current.historyEntryIndex
 
         const isCurrentApi = request.api === APIS.OPTION.CURRENT
 
@@ -771,7 +773,7 @@ function registerContentApi({ registry, register, apiRef }) {
                     break
                 }
             }
-            history.push2history(request, assignments, bodyType)
+            historyEntryIndex.addFirst(request, assignments, bodyType)
             treeBuilder.reset()
 
             const httpStream = startAbortableApiRequestStream(
@@ -844,7 +846,6 @@ function registerContentApi({ registry, register, apiRef }) {
                 )
 
                 const url = getApiUrl(api)
-                d("->", url, options)
                 const httpStream = startAbortableApiBodyRequest(url, {
                     ...options,
                     expect: () => true
@@ -1162,41 +1163,23 @@ function registerApiEnvApi({ registry, apiRef }) {
         apiEnvIndex,
         getApiEnvName,
         getApiEnvOptions,
+        getLastApiId: () => {
+            return apiRef.current.apiSettings.lastApiId ?? APIS.OPTION.CURRENT
+        },
         rebuildApiEnvs
     }
 }
 
 function registerHistoryApi({ registry, register }) {
-    const { apiStorage } = registry()
+    const { apiStorage, globalSettings } = registry()
 
-    const history = apiStorage.getJson("requestHistory", [])
-
-    const restrictHistory = () => {
-        while (history.length > 10) {
-            history.pop()
-        }
-    }
-
-    const push2history = (request, assignments, bodyType) => {
-        const hash = md5(request)
-        let i = 0
-        while (i < history.length && history[i].hash !== hash) i++
-
-        if (i < history.length) {
-            history.splice(i, 1)
-        }
-        history.unshift({
-            timestamp: Date.now(),
-            request,
-            bodyType,
-            assignments,
-            hash
-        })
-        restrictHistory()
-        apiStorage.setJson("requestHistory", history)
-    }
-
-    register("history", { push2history })
+    const historyEntryIndex = new HistoryEntryIndex(
+        apiStorage.getJson("requestHistory", []),
+        globalSettings.history
+    )
+    historyEntryIndex.addListener(() => {
+        apiStorage.setJson("requestHistory", historyEntryIndex.model)
+    })
 
     const getLastPathParams = (path) => {
         const pathInfo = getPathInfo(path)
@@ -1204,7 +1187,7 @@ function registerHistoryApi({ registry, register }) {
 
         const matchExpr = new RegExp(pathInfo.regexp)
 
-        for (const { request } of history) {
+        for (const { request } of historyEntryIndex.getEntityObjects()) {
             const matches = matchExpr.exec(request.path)
             if (matches === null) continue
 
@@ -1222,7 +1205,11 @@ function registerHistoryApi({ registry, register }) {
     const getLastRouteMatch = (method, pathInfo) => {
         const matchExpr = new RegExp(pathInfo.regexp)
 
-        for (const { request, assignments, bodyType } of history) {
+        for (const {
+            request,
+            assignments,
+            bodyType
+        } of historyEntryIndex.getEntityObjects()) {
             const matches = matchExpr.exec(request.path)
             if (matches !== null && request.method === method)
                 return {
@@ -1232,12 +1219,113 @@ function registerHistoryApi({ registry, register }) {
                 }
         }
     }
-
     return {
-        history,
-        push2history,
+        historyEntryIndex,
         getLastPathParams,
         getLastRouteMatch
+    }
+}
+
+function registerBodyModeApi({ apiRef }) {
+    const id2mode = {
+        raw: { name: "Raw" },
+        json: {
+            name: "JSON",
+            isValid: (value) => {
+                try {
+                    const parsed = JSON.parse(value)
+                    return parsed !== undefined
+                } catch (e) {
+                    return false
+                }
+            },
+            format: (value) => {
+                const { globalSettings } = apiRef.current
+                const parsed = JSON.parse(value)
+                return JSON.stringify(parsed, null, globalSettings.tabWidth)
+            }
+        }
+    }
+    const bodyType2modes = {
+        json: ["json"]
+    }
+
+    const getModeOptionsForBodyType = (bodyType) => {
+        const modes = ["raw"]
+
+        const extraModes = bodyType2modes[bodyType.toLowerCase()] ?? []
+        modes.push(...extraModes)
+
+        const options = []
+        for (const id of modes) {
+            const mode = id2mode[id]
+            options.push({ id, name: mode.name })
+        }
+        return options
+    }
+
+    const doBodyConversion = (body, fromMode, toMode) => {
+        const mode = id2mode[fromMode.toLowerCase()]
+        if (!mode || !mode.convertTo) return body
+
+        return mode.convertTo(body, toMode)
+    }
+
+    return {
+        registerMode: (id, mode) => {
+            id2mode[id] = mode
+        },
+        linkModeWithBodyType: (type, id) => {
+            let links = bodyType2modes[type]
+            if (!links) links[type] = []
+            if (links.includes(id)) return
+
+            links.push(id)
+        },
+        getModeOptionsForBodyType,
+        isValidBody: (modeId, body) => {
+            const mode = id2mode[modeId.toLowerCase()]
+            if (!mode) return true
+
+            return mode.isValid && mode.isValid(body)
+        },
+        getFormatedBody: (modeId, body) => {
+            const mode = id2mode[modeId.toLowerCase()]
+            if (!mode || !mode.format) return body
+
+            return mode.format(body)
+        },
+        hasBodyValidator: (modeId) => {
+            const mode = id2mode[modeId.toLowerCase()]
+            return !!(mode && mode.isValid)
+        },
+        getBodyModeName: (modeId) => {
+            const mode = id2mode[modeId.toLowerCase()]
+            return mode.name
+        },
+        hasBodyTypeMode: (bodyType, modeId) => {
+            const available = getModeOptionsForBodyType(bodyType).map(
+                (x) => x.id
+            )
+            return available.includes(modeId)
+        },
+        doBodyConversion,
+        setLastBodyTypeMode: (bodyType, mode) => {
+            const { apiSettings, setApiSetting } = apiRef.current
+            const lastBodyTypeModes = apiSettings.lastBodyTypeModes
+            lastBodyTypeModes[bodyType] = mode
+            setApiSetting("lastBodyTypeModes", lastBodyTypeModes)
+        },
+        getLastBodyTypeMode: (bodyType) => {
+            const { apiSettings } = apiRef.current
+            return apiSettings.lastBodyTypeModes[bodyType] ?? "raw"
+        },
+        getResolvedBodyForMode: (modeId, body) => {
+            const mode = id2mode[modeId.toLowerCase()]
+            if (!mode || !mode.targetMode) return body
+
+            return doBodyConversion(body, modeId, mode.targetMode)
+        }
     }
 }
 
@@ -1279,6 +1367,7 @@ function AppCtx({ config, children }) {
             ...registerApiEnvApi(registration),
             ...registerRequestsApi(registration),
             ...registerDefaultsApi(registration),
+            ...registerBodyModeApi(registration),
 
             config: registry("config"),
             version: registry("version"),
@@ -1287,6 +1376,12 @@ function AppCtx({ config, children }) {
                 apiRef.current = { ...apiRef.current }
                 update()
             }
+        }
+        for (const plugin of PluginRegistry.getPlugins()) {
+            plugin.registerContext(apiRef.current)
+        }
+        for (const plugin of PluginRegistry.getActivePlugins()) {
+            plugin.activateInContext(apiRef.current)
         }
     }
     return (

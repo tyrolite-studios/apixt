@@ -10,6 +10,7 @@ import "plugins/syntax-highlighter/plugin"
 import "plugins/halt/plugin"
 import "plugins/request-builder/plugin"
 import "plugins/json-diff/plugin"
+import "plugins/json5/plugin"
 
 function Footer() {
     const aContext = useContext(AppContext)

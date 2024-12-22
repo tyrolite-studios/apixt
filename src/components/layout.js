@@ -168,7 +168,7 @@ function Tabs({
         })
         i++
     }
-    const buttonGroupCls = new ClassNames("bg-header-bg/50")
+    const buttonGroupCls = new ClassNames("bg-gradient-to-t from-header-bg/50")
     buttonGroupCls.addIf(padded, "px-2 pt-2")
 
     const stackItems = []
@@ -369,6 +369,7 @@ function AvailContextProvider({ children }) {
 
 function OkCancelLayout({
     ok = () => {},
+    okLabel = "OK",
     cancel = () => {},
     submit,
     buttons = [],
@@ -378,7 +379,7 @@ function OkCancelLayout({
 }) {
     const groupBtns = [
         {
-            name: "OK",
+            name: okLabel,
             icon: "check",
             iconClassName: "text-ok-text",
             autoFocus: true,

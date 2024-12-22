@@ -18,6 +18,10 @@ class AbstractPlugin {
 
     init() {}
 
+    registerContext(ctx) {}
+
+    activateInContext(ctx) {}
+
     addHook(id, handler) {
         PluginRegistry.addHook(id, this, handler)
     }
@@ -260,6 +264,14 @@ const PluginRegistry = {
 
     getAll() {
         return plugins
+    },
+
+    getPlugins() {
+        const result = []
+        for (const plugin of plugins) {
+            result.push(plugin)
+        }
+        return result
     },
 
     getActivePlugins() {
