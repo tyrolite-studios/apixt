@@ -66,23 +66,28 @@ function MainInner() {
             }
             let hotKey = ""
             let actionKey = ""
+            const isTextArea =
+                document.activeElement &&
+                "TEXTAREA" === document.activeElement.tagName
+            const isInput =
+                document.activeElement &&
+                "INPUT" === document.activeElement.tagName
+
             if (e.metaKey) {
                 hotKey += "m"
             } else if (e.ctrlKey) {
                 hotKey += "c"
             } else if (e.altKey) {
                 hotKey += "a"
-            } else if (HotKeySingleKeys.includes(e.key)) {
+            } else if (
+                HotKeySingleKeys.includes(e.key) &&
+                !(e.key === "Enter" && isTextArea)
+            ) {
                 actionKey = e.key
             } else if (
                 e.key >= "0" &&
                 e.key <= "9" &&
-                !(
-                    document.activeElement &&
-                    ["INPUT", "TEXTAREA"].includes(
-                        document.activeElement.tagName
-                    )
-                )
+                !(isTextArea || isInput)
             ) {
                 if (aContext.focusHotKeyArea(e.key)) {
                     e.stopPropagation()

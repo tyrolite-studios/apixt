@@ -4,7 +4,7 @@ import { AppContext } from "components/context"
 import { Input, Textarea } from "components/form"
 import { d, getPathInfo, getResolvedPath, getPathParams } from "core/helper"
 import { Tabs, Tab, OkCancelLayout } from "components/layout"
-import { EntityStack } from "components/common"
+import { EntityStack, useComponentUpdate } from "components/common"
 import { FormGrid, Radio } from "components/form"
 import { isMethodWithRequestBody } from "core/http"
 import { CustomCells } from "components/form"
@@ -13,35 +13,7 @@ import {
     AssignmentStack,
     AssignmentIndex
 } from "entities/assignments"
-import { useComponentUpdate } from "../../components/common"
-
-function RoutePath({ path, params = [] }) {
-    const parts = path.substring(1).split("/")
-    const elems = []
-    let i = 0
-    const pathParams = [...params]
-    for (const part of parts) {
-        elems.push(<div key={i + "_0"}>/</div>)
-        if (part.startsWith(":")) {
-            const param = pathParams.shift()
-            elems.push(
-                <div
-                    className="px-2 border-b border-header-text/50"
-                    key={i + "_1"}
-                >
-                    <div className="border-1 border-app-border text-xs">
-                        <span className="opacity-50">{part.substring(1)}:</span>{" "}
-                        {param}
-                    </div>
-                </div>
-            )
-        } else {
-            elems.push(<div key={i + "_1"}>{part}</div>)
-        }
-        i++
-    }
-    return <div className="stack-h">{elems}</div>
-}
+import { RoutePath } from "entities/routes"
 
 function getDefaultedAssignments(assignments, defaults) {
     for (const key of Object.keys(defaults)) {
@@ -61,7 +33,7 @@ function RouteLauncher({ close, request, assignments = {} }) {
 
     const { method } = request
     const pathInfo = useMemo(() => {
-        return aContext.getMatchingRoutePath(request.path, method)
+        return aContext.getMatchingRoutePath(request.api, request.path, method)
     }, [])
     const params = useMemo(() => {
         return pathInfo ? getPathParams(pathInfo, request.path) : []

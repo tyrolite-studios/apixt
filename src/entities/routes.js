@@ -1,5 +1,11 @@
+import { useState, useMemo } from "react"
 import { EntityIndex } from "core/entity"
 import { APIS } from "./apis"
+import { OkCancelLayout } from "components/layout"
+import { FormGrid, InputCells } from "components/form"
+import { useModalWindow } from "components/modal"
+import { getPathParams } from "core/helper"
+import { getResolvedPath } from "../core/helper"
 
 class RouteIndex extends EntityIndex {
     constructor(routes) {
@@ -81,4 +87,74 @@ function RoutePath({ path, params = [] }) {
     return <div className="stack-h">{elems}</div>
 }
 
-export { RouteIndex, SimpleRoutePath }
+function RouteParamsCells({ pathInfo, pathParams, setPathParams }) {
+    const routeInputCells = []
+    for (const { fix, value, ref } of pathInfo.components) {
+        if (fix) continue
+
+        routeInputCells.push(
+            <InputCells
+                key={value}
+                name={`${value}:`}
+                autoFocus={ref === 0}
+                value={pathParams[ref]}
+                set={(newValue) => {
+                    const newParams = [...pathParams]
+                    newParams[ref] = newValue
+                    setPathParams(newParams)
+                }}
+            />
+        )
+    }
+
+    return <>{routeInputCells}</>
+}
+
+function RouteParamsWindow({ close, save, pathInfo, path }) {
+    const params = useMemo(() => {
+        return pathInfo ? getPathParams(pathInfo, path) : []
+    }, [])
+    const [pathParams, setPathParams] = useState(() => {
+        const { varCount } = pathInfo
+        if (!varCount) return []
+        if (params) return [...params]
+        const arr = []
+        while (arr.length < varCount) arr.push("")
+        return arr
+    })
+    const formParams = { pathParams, setPathParams, pathInfo }
+    return (
+        <OkCancelLayout
+            submit
+            cancel={close}
+            ok={() => save(getResolvedPath(pathInfo.path, pathParams))}
+        >
+            <FormGrid>
+                <RouteParamsCells {...formParams} />
+            </FormGrid>
+        </OkCancelLayout>
+    )
+}
+
+function useRouteParamsModal({ save, ...props }) {
+    const RouteParamsModal = useModalWindow()
+
+    return {
+        openRouteParamsModal: () => {
+            RouteParamsModal.open({
+                ...props,
+                save: (model) => {
+                    save(model)
+                    RouteParamsModal.close()
+                }
+            })
+        },
+        RouteParamsModal: (
+            <RouteParamsModal.content>
+                <RouteParamsWindow {...RouteParamsModal.props} />
+            </RouteParamsModal.content>
+        )
+    }
+}
+
+export { RouteIndex, SimpleRoutePath, RoutePath, useRouteParamsModal }

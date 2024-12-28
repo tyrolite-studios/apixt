@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useContext, useRef } from "react"
+import { useEffect, useMemo, useContext, useRef, Fragment } from "react"
 import { useModalWindow } from "components/modal"
 import { isMethodWithRequestBody, getParsedQueryString } from "core/http"
 import {
@@ -7,6 +7,7 @@ import {
     SelectCells,
     Input,
     Button,
+    Checkbox,
     RadioCells,
     InputCells,
     CustomCells
@@ -18,7 +19,7 @@ import {
     useCallAfterwards
 } from "components/common"
 import { useState } from "react"
-import { OkCancelLayout, Tab, Tabs } from "components/layout"
+import { OkCancelLayout, Tab, Tabs, Centered } from "components/layout"
 import {
     AssignmentIndex,
     AssignmentStack,
@@ -32,8 +33,8 @@ import { RequestAssingmentsPickerCells } from "entities/request-assignments"
 import { APIS, ApiSelect } from "entities/apis"
 import { SimpleRoutePath } from "entities/routes"
 import { HistoryEntryPicker } from "entities/history-entry"
-import { Checkbox } from "../../components/form"
-import { without } from "../../core/helper"
+import { isObject, isArray, without, getResolvedPath } from "core/helper"
+import { useRouteParamsModal } from "entities/routes"
 
 const httpMethodOptions = [
     { id: "POST", name: "POST" },
@@ -48,12 +49,64 @@ const httpMethodOptions = [
 const pathMatchRegexp = /^https?\:\/\/[^\/]+(\/.*)$/
 const urlInputRegexp = /^https?:\/\/[^\/]+$/
 
-const strategyOptions = [
-    { id: "new", name: "New Request" },
-    { id: "add", name: "Add to request" }
+const actionOptions = [
+    { id: "add", name: "Add" },
+    { id: "replace", name: "Replace" },
+    { id: "new", name: "New" }
 ]
 
-function ImportForm({ save, close }) {
+function QueryValue({ value }) {
+    if (isObject(value)) {
+        return (
+            <div className="stack-v text-xs">
+                <div>{"{"}</div>
+                <div className="stack-h gap-2">
+                    <div> </div>
+                    <div className="grid grid-cols-2 gap-2 pl-2">
+                        {Object.entries(value).map(([name, subValue]) => (
+                            <Fragment key={name}>
+                                <div>{name}:</div>
+                                {QueryValue({ value: subValue })}
+                            </Fragment>
+                        ))}
+                    </div>
+                </div>
+                <div>{"}"}</div>
+            </div>
+        )
+    }
+    if (isArray(value)) {
+        return (
+            <div className="stack-v text-xs">
+                <div>{"["}</div>
+                <div className="stack-h gap-2">
+                    <div> </div>
+                    <div className="grid grid-cols-2 pl-2">
+                        {Object.values(value).map((subValue, index) => (
+                            <Fragment key={index}>
+                                <div>{QueryValue({ value: subValue })}</div>
+                                <div className="text-sm">
+                                    {index < value.length - 1 ? "," : ""}
+                                </div>
+                            </Fragment>
+                        ))}
+                    </div>
+                </div>
+                <div>{"]"}</div>
+            </div>
+        )
+    }
+    return <div className="text-sm">{value}</div>
+}
+
+function getWithoutProtocol(url) {
+    if (url.startsWith("http://")) {
+        return url.substring(7)
+    }
+    return url.startsWith("https://") ? url.substring(8) : url
+}
+
+function ImportForm({ save, close, ...props }) {
     const aContext = useContext(AppContext)
 
     const [url, setUrlRaw] = useState("")
@@ -65,7 +118,11 @@ function ImportForm({ save, close }) {
     const [importPath, setImportPath] = useState(true)
     const [importQuery, setImportQuery] = useState(true)
     const [skipKeys, setSkipKeys] = useState([])
-    const [strategy, setStrategy] = useState("new")
+    const [action, setActionRaw] = useState("add")
+    const setAction = (value) => {
+        setActionRaw(value)
+        setUrl(url, value)
+    }
 
     const getSkipQueryKey = (key) => {
         return !skipKeys.includes(key)
@@ -77,13 +134,38 @@ function ImportForm({ save, close }) {
     }
 
     const apis = useMemo(() => {
-        return [
-            { id: "0", url: aContext.config.baseUrl, name: "current" },
-            aContext.apiIndex.getEntityObjects()
+        const items = aContext.apiIndex.getEntityObjects()
+        const result = [
+            {
+                id: APIS.OPTION.CURRENT,
+                url: aContext.config.baseUrl,
+                name: "current"
+            }
         ]
+        for (const { value, url, name } of items) {
+            result.push({ id: value, url, name })
+        }
+        const envUrls = aContext.apiEnvIndex.getPropValues("url")
+        for (const url of envUrls) {
+            result.push({ id: APIS.OPTION.CURRENT, url, name: "current" })
+        }
+        for (const { envValues, value, name } of items) {
+            if (!envValues) continue
+
+            for (const envUrl of Object.values(envValues)) {
+                result.push({ id: value, url: envUrl, name })
+            }
+        }
+        const without = []
+        for (const item of result) {
+            without.push({ ...item, url: getWithoutProtocol(item.url) })
+        }
+        return [...result, ...without]
     }, [])
 
-    const setUrl = (value) => {
+    const setUrl = (value, newAction) => {
+        if (!newAction) newAction = action
+
         const [urlWithoutHash] = value.split("#")
         let [apiAndPath, foundQuery = ""] = urlWithoutHash.split("?")
         if (!foundQuery && apiAndPath.indexOf("=") > -1) {
@@ -101,7 +183,9 @@ function ImportForm({ save, close }) {
             for (const api of apis) {
                 if (!apiAndPath.startsWith(api.url)) continue
 
-                foundApi = api
+                if (newAction === "new" && api.id !== props.api) {
+                    foundApi = api
+                }
                 foundPath = apiAndPath.substring(api.url.length)
                 break
             }
@@ -129,7 +213,7 @@ function ImportForm({ save, close }) {
     }
 
     const importUrl = () => {
-        const result = { strategy }
+        const result = { action }
         if (hasApi && importApi) {
             result.api = hasApi.value
         }
@@ -157,10 +241,10 @@ function ImportForm({ save, close }) {
             <div className="p-2">
                 <FormGrid>
                     <RadioCells
-                        name="Import:"
-                        value={strategy}
-                        set={setStrategy}
-                        options={strategyOptions}
+                        name="Action:"
+                        value={action}
+                        set={setAction}
+                        options={actionOptions}
                     />
                     <InputCells
                         name="URL:"
@@ -170,8 +254,13 @@ function ImportForm({ save, close }) {
                         required={url === ""}
                         className="w-full"
                     />
-                    <CustomCells name="Selection:">
+                    <CustomCells name="Import:">
                         <div className="stack-v gap-2 divide-y divide-header-border">
+                            {url === "" && (
+                                <Centered className="opacity-50 text-xs">
+                                    Please enter a valid URL
+                                </Centered>
+                            )}
                             {hasApi !== "" && (
                                 <div className="stack-h gap-2 text-xs p-2">
                                     <div className="stack-h gap-2">
@@ -237,7 +326,7 @@ function ImportForm({ save, close }) {
                                                             name
                                                         )}
                                                     />
-                                                    <div className="stack-v">
+                                                    <div className="stack-v gap-1">
                                                         <div className="opacity-50 text-xs">
                                                             {name}:
                                                         </div>
@@ -251,7 +340,9 @@ function ImportForm({ save, close }) {
                                                                     : "opacity-30"
                                                             }
                                                         >
-                                                            {value}
+                                                            <QueryValue
+                                                                value={value}
+                                                            />
                                                         </div>
                                                     </div>
                                                 </div>
@@ -442,14 +533,17 @@ function RequestBuilder({ close, request, assignments }) {
             }
         },
         {
-            name: "Import",
+            name: "URL...",
             onPressed: () => {
                 ImportModal.open({
+                    api,
                     save: (model) => {
+                        const isNew = model.action === "new"
                         if (model.path) {
                             setPath(model.path)
+                        } else if (isNew) {
+                            setPath("/")
                         }
-                        const add = model.strategy === "add"
                         if (model.assignments) {
                             const newModel = {}
                             for (const [
@@ -462,7 +556,7 @@ function RequestBuilder({ close, request, assignments }) {
                                 }
                             }
                             queryAssignmentIndex.setModel(
-                                add
+                                model.action === "add"
                                     ? {
                                           ...queryAssignmentIndex.model,
                                           ...newModel
@@ -470,7 +564,7 @@ function RequestBuilder({ close, request, assignments }) {
                                     : newModel
                             )
                         }
-                        if (!add) {
+                        if (isNew) {
                             if (model.api) {
                                 setApi(model.api)
                             }
@@ -636,7 +730,7 @@ function RequestBuilder({ close, request, assignments }) {
                                             load({
                                                 request: {
                                                     api,
-                                                    path,
+                                                    path: getResolvedPath(path),
                                                     defaults:
                                                         aContext.apiSettings
                                                             .preselectedDefaults,
@@ -700,6 +794,7 @@ function RequestBuilder({ close, request, assignments }) {
 }
 
 const RequestLauncher = ({
+    api,
     method,
     setMethod,
     path,
@@ -719,6 +814,14 @@ const RequestLauncher = ({
     bodyAssignmentIndex
 }) => {
     const aContext = useContext(AppContext)
+    const pathInfo = useMemo(() => {
+        return aContext.getMatchingRoutePath(api, path, method)
+    }, [api, method, path])
+    const { RouteParamsModal, openRouteParamsModal } = useRouteParamsModal({
+        path,
+        pathInfo,
+        save: (newPath) => setPath(newPath)
+    })
     const hasBody = isMethodWithRequestBody(method)
     const getMatcher = (entityIndex) => {
         if (showDefaults) return
@@ -728,73 +831,97 @@ const RequestLauncher = ({
     }
 
     return (
-        <div className="auto overflow-hidden">
-            <FormGrid>
-                <SelectCells
-                    name="Method:"
-                    options={httpMethodOptions}
-                    value={method}
-                    set={setMethod}
-                />
-                <CustomCells name="Path:">
-                    <div className="stack-h gap-2 w-full">
-                        <Input
-                            name="Path:"
-                            value={path}
-                            set={setPath}
-                            className="w-full"
-                        />
-                        <Button name="Params" disabled={true} />
-                    </div>
-                </CustomCells>
-                <RequestAssingmentsPickerCells
-                    name="Defaults:"
-                    requestAssignmentsIndex={aContext.defaultsIndex}
-                    value={defaults}
-                    set={setDefaults}
-                    visibility={showDefaults}
-                    setVisibility={setShowDefaults}
-                />
-                <CustomCells name="Query:">
-                    <AssignmentStack
-                        assignmentIndex={queryAssignmentIndex}
-                        defaultsModel={defaultsModel.query}
-                        matcher={getMatcher(queryAssignmentIndex)}
+        <>
+            <div className="auto overflow-hidden">
+                <FormGrid>
+                    <SelectCells
+                        name="Method:"
+                        options={httpMethodOptions}
+                        value={method}
+                        set={setMethod}
                     />
-                </CustomCells>
-                <CustomCells name="Headers:">
-                    <AssignmentStack
-                        assignmentIndex={headersAssignmentIndex}
-                        defaultsModel={defaultsModel.headers}
-                        matcher={getMatcher(headersAssignmentIndex)}
-                    />
-                </CustomCells>
-                {hasBody && (
-                    <CustomCells name="Body:">
-                        <div className="stack-v">
-                            {bodyType !== "pending" && (
-                                <BodyTextarea
-                                    value={body}
-                                    set={setBody}
-                                    mode={inputMode}
-                                    setMode={setInputMode}
-                                    rows={10}
-                                    type={bodyType}
+                    <CustomCells name="Path:">
+                        <div className="stack-v gap-2">
+                            <div className="stack-h gap-2 w-full">
+                                <Input
+                                    name="Path:"
+                                    value={path}
+                                    set={setPath}
+                                    className="w-full"
                                 />
-                            )}
-                            <div className="text-xs py-2">
-                                Auto-Assignments:
+                                <Button
+                                    name="Params"
+                                    disabled={
+                                        !pathInfo || pathInfo.varCount === 0
+                                    }
+                                    onPressed={() => openRouteParamsModal()}
+                                />
                             </div>
-                            <AssignmentStack
-                                assignmentIndex={bodyAssignmentIndex}
-                                defaultsModel={defaultsModel.body}
-                                matcher={getMatcher(bodyAssignmentIndex)}
-                            />
+                            <div className="text-xs gap-2 stack-h pl-2 pb-2">
+                                <div className="opacity-50">Route:</div>
+                                <div>
+                                    {pathInfo ? (
+                                        <SimpleRoutePath path={pathInfo.path} />
+                                    ) : (
+                                        <span className="opacity-50">
+                                            {"-"}
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
                         </div>
                     </CustomCells>
-                )}
-            </FormGrid>
-        </div>
+                    <RequestAssingmentsPickerCells
+                        name="Defaults:"
+                        requestAssignmentsIndex={aContext.defaultsIndex}
+                        value={defaults}
+                        set={setDefaults}
+                        visibility={showDefaults}
+                        setVisibility={setShowDefaults}
+                    />
+                    <CustomCells name="Query:">
+                        <AssignmentStack
+                            assignmentIndex={queryAssignmentIndex}
+                            defaultsModel={defaultsModel.query}
+                            matcher={getMatcher(queryAssignmentIndex)}
+                        />
+                    </CustomCells>
+                    <CustomCells name="Headers:">
+                        <AssignmentStack
+                            assignmentIndex={headersAssignmentIndex}
+                            defaultsModel={defaultsModel.headers}
+                            matcher={getMatcher(headersAssignmentIndex)}
+                        />
+                    </CustomCells>
+                    {hasBody && (
+                        <CustomCells name="Body:">
+                            <div className="stack-v">
+                                {bodyType !== "pending" && (
+                                    <BodyTextarea
+                                        value={body}
+                                        set={setBody}
+                                        mode={inputMode}
+                                        setMode={setInputMode}
+                                        rows={10}
+                                        type={bodyType}
+                                    />
+                                )}
+                                <div className="text-xs py-2">
+                                    Auto-Assignments:
+                                </div>
+                                <AssignmentStack
+                                    assignmentIndex={bodyAssignmentIndex}
+                                    defaultsModel={defaultsModel.body}
+                                    matcher={getMatcher(bodyAssignmentIndex)}
+                                />
+                            </div>
+                        </CustomCells>
+                    )}
+                </FormGrid>
+            </div>
+
+            {RouteParamsModal}
+        </>
     )
 }
 

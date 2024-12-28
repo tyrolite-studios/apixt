@@ -366,7 +366,7 @@ function getPathParams(pathInfo, path) {
     return result
 }
 
-function getResolvedPath(path, params, strict = false) {
+function getResolvedPath(path, params = [], strict = false) {
     const pathInfo = getPathInfo(path)
     if (!pathInfo.varCount) return path
 

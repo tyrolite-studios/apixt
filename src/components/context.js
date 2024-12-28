@@ -152,9 +152,9 @@ function PromptDiv() {
 function registerRouteApi({ config }) {
     const routeIndex = new RouteIndex(config.routes)
 
-    const getMatchingRoutePath = (resolvedPath, method) => {
-        for (const { path, methods } of routeIndex.getEntityObjects()) {
-            if (!methods.includes(method)) continue
+    const getMatchingRoutePath = (matchApi, resolvedPath, method) => {
+        for (const { path, methods, api } of routeIndex.getEntityObjects()) {
+            if (!methods.includes(method) || matchApi !== api) continue
 
             const pathInfo = getPathInfo(path)
             const pathRegexp = new RegExp(pathInfo.regexp)

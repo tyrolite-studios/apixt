@@ -1844,7 +1844,14 @@ function Form({ children, submit, onKeyDown, className, ...props }) {
     const submitOnReturn = !submit
         ? null
         : (e) => {
-              if (e.key === "Enter" && !invalidRef.current) {
+              if (
+                  e.key === "Enter" &&
+                  !invalidRef.current &&
+                  !(
+                      d(document.activeElement) &&
+                      document.activeElement.tagName === "TEXTAREA"
+                  )
+              ) {
                   submit()
                   e.preventDefault()
                   e.stopPropagation()

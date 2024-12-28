@@ -36,6 +36,7 @@ function HistoryWidget({}) {
                             icon="edit"
                             onPressed={() => {
                                 const pathInfo = aContext.getMatchingRoutePath(
+                                    request.api,
                                     request.path,
                                     request.method
                                 )
@@ -83,6 +84,7 @@ function History({ close }) {
                 const { request, assignments = {} } =
                     historyEntryIndex.getEntityObject(index)
                 const pathInfo = aContext.getMatchingRoutePath(
+                    request.api,
                     request.path,
                     request.method
                 )
@@ -145,6 +147,7 @@ function History({ close }) {
                                 value
                             }) => {
                                 const pathInfo = aContext.getMatchingRoutePath(
+                                    request.api,
                                     request.path,
                                     request.method
                                 )
