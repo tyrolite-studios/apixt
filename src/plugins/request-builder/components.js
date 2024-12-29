@@ -236,6 +236,16 @@ function ImportForm({ save, close, ...props }) {
         save(result)
     }
 
+    const apiCls = ClassNames("p-2 text-sm")
+    apiCls.addIf(!importApi, "opacity-30")
+    const pathCls = ClassNames("p-2 text-sm")
+    pathCls.addIf(!importPath, "opacity-30")
+    const queryCls = ClassNames("stack-v text-sm gap-2 p-2")
+    const queryOnCls = ClassNames("")
+    queryOnCls.addIf(importPath, "opacity-50", "opacity-30")
+    const queryOffCls = ClassNames("")
+    queryOffCls.addIf(!importQuery, "opacity-30")
+
     return (
         <OkCancelLayout submit ok={importUrl} cancel={close}>
             <div className="p-2">
@@ -255,62 +265,54 @@ function ImportForm({ save, close, ...props }) {
                         className="w-full"
                     />
                     <CustomCells name="Import:">
-                        <div className="stack-v gap-2 divide-y divide-header-border">
+                        <div className="grid grid-cols-[min-content_auto] [clip-path:inset(2px_0_0)] *:border-t *:border-header-border/50">
                             {url === "" && (
-                                <Centered className="opacity-50 text-xs">
-                                    Please enter a valid URL
-                                </Centered>
+                                <div className="col-span-2 p-2">
+                                    <Centered className="opacity-50 text-xs">
+                                        Please enter a valid URL
+                                    </Centered>
+                                </div>
                             )}
                             {hasApi !== "" && (
-                                <div className="stack-h gap-2 text-xs p-2">
-                                    <div className="stack-h gap-2">
+                                <Fragment>
+                                    <div className="stack-h gap-2 text-xs p-2">
                                         <Checkbox
                                             value={importApi}
                                             set={setImportApi}
                                         />
                                         API:
                                     </div>
-                                    <div
-                                        className={
-                                            "text-sm" +
-                                            (importApi ? "" : " opacity-30")
-                                        }
-                                    >
+                                    <div className={apiCls.value}>
                                         {hasApi.name}
                                     </div>
-                                </div>
+                                </Fragment>
                             )}
 
                             {hasPath !== "" && (
-                                <div className="stack-h gap-2 text-xs p-2">
-                                    <div className="stack-h gap-2">
+                                <Fragment>
+                                    <div className="stack-h gap-2 text-xs p-2">
                                         <Checkbox
                                             value={importPath}
                                             set={setImportPath}
                                         />
                                         Path:
                                     </div>
-                                    <div
-                                        className={
-                                            "text-sm" +
-                                            (importPath ? "" : " opacity-30")
-                                        }
-                                    >
+                                    <div className={pathCls.value}>
                                         {hasPath}
                                     </div>
-                                </div>
+                                </Fragment>
                             )}
 
                             {hasQuery !== "" && (
-                                <div className="stack-h gap-2 text-xs p-2">
-                                    <div className="stack-h gap-2">
+                                <Fragment>
+                                    <div className="stack-h gap-2 text-xs p-2">
                                         <Checkbox
                                             value={importQuery}
                                             set={setImportQuery}
                                         />
                                         Query:
                                     </div>
-                                    <div className="stack-v text-sm gap-2">
+                                    <div className={queryCls.value}>
                                         {Object.entries(assignments).map(
                                             ([name, value]) => (
                                                 <div
@@ -327,7 +329,11 @@ function ImportForm({ save, close, ...props }) {
                                                         )}
                                                     />
                                                     <div className="stack-v gap-1">
-                                                        <div className="opacity-50 text-xs">
+                                                        <div
+                                                            className={
+                                                                queryOnCls.value
+                                                            }
+                                                        >
                                                             {name}:
                                                         </div>
                                                         <div
@@ -336,8 +342,8 @@ function ImportForm({ save, close, ...props }) {
                                                                 getSkipQueryKey(
                                                                     name
                                                                 )
-                                                                    ? ""
-                                                                    : "opacity-30"
+                                                                    ? queryOffCls.value
+                                                                    : queryOnCls.value
                                                             }
                                                         >
                                                             <QueryValue
@@ -349,7 +355,7 @@ function ImportForm({ save, close, ...props }) {
                                             )
                                         )}
                                     </div>
-                                </div>
+                                </Fragment>
                             )}
                         </div>
                     </CustomCells>
@@ -688,6 +694,7 @@ function RequestBuilder({ close, request, assignments }) {
                                         className="h-full"
                                         entityIndex={aContext.requestIndex}
                                         pick={load}
+                                        filter
                                         matcher={(idx) =>
                                             aContext.requestIndex.getEntityPropValue(
                                                 idx,
@@ -712,6 +719,7 @@ function RequestBuilder({ close, request, assignments }) {
                                 <div className="p-2 h-full">
                                     <HistoryEntryPicker
                                         className="h-full"
+                                        filter
                                         pick={({ request, assignments }) =>
                                             load({ request, assignments })
                                         }
@@ -726,6 +734,7 @@ function RequestBuilder({ close, request, assignments }) {
                                 <div className="p-2 h-full">
                                     <EntityPicker
                                         className="h-full"
+                                        filter
                                         pick={({ path, methods, api }) => {
                                             load({
                                                 request: {

@@ -1,7 +1,14 @@
 import { useRef, useState, useEffect, useContext, useMemo } from "react"
 import { useModalWindow } from "./modal"
 import { ClassNames, isValidJson, clamp, d } from "core/helper"
-import { Button, ButtonGroup, AutoCompleteInput, Radio, Textarea } from "./form"
+import {
+    Button,
+    ButtonGroup,
+    AutoCompleteInput,
+    Radio,
+    Textarea,
+    Input
+} from "./form"
 import { Centered, Div, Stack, Icon, OkCancelLayout } from "./layout"
 import { AppContext } from "./context"
 
@@ -936,12 +943,16 @@ function EntityPicker({
     bordered = true,
     divided = true,
     padded = true,
-    render = (item) => item.name
+    render = (item) => item.name,
+    ...props
 }) {
     const update = useUpdateOnEntityIndexChanges(entityIndex)
 
-    const [active, setActive] = useState(0)
-    const { matches } = entityIndex.getView({ match: matcher })
+    const [filter, setFilter] = useState("")
+    const { matches, isFiltered } = entityIndex.getView({
+        match: matcher,
+        filter
+    })
     const items = entityIndex.getEntityObjects(matches)
 
     const stackRef = useRef(null)
@@ -958,7 +969,7 @@ function EntityPicker({
         handleSpace: true
     })
 
-    const cls = ClassNames("stack-v overflow-auto", className)
+    const cls = ClassNames("stack-v overflow-auto auto", className)
     cls.addIf(styled && colored, "bg-input-bg text-input-text")
     cls.addIf(styled && bordered, "border")
     cls.addIf(styled && bordered && colored, "border-input-border")
@@ -967,6 +978,29 @@ function EntityPicker({
 
     let i = 0
     const elems = []
+    const headerGroups = []
+
+    if (props.filter && entityIndex.filterProps.length) {
+        headerGroups.push(
+            <div key="filter" className="stack-h items-center gap-1">
+                <Icon className="text-sm" name="search" />
+                <Input
+                    padded={false}
+                    sized={false}
+                    className="text-xs p-1"
+                    value={filter}
+                    size={10}
+                    set={setFilter}
+                />
+                <Button
+                    icon="close"
+                    disabled={!filter}
+                    onPressed={() => setFilter("")}
+                />
+            </div>
+        )
+    }
+
     for (const item of items) {
         const isFocused = hasFocus && i === tabIndex
 
@@ -997,15 +1031,27 @@ function EntityPicker({
     elems.push(
         <div key={-1} className="auto bg-black/10">
             {items.length === 0 && (
-                <Centered className="opacity-50 text-xs">{emptyMsg}</Centered>
+                <Centered className="opacity-50 text-xs">
+                    {isFiltered ? `No matches for "${filter}"` : emptyMsg}
+                </Centered>
             )}
         </div>
     )
 
-    return (
+    const itemsDiv = (
         <Div ref={stackRef} className={cls.value} {...attr}>
             {elems}
         </Div>
+    )
+    if (!headerGroups.length) return itemsDiv
+
+    return (
+        <div className="stack-v h-full">
+            <div className="bg-header-bg/50 text-header-text text-xs border-header-border border-x border-t p-1">
+                {headerGroups}
+            </div>
+            {itemsDiv}
+        </div>
     )
 }
 

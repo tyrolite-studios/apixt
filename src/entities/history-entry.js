@@ -13,6 +13,10 @@ class HistoryEntryIndex extends EntityIndex {
         this.items = model.map(({ request, assignments }) =>
             this.getHash(request, assignments)
         )
+        this.filterProps = [
+            ["request", "path"],
+            ["request", "method"]
+        ]
     }
 
     setMaxItems(value) {

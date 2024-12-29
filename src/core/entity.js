@@ -1,4 +1,4 @@
-import { d, isFunction, cloneDeep, without } from "./helper"
+import { d, isFunction, cloneDeep, without, isArray, isObject } from "./helper"
 
 class EntityIndex {
     constructor() {
@@ -7,7 +7,35 @@ class EntityIndex {
         this._allIndices = null
         this.suspendNotifications = false
         this.valueIndexing = false
+        this.filterProps = []
+        this._filterValueGetter = null
         this.valueTemplate = ""
+    }
+
+    getFilterValueGetter() {
+        if (this._filterValueGetter === null) {
+            const getter = []
+            for (const prop of this.filterProps) {
+                if (isArray(prop)) {
+                    getter.push((index) => {
+                        let pos = 0
+                        let value = this.getEntityPropValue(index, prop[pos])
+                        if (prop.length === 1) return value
+
+                        while (pos < prop.length - 1) {
+                            if (!isObject(value)) return
+                            pos++
+                            value = value[prop[pos]]
+                        }
+                        return value
+                    })
+                } else {
+                    getter.push((index) => this.getEntityPropValue(index, prop))
+                }
+            }
+            this._filterValueGetter = getter
+        }
+        return this._filterValueGetter
     }
 
     addListener(listener) {
@@ -205,8 +233,24 @@ class EntityIndex {
         return indices.filter(match)
     }
 
-    getView({ start = 0, length, page, match, sort } = {}) {
-        const items = this.getMatchingEntities(match)
+    getView({ start = 0, length, page, match, sort, filter } = {}) {
+        let items = this.getMatchingEntities(match)
+        const isFiltered = filter && this.filterProps.length
+
+        if (isFiltered) {
+            const lcFilter = filter.toLowerCase()
+
+            const getPropValues = this.getFilterValueGetter()
+            items = items.filter((index) => {
+                for (const getPropValue of getPropValues) {
+                    const value = getPropValue(index)
+                    if (value === undefined) return false
+
+                    if (value.toLowerCase().includes(lcFilter)) return true
+                }
+                return false
+            })
+        }
         if (sort) items.sort(sort)
 
         const matches = []
@@ -223,6 +267,7 @@ class EntityIndex {
             i++
         }
         return {
+            isFiltered,
             matches,
             count,
             pages:

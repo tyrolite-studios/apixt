@@ -12,6 +12,7 @@ class RouteIndex extends EntityIndex {
         super()
         this.model = routes
         this.items = routes.map((route) => route.path)
+        this.filterProps = ["path"]
     }
 
     getEntityProps() {

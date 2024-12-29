@@ -9,6 +9,7 @@ import { FormGrid, InputCells } from "components/form"
 class RequestIndex extends MappingIndex {
     constructor(model) {
         super(model, ["name", "folder", "request", "assignments"])
+        this.filterProps = ["name"]
     }
 }
 
