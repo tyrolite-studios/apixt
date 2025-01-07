@@ -1,4 +1,4 @@
-import { isString, d, isInt, isArray } from "./helper"
+import { isString, d, isInt, isArray, isObject } from "./helper"
 import { CMD } from "core/tree"
 
 const isMethodWithRequestBody = (method) =>
@@ -6,44 +6,6 @@ const isMethodWithRequestBody = (method) =>
 
 const isMethodWithResponseBody = (method) =>
     !["HEAD", "OPTIONS"].includes(method)
-
-const getParsedQueryString = (queryString) => {
-    const params = new URLSearchParams(queryString)
-    const result = {}
-
-    for (const [key, value] of params.entries()) {
-        const keys = key.split(/[\[\]]+/).filter((k) => k) // Zerlege Schlüssel wie "x[]" oder "address[city]"
-        let current = result
-
-        keys.forEach((k, index) => {
-            if (index === keys.length - 1) {
-                // Letzter Schlüssel: Wert zuweisen
-                if (k === "") {
-                    // Array-Schlüssel ("x[]")
-                    if (!Array.isArray(current)) {
-                        current = []
-                        result[keys[0]] = current // Aktualisiere die Referenz im Hauptobjekt
-                    }
-                    current.push(value)
-                } else {
-                    if (current[k] === undefined) {
-                        current[k] = value
-                    } else if (Array.isArray(current[k])) {
-                        current[k].push(value)
-                    } else {
-                        current[k] = [current[k], value]
-                    }
-                }
-            } else {
-                // Stelle sicher, dass die Struktur existiert
-                if (!current[k]) current[k] = {}
-                current = current[k]
-            }
-        })
-    }
-
-    return result
-}
 
 const startAbortableApiRequest = (
     baseUrl,
@@ -59,9 +21,8 @@ const startAbortableApiRequest = (
     const controller = new AbortController()
 
     if (isInt(expect)) expect = [expect]
-    const expected = isArray(expect)
-        ? (response) => expect.includes(response.status)
-        : expect
+    const expected = (response) =>
+        isArray(expect) ? expect.includes(response.status) : true
 
     let url =
         (baseUrl.endsWith("/")
@@ -190,13 +151,19 @@ const startAbortableRequestResponse = (
 ) => {
     const controller = new AbortController()
 
+    const [pathOnly, rawQuery] = path.split("?")
     let url =
         (baseUrl.endsWith("/")
             ? baseUrl.substring(0, baseUrl.length - 1)
-            : baseUrl) + path
+            : baseUrl) + pathOnly
 
-    if (query) url += "?" + query
+    const queryParts = []
+    if (rawQuery) queryParts.push(rawQuery)
+    if (query) queryParts.push(query)
 
+    if (queryParts.length) {
+        url += "?" + queryParts.join("&")
+    }
     const request = {
         status: null,
         abort: controller.abort,
@@ -263,11 +230,195 @@ const startAbortableRequestResponse = (
     return request
 }
 
+const addQueryParams = (params, name, value, path = []) => {
+    if (isArray(value)) {
+        const pathNode = [0, 0]
+        path.push(pathNode)
+        for (const [idx, subValue] of value.entries()) {
+            pathNode[0] = idx
+            addQueryParams(params, name, subValue, path)
+        }
+    }
+    if (isObject(value)) {
+        for (const [subKey, subValue] of Object.entries(value)) {
+            addQueryParams(params, name, subValue, [...path, subKey])
+        }
+    }
+    if (isString(value)) {
+        let fullname = name
+        for (const node of path) {
+            if (isArray(node)) {
+                if (node[0] === node[1]) {
+                    node[1]++
+                    fullname += "[]"
+                    continue
+                }
+            }
+            fullname += `[${isArray(node) ? node[0] : node}]`
+        }
+        params.append(fullname, value)
+    }
+}
+
+const getQueryStringForJson = (json) => {
+    const params = new URLSearchParams()
+    for (const [name, value] of Object.entries(json)) {
+        addQueryParams(params, name, value)
+    }
+    return params.toString().replaceAll("%5B", "[").replaceAll("%5D", "]")
+}
+
+const createPathValue = (path, value) => {
+    let result = value
+    let i = path.length
+    while (i > 0) {
+        i--
+        const curr = path[i]
+        if (curr === "]" || curr === "0]") {
+            result = [result]
+            continue
+        }
+        const key = curr.substring(0, curr.length - 1)
+        result = { [key]: result }
+    }
+    return result
+}
+
+// TODO throw error if param is array and object at the same time and on parsing errors (missing ], ? etc.)
+const addQueryParamToJson = (queryParam, result) => {
+    const [nameAndPath, value = ""] = queryParam.split("=")
+
+    const [name, ...path] = nameAndPath.split("[")
+    if (path.length === 0) {
+        if (result[name] !== undefined)
+            throw Error(`Param name ${name} already exists!`)
+        result[name] = value
+    }
+    let ref = result[name]
+    while (path.length) {
+        const curr = path.shift()
+        if (curr === "]") {
+            if (ref === undefined) {
+                const newArray = []
+                result[name] = newArray
+                ref = newArray
+            }
+            ref.push(createPathValue(path, value))
+            return
+        } else {
+            const key = curr.substring(0, curr.length - 1)
+            if (ref === undefined) {
+                const newObj = {}
+                result[name] = newObj
+                ref = newObj
+            }
+            if (ref[key] === undefined) {
+                ref[key] = createPathValue(path, value)
+                return
+            }
+            if (!path.length) {
+                ref[key] = value
+                return
+            }
+            ref = ref[key]
+        }
+    }
+}
+
+const getParsedQueryString = (queryString) => {
+    const params = new URLSearchParams(queryString)
+    const result = {}
+
+    for (const [key, value] of params.entries()) {
+        addQueryParamToJson(`${key}=${value}`, result)
+    }
+    return result
+}
+
+function getWithoutProtocol(url) {
+    if (url.startsWith("http://")) {
+        return url.substring(7)
+    }
+    return url.startsWith("https://") ? url.substring(8) : url
+}
+
+function getPathInfo(fullPath) {
+    const [path, query] = fullPath.split("?")
+    const pathParts = path.substring(1).split("/")
+    const pathComponents = []
+    let varIndex = -1
+    let regexp = "^"
+    for (const pathPart of pathParts) {
+        if (pathPart.startsWith(":")) {
+            varIndex++
+            pathComponents.push({
+                fix: false,
+                value: pathPart.substring(1),
+                ref: varIndex
+            })
+            regexp += "\\/([^\\/:?]*)"
+        } else {
+            pathComponents.push({ fix: true, value: pathPart })
+            regexp += "\\/" + pathPart
+        }
+    }
+    regexp += "$"
+    return {
+        fullPath: fullPath,
+        path,
+        query,
+        components: pathComponents,
+        varCount: varIndex + 1,
+        regexp
+    }
+}
+
+function getPathParams(pathInfo, fullPath) {
+    const [path] = fullPath.split("?")
+    if (!pathInfo.varCount) return []
+
+    const matchExpr = new RegExp(pathInfo.regexp)
+
+    const matches = matchExpr.exec(path)
+    if (matches === null) return []
+
+    const result = []
+    let i = 0
+    while (i < pathInfo.varCount) {
+        i++
+        result.push(matches[i])
+    }
+    return result
+}
+
+function getResolvedPath(path, params = [], strict = false) {
+    const pathInfo = getPathInfo(path)
+    if (!pathInfo.varCount) return path
+
+    if (strict && pathInfo.varCount !== params.length)
+        throw Error(
+            `Path ${path} requires ${pathInfo.varCount} parameters but only got ${params.length}`
+        )
+
+    let resolved = []
+    for (const { fix, value, ref } of pathInfo.components) {
+        resolved.push(fix ? value : params[ref] ?? "")
+    }
+    return (
+        "/" + resolved.join("/") + (pathInfo.query ? "?" + pathInfo.query : "")
+    )
+}
+
 export {
     startAbortableApiBodyRequest,
     startAbortableApiRequestStream,
     startAbortableApiRequest,
     isMethodWithRequestBody,
     isMethodWithResponseBody,
-    getParsedQueryString
+    getParsedQueryString,
+    getQueryStringForJson,
+    getWithoutProtocol,
+    getPathInfo,
+    getPathParams,
+    getResolvedPath
 }

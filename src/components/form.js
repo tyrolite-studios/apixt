@@ -38,7 +38,7 @@ import {
     useGetAttrWithDimProps,
     useGetTabIndex,
     useFocusManager,
-    useCallAfterwards
+    useMarkInvalid
 } from "./common"
 
 function useFocusKeyBindings({ keyHandlers = [], disabled = false, direct }) {
@@ -68,16 +68,6 @@ function useFocusKeyBindings({ keyHandlers = [], disabled = false, direct }) {
         }
     }
     return attr
-}
-
-function useMarkInvalid(cls, invalid) {
-    const fContext = useContext(FormContext)
-    const callAfterwards = useCallAfterwards()
-
-    cls.addIf(invalid, "invalid")
-    if (invalid && fContext) {
-        callAfterwards(fContext.markInvalid)
-    }
 }
 
 function Checkbox({
@@ -557,7 +547,7 @@ function Select({
         <select
             className={cls.value}
             required={required}
-            value={tmpValue}
+            value={tmpValue === null ? "" : tmpValue}
             onMouseDown={!interactive ? (e) => e.preventDefault() : onMouseDown}
             onKeyDown={
                 !interactive
@@ -2005,5 +1995,6 @@ export {
     SelectCells,
     RadioCells,
     ColorCells,
-    SliderCells
+    SliderCells,
+    useMarkInvalid
 }

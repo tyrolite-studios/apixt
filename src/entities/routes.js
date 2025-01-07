@@ -4,8 +4,8 @@ import { APIS } from "./apis"
 import { OkCancelLayout } from "components/layout"
 import { FormGrid, InputCells } from "components/form"
 import { useModalWindow } from "components/modal"
-import { getPathParams } from "core/helper"
-import { getResolvedPath } from "../core/helper"
+import { getPathParams, getResolvedPath } from "core/http"
+import { d } from "core/helper"
 
 class RouteIndex extends EntityIndex {
     constructor(routes) {
@@ -128,7 +128,13 @@ function RouteParamsWindow({ close, save, pathInfo, path }) {
         <OkCancelLayout
             submit
             cancel={close}
-            ok={() => save(getResolvedPath(pathInfo.path, pathParams))}
+            ok={() => {
+                const [, query] = path.split("?")
+                save(
+                    getResolvedPath(pathInfo.path, pathParams) +
+                        (query ? "?" + query : "")
+                )
+            }}
         >
             <FormGrid>
                 <RouteParamsCells {...formParams} />

@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useContext, useRef, Fragment } from "react"
 import { useModalWindow } from "components/modal"
-import { isMethodWithRequestBody, getParsedQueryString } from "core/http"
+import {
+    isMethodWithRequestBody,
+    getParsedQueryString,
+    getWithoutProtocol,
+    getResolvedPath
+} from "core/http"
 import {
     ButtonGroup,
     FormGrid,
@@ -20,21 +25,38 @@ import {
 } from "components/common"
 import { useState } from "react"
 import { OkCancelLayout, Tab, Tabs, Centered } from "components/layout"
+import { AppContext } from "components/context"
+import { extractLcProps } from "core/entity"
 import {
-    AssignmentIndex,
+    ASSIGNMENT,
+    QueryAssignmentIndex,
+    HeadersAssignmentIndex,
+    BodyAssignmentIndex,
     AssignmentStack,
     extractContentTypeFromAssignments
 } from "entities/assignments"
-import { AppContext } from "components/context"
 import { SaveRequestForm } from "entities/requests"
-import { extractLcProps } from "core/entity"
-import { ClassNames, d, cloneDeep } from "core/helper"
+import {
+    ClassNames,
+    d,
+    cloneDeep,
+    isObject,
+    isArray,
+    without
+} from "core/helper"
 import { RequestAssingmentsPickerCells } from "entities/request-assignments"
 import { APIS, ApiSelect } from "entities/apis"
 import { SimpleRoutePath } from "entities/routes"
 import { HistoryEntryPicker } from "entities/history-entry"
-import { isObject, isArray, without, getResolvedPath } from "core/helper"
 import { useRouteParamsModal } from "entities/routes"
+import { isString } from "../../core/helper"
+import {
+    startFetchProcessing,
+    setPromptsAndExtracts,
+    fireRequestStage,
+    retryAuthorization
+} from "core/processor"
+import { useLoadingSpinner } from "../../components/common"
 
 const httpMethodOptions = [
     { id: "POST", name: "POST" },
@@ -65,7 +87,7 @@ function QueryValue({ value }) {
                     <div className="grid grid-cols-2 gap-2 pl-2">
                         {Object.entries(value).map(([name, subValue]) => (
                             <Fragment key={name}>
-                                <div>{name}:</div>
+                                <div>{JSON.stringify(name)}:</div>
                                 {QueryValue({ value: subValue })}
                             </Fragment>
                         ))}
@@ -96,14 +118,7 @@ function QueryValue({ value }) {
             </div>
         )
     }
-    return <div className="text-sm">{value}</div>
-}
-
-function getWithoutProtocol(url) {
-    if (url.startsWith("http://")) {
-        return url.substring(7)
-    }
-    return url.startsWith("https://") ? url.substring(8) : url
+    return <div className="text-sm">{JSON.stringify(value)}</div>
 }
 
 function ImportForm({ save, close, ...props }) {
@@ -113,11 +128,14 @@ function ImportForm({ save, close, ...props }) {
     const [hasApi, setHasApi] = useState("")
     const [hasPath, setHasPath] = useState("")
     const [hasQuery, setHasQuery] = useState("")
+    const [hasRawQuery, setHasRawQuery] = useState("")
     const [assignments, setAssignments] = useState({})
+    const [paramIndex, setParamIndex] = useState([])
     const [importApi, setImportApi] = useState(true)
     const [importPath, setImportPath] = useState(true)
     const [importQuery, setImportQuery] = useState(true)
     const [skipKeys, setSkipKeys] = useState([])
+    const [skipIndex, setSkipIndex] = useState([])
     const [action, setActionRaw] = useState("add")
     const setAction = (value) => {
         setActionRaw(value)
@@ -128,9 +146,16 @@ function ImportForm({ save, close, ...props }) {
         return !skipKeys.includes(key)
     }
 
+    const getSkipQueryIndex = (idx) => {
+        return !skipIndex.includes(idx)
+    }
     const getSkipQueryKeySetter = (key) => {
         return (value) =>
             setSkipKeys(value ? without(skipKeys, key) : [...skipKeys, key])
+    }
+    const getSkipQueryIndexSetter = (idx) => {
+        return (value) =>
+            setSkipIndex(value ? without(skipIndex, idx) : [...skipIndex, idx])
     }
 
     const apis = useMemo(() => {
@@ -173,8 +198,17 @@ function ImportForm({ save, close, ...props }) {
             apiAndPath = ""
         }
 
+        let foundRawQuery = ""
         if (foundQuery) {
-            setAssignments(getParsedQueryString(foundQuery))
+            try {
+                const parsedJson = getParsedQueryString(foundQuery)
+                setAssignments(parsedJson)
+            } catch (e) {
+                foundRawQuery = foundQuery
+                setParamIndex(foundQuery.split("&"))
+                foundQuery = ""
+                setAssignments({})
+            }
         }
 
         let foundApi = ""
@@ -208,6 +242,7 @@ function ImportForm({ save, close, ...props }) {
         setHasApi(foundApi)
         setHasPath(foundPath)
         setHasQuery(foundQuery)
+        setHasRawQuery(foundRawQuery)
 
         setUrlRaw(value)
     }
@@ -231,6 +266,19 @@ function ImportForm({ save, close, ...props }) {
             }
             if (hasValues) {
                 result.assignments = notSkipped
+            }
+        }
+        if (hasRawQuery && importQuery) {
+            let hasValues = false
+            const params = []
+            for (const [idx, value] of paramIndex.entries()) {
+                if (skipIndex.includes(idx)) continue
+
+                hasValues = true
+                params.push(value)
+            }
+            if (hasValues) {
+                result.path = (result.path ?? "") + "?" + params.join("&")
             }
         }
         save(result)
@@ -302,7 +350,64 @@ function ImportForm({ save, close, ...props }) {
                                     </div>
                                 </Fragment>
                             )}
+                            {hasRawQuery !== "" && (
+                                <Fragment>
+                                    <div className="stack-h gap-2 text-xs p-2">
+                                        <Checkbox
+                                            value={importQuery}
+                                            set={setImportQuery}
+                                        />
+                                        Query:
+                                    </div>
 
+                                    <div className={queryCls.value}>
+                                        {paramIndex
+                                            .map((x) => x.split("="))
+                                            .map(([name, value], index) => (
+                                                <div
+                                                    key={name}
+                                                    className="stack-h gap-2"
+                                                >
+                                                    <Checkbox
+                                                        disabled={!importQuery}
+                                                        value={getSkipQueryIndex(
+                                                            index
+                                                        )}
+                                                        set={getSkipQueryIndexSetter(
+                                                            index
+                                                        )}
+                                                    />
+                                                    <div className="stack-v gap-1">
+                                                        <div
+                                                            className={
+                                                                queryOnCls.value
+                                                            }
+                                                        >
+                                                            {decodeURIComponent(
+                                                                name
+                                                            )}
+                                                            :
+                                                        </div>
+                                                        <div
+                                                            className={
+                                                                importQuery &&
+                                                                getSkipQueryIndex(
+                                                                    index
+                                                                )
+                                                                    ? queryOffCls.value
+                                                                    : queryOnCls.value
+                                                            }
+                                                        >
+                                                            <QueryValue
+                                                                value={value}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                    </div>
+                                </Fragment>
+                            )}
                             {hasQuery !== "" && (
                                 <Fragment>
                                     <div className="stack-h gap-2 text-xs p-2">
@@ -370,7 +475,7 @@ function getDefaultlessClone(model) {
 
     const obj = {}
     for (const [key, value] of Object.entries(model)) {
-        if (value.type === "default") continue
+        if (value.action === ASSIGNMENT.ACTION.DEFAULT) continue
 
         obj[key] = cloneDeep(value)
     }
@@ -400,16 +505,16 @@ function RequestBuilder({ close, request, assignments }) {
         setShowDefaultsRaw(value)
     }
     const queryAssignmentIndex = useMemo(
-        () => new AssignmentIndex(assignments?.query ?? {}),
+        () => new QueryAssignmentIndex(assignments?.query ?? {}),
         []
     )
     const headersAssignmentIndex = useMemo(
-        () => new AssignmentIndex(assignments?.headers ?? {}),
+        () => new HeadersAssignmentIndex(assignments?.headers ?? {}),
         []
     )
     useUpdateOnEntityIndexChanges(headersAssignmentIndex)
     const bodyAssignmentIndex = useMemo(
-        () => new AssignmentIndex(assignments?.body ?? {}),
+        () => new BodyAssignmentIndex(assignments?.body ?? {}),
         []
     )
     const syncedRef = useRef(false)
@@ -539,7 +644,7 @@ function RequestBuilder({ close, request, assignments }) {
             }
         },
         {
-            name: "URL...",
+            name: "URL…",
             onPressed: () => {
                 ImportModal.open({
                     api,
@@ -557,8 +662,13 @@ function RequestBuilder({ close, request, assignments }) {
                                 assignmentValue
                             ] of Object.entries(model.assignments)) {
                                 newModel[value] = {
-                                    type: "set",
-                                    assignmentValue
+                                    action: ASSIGNMENT.ACTION.SET,
+                                    type: isString(assignmentValue)
+                                        ? ASSIGNMENT.TYPE.STRING
+                                        : ASSIGNMENT.TYPE.JSON,
+                                    assignmentValue: isString(assignmentValue)
+                                        ? assignmentValue
+                                        : JSON.stringify(assignmentValue)
                                 }
                             }
                             queryAssignmentIndex.setModel(
@@ -604,7 +714,8 @@ function RequestBuilder({ close, request, assignments }) {
                             defaults,
                             method,
                             path,
-                            body
+                            body,
+                            inputMode
                         }),
                         assignments: {
                             query: getDefaultlessClone(
@@ -623,7 +734,7 @@ function RequestBuilder({ close, request, assignments }) {
             }
         },
         {
-            name: "Save As...",
+            name: "Save As…",
             onPressed: () => {
                 SaveAsModal.open({
                     model: { name: "" },
@@ -638,7 +749,8 @@ function RequestBuilder({ close, request, assignments }) {
                                 defaults,
                                 method,
                                 path,
-                                body
+                                body,
+                                inputMode
                             },
                             assignments: {
                                 query: getDefaultlessClone(
@@ -667,6 +779,30 @@ function RequestBuilder({ close, request, assignments }) {
         "bg-active-bg text-active-text py-1 border border-header-border text-xs",
         "opacity-50 text-sm"
     )
+    const spinner = useLoadingSpinner()
+    // TODO just for testing, delete before merge
+    const testButtons = [
+        {
+            name: "Process",
+            onPressed: async () => {
+                const processing = await startFetchProcessing({
+                    request: {},
+                    assignments: {},
+                    signals: [],
+                    preprocessors: [setPromptsAndExtracts],
+                    stages: [fireRequestStage, retryAuthorization]
+                })
+                spinner.start(processing.promise, processing.abort)
+                processing.promise
+                    .then((response) => {
+                        d("GOT RESPONSE", response)
+                    })
+                    .catch((e) => {
+                        d("ERROR", e)
+                    })
+            }
+        }
+    ]
     return (
         <OkCancelLayout
             scroll={false}
@@ -674,10 +810,12 @@ function RequestBuilder({ close, request, assignments }) {
             submit
             ok={startRequest}
             okLabel="Launch"
+            buttons={testButtons}
         >
             <>
+                {spinner.Modal}
                 <div className="w-full h-full divide-x divide-header-border stack-h overflow-hidden">
-                    <div className="stack-v h-full overflow-hidden">
+                    <div className="stack-v h-full overflow-hidden max-w-[50%]">
                         <div className="stack-h gap-2 p-2">
                             <ApiSelect
                                 api={api}
@@ -687,7 +825,10 @@ function RequestBuilder({ close, request, assignments }) {
                             />
                         </div>
 
-                        <Tabs className="overflow-hidden">
+                        <Tabs
+                            className="overflow-hidden"
+                            persistId="request-builder.picker"
+                        >
                             <Tab name="Stored" active>
                                 <div className="p-2 h-full">
                                     <EntityPicker
@@ -836,7 +977,8 @@ const RequestLauncher = ({
         if (showDefaults) return
 
         return (index) =>
-            entityIndex.getEntityPropValue(index, "type") !== "default"
+            entityIndex.getEntityPropValue(index, "action") !==
+            ASSIGNMENT.ACTION.DEFAULT
     }
 
     return (

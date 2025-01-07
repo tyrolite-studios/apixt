@@ -6,7 +6,7 @@ import {
     extractString,
     getStringifiedJSON,
     COLOR_CLS
-} from "../../../src/plugins/syntaxHighlighter/helper"
+} from "../../../src/plugins/syntax-highlighter/helper"
 
 const testExtractor = (name, extractor, cases) => {
     test(`Test extractor "${name}"`, () => {

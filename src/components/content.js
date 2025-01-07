@@ -233,9 +233,27 @@ function DumpBlock({ name, vars }) {
     )
 }
 
-function CodeBlock(props) {
-    const { name, content, footer, isError, mime } = props
+function PreBlockContent({ mime, content, className }) {
     const aContext = useContext(AppContext)
+
+    const cls = ClassNames(
+        "full bg-block-bg text-block-text text-sm p-2",
+        className
+    )
+    let renderHtml = content
+    const pipeline = PluginRegistry.getContentPipeline(mime)
+    while (pipeline.length) {
+        const exec = pipeline.shift()
+        renderHtml = exec(renderHtml, aContext)
+    }
+    renderHtml = `<pre class="${cls.value}">${renderHtml}</pre>`
+
+    return <div dangerouslySetInnerHTML={{ __html: renderHtml }} />
+}
+
+function CodeBlock(props) {
+    const aContext = useContext(AppContext)
+    const { name, content, footer, isError, mime } = props
     const [colapsed, setColapsed] = useState(name !== "Http Response")
     const toggle = () => {
         setColapsed(!colapsed)
@@ -365,4 +383,4 @@ function Content() {
     )
 }
 
-export { Section, Content }
+export { Section, Content, PreBlockContent }

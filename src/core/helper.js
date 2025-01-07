@@ -36,6 +36,25 @@ function d(main, ...params) {
     return main
 }
 
+const getParsedJson = (value) => {
+    try {
+        return JSON.parse(value)
+    } catch (e) {
+        return
+    }
+}
+
+const getSimpleType = (value) => {
+    if (value === undefined) return "undefined"
+    if (value === null) return "null"
+    const type = typeof value
+    if (type !== "object") return type
+    if (Array.isArray(value)) return "array"
+    if (value instanceof String) return "string"
+
+    return "object"
+}
+
 /**
  * Returns whether the given value is null or not
  *
@@ -321,67 +340,6 @@ function rgb2hex(rgb) {
     )
 }
 
-function getPathInfo(path) {
-    const pathParts = path.substring(1).split("/")
-    const pathComponents = []
-    let varIndex = -1
-    let regexp = "^"
-    for (const pathPart of pathParts) {
-        if (pathPart.startsWith(":")) {
-            varIndex++
-            pathComponents.push({
-                fix: false,
-                value: pathPart.substring(1),
-                ref: varIndex
-            })
-            regexp += "\\/([^\\/:?]*)"
-        } else {
-            pathComponents.push({ fix: true, value: pathPart })
-            regexp += "\\/" + pathPart
-        }
-    }
-    regexp += "$"
-    return {
-        path,
-        components: pathComponents,
-        varCount: varIndex + 1,
-        regexp
-    }
-}
-
-function getPathParams(pathInfo, path) {
-    if (!pathInfo.varCount) return []
-
-    const matchExpr = new RegExp(pathInfo.regexp)
-
-    const matches = matchExpr.exec(path)
-    if (matches === null) return []
-
-    const result = []
-    let i = 0
-    while (i < pathInfo.varCount) {
-        i++
-        result.push(matches[i])
-    }
-    return result
-}
-
-function getResolvedPath(path, params = [], strict = false) {
-    const pathInfo = getPathInfo(path)
-    if (!pathInfo.varCount) return path
-
-    if (strict && pathInfo.varCount !== params.length)
-        throw Error(
-            `Path ${path} requires ${pathInfo.varCount} parameters but only got ${params.length}`
-        )
-
-    let resolved = []
-    for (const { fix, value, ref } of pathInfo.components) {
-        resolved.push(fix ? value : params[ref] ?? "")
-    }
-    return "/" + resolved.join("/")
-}
-
 const replacer = (key, value) =>
     value instanceof Object && !(value instanceof Array)
         ? Object.keys(value)
@@ -552,9 +510,6 @@ export {
     without,
     clamp,
     round,
-    getPathInfo,
-    getPathParams,
-    getResolvedPath,
     extractFullClasses,
     ClassNames,
     Attributes,
@@ -564,5 +519,7 @@ export {
     md5,
     sortAsc,
     sortDesc,
-    formatDate
+    formatDate,
+    getParsedJson,
+    getSimpleType
 }

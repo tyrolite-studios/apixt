@@ -1,4 +1,4 @@
-import { EntityIndex } from "../../src/core/entity"
+import { EntityIndex, MappingIndex } from "../../src/core/entity"
 import { d } from "../../src/core/helper"
 
 class ArrayIndex extends EntityIndex {

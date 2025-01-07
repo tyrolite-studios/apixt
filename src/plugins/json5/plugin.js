@@ -52,6 +52,7 @@ class Plugin extends AbstractPlugin {
 
     activateInContext(ctx) {
         ctx.linkModeWithBodyType("json", "json5")
+        ctx.linkModeWithBodyType("assign_json", "json5")
     }
 }
 

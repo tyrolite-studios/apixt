@@ -1,16 +1,31 @@
 import { useRef, useState, useEffect, useContext, useMemo } from "react"
 import { useModalWindow } from "./modal"
-import { ClassNames, isValidJson, clamp, d } from "core/helper"
+import {
+    ClassNames,
+    isValidJson,
+    clamp,
+    getParsedJson,
+    isObject,
+    isArray,
+    getSimpleType,
+    d
+} from "core/helper"
 import {
     Button,
     ButtonGroup,
     AutoCompleteInput,
     Radio,
     Textarea,
-    Input
+    Input,
+    FormContext,
+    SelectCells,
+    CustomCells,
+    FormGrid
 } from "./form"
 import { Centered, Div, Stack, Icon, OkCancelLayout } from "./layout"
 import { AppContext } from "./context"
+import { getExtractPathForString } from "entities/assignments"
+import { PreBlockContent } from "./content"
 
 function useComponentUpdate() {
     const mounted = useMounted()
@@ -45,6 +60,16 @@ function useDebugMount(name) {
             d("UNMOUNTING", name)
         }
     }, [])
+}
+
+function useMarkInvalid(cls, invalid) {
+    const fContext = useContext(FormContext)
+    const callAfterwards = useCallAfterwards()
+
+    cls.addIf(invalid, "invalid")
+    if (invalid && fContext) {
+        callAfterwards(fContext.markInvalid)
+    }
 }
 
 const useGetTabIndex = ({ tab, tabControlled, focused }, cls) => {
@@ -1467,7 +1492,18 @@ function FocusMatrix({}) {
     )
 }
 
-function BodyTextarea({ type, value, set, mode, setMode, ...props }) {
+function BodyTextarea({
+    type,
+    value,
+    set,
+    mode,
+    setMode,
+    reverse,
+    validator,
+    markInvalid,
+    className,
+    ...props
+}) {
     const aContext = useContext(AppContext)
     const callAfterwards = useCallAfterwards()
 
@@ -1485,13 +1521,14 @@ function BodyTextarea({ type, value, set, mode, setMode, ...props }) {
         "stack-h text-xs items-center gap-1 px-2 border"
     )
     const isValid = useMemo(() => {
-        return aContext.isValidBody(mode, value)
+        return aContext.isValidBody(mode, value, validator)
     }, [value, mode])
     checkCls.addIf(
         isValid,
         "border-ok-text bg-ok-bg text-ok-text",
         "border-warning-text bg-warning-bg text-warning-text"
     )
+    useMarkInvalid(checkCls, !(markInvalid ? isValid : true))
 
     if (!aContext.hasBodyTypeMode(type, mode) || type !== lastType.current) {
         lastType.current = type
@@ -1501,28 +1538,209 @@ function BodyTextarea({ type, value, set, mode, setMode, ...props }) {
     const format = () => {
         set(aContext.getFormatedBody(mode, value))
     }
-    return (
-        <div className="stack-v full-w">
-            <div className="stack-h full-w p-1 gap-2">
-                <div className="auto">
-                    <Radio
-                        options={modeOptions}
-                        value={mode}
-                        set={setModeManual}
-                    />
-                </div>
-                {!!value && aContext.hasBodyValidator(mode) && (
-                    <div className={checkCls.value}>
-                        <div>
-                            <Icon name={iconName} />
-                        </div>
-                        <div>{aContext.getBodyModeName(mode)}</div>
-                    </div>
-                )}
-                <Button name="Format" disabled={!isValid} onPressed={format} />
+    const cls = ClassNames("stack-v full-w", className)
+    const controls = (
+        <div className="stack-h full-w p-1 gap-2">
+            <div className="auto">
+                <Radio options={modeOptions} value={mode} set={setModeManual} />
             </div>
-            <Textarea value={value} set={set} {...props} />
+            {!!value && aContext.hasBodyValidator(mode) && (
+                <div className={checkCls.value}>
+                    <div>
+                        <Icon name={iconName} />
+                    </div>
+                    <div>{aContext.getBodyModeName(mode)}</div>
+                </div>
+            )}
+            <Button name="Format" disabled={!isValid} onPressed={format} />
         </div>
+    )
+    const textarea = <Textarea value={value} set={set} {...props} />
+
+    return reverse ? (
+        <div className={cls.value}>
+            {textarea}
+            {controls}
+        </div>
+    ) : (
+        <div className={cls.value}>
+            {controls}
+            {textarea}
+        </div>
+    )
+}
+
+function getPathElem(tree, path) {
+    if (tree === undefined || path === undefined) return
+
+    if (!path.length) return tree
+
+    const [curr, ...remPath] = path
+
+    return getPathElem(tree[curr], remPath)
+}
+
+function JsonPathBrowser({ close, loadTree, root, save, ...props }) {
+    const aContext = useContext(AppContext)
+    const [ready, setReady] = useState(false)
+    const [tree, setTree] = useState({})
+    const [path, setPath] = useState(() => {
+        if (!props.path) return []
+
+        const parsed = getParsedJson(props.path)
+        return isArray(parsed) ? parsed : []
+    })
+
+    useEffect(() => {
+        if (!loadTree) {
+            setReady(true)
+            return
+        }
+        loadTree().then((loadedTree) => {
+            setTree(loadedTree)
+            setReady(true)
+        })
+    }, [])
+
+    const curr = getPathElem(tree, path)
+    const levelOptions = useMemo(() => {
+        const options = []
+
+        if (isArray(curr)) {
+            for (const [index, value] of curr.entries()) {
+                options.push({ id: index, name: `Index ${index}` })
+            }
+        } else if (isObject(curr)) {
+            for (const [key, value] of Object.entries(curr)) {
+                options.push({ id: key, name: `Key ${JSON.stringify(key)}` })
+            }
+        }
+        return options.length ? options : [{ id: -1, name: "" }]
+    }, [ready, path])
+
+    const buttons = [
+        {
+            icon: "close",
+            disabled: path.length === 0,
+            onPressed: () => setPath([])
+        },
+        {
+            icon: "undo",
+            disabled: path.length === 0,
+            onPressed: () => {
+                setPath(path.slice(0, path.length - 1))
+            }
+        }
+    ]
+    const noOptions = levelOptions[0].id === -1
+
+    return (
+        <>
+            {!ready && (
+                <div className="p-4">
+                    <LoadingSpinner />
+                </div>
+            )}
+            {ready && (
+                <OkCancelLayout
+                    cancel={close}
+                    ok={() => {
+                        save(JSON.stringify(path))
+                    }}
+                >
+                    <FormGrid>
+                        <CustomCells name="Path:">
+                            <div className="stack-h gap-2 w-full">
+                                <Input
+                                    value={getExtractPathForString(
+                                        JSON.stringify(path),
+                                        root
+                                    )}
+                                    set={() => {}}
+                                    readOnly
+                                    className="auto"
+                                />
+                                <ButtonGroup buttons={buttons} />
+                            </div>
+                        </CustomCells>
+                        <SelectCells
+                            name="Add:"
+                            value={noOptions ? -1 : ""}
+                            disabled={noOptions}
+                            set={(value) => setPath([...path, value])}
+                            options={levelOptions}
+                        />
+                        <CustomCells name="Preview:">
+                            <div className="stack-v gap-2 w-full">
+                                <div className="opacity-50 text-sm">
+                                    {getSimpleType(curr) + ":"}
+                                </div>
+                                <div
+                                    style={{ width: "500px", height: "300px" }}
+                                    className="overflow-auto text-xs w-full"
+                                >
+                                    <PreBlockContent
+                                        mime="text/json"
+                                        content={JSON.stringify(curr)}
+                                    />
+                                </div>
+                            </div>
+                        </CustomCells>
+                    </FormGrid>
+                </OkCancelLayout>
+            )}
+            {}
+        </>
+    )
+}
+
+function JsonPathInput({
+    treeProvider,
+    root = "",
+    path,
+    setPath,
+    disabled,
+    loadTree,
+    ...props
+}) {
+    const BrowseModal = useModalWindow()
+
+    const buttons = [
+        {
+            icon: "edit",
+            disabled,
+            onPressed: () => {
+                BrowseModal.open({
+                    path,
+                    root,
+                    treeProvider,
+                    loadTree,
+                    save: (newPath) => {
+                        setPath(newPath)
+                        BrowseModal.close()
+                    }
+                })
+            }
+        },
+        { icon: "delete", onPressed: () => setPath("") }
+    ]
+    const extractPath = getExtractPathForString(path, root)
+    return (
+        <>
+            <div className="stack-h gap-2">
+                <Input
+                    value={extractPath}
+                    set={() => undefined}
+                    readOnly
+                    {...props}
+                />
+                <ButtonGroup buttons={buttons} />
+            </div>
+
+            <BrowseModal.content>
+                <JsonPathBrowser {...BrowseModal.props} />
+            </BrowseModal.content>
+        </>
     )
 }
 
@@ -1536,6 +1754,7 @@ export {
     useCallAfterwards,
     useFocusManager,
     useExtractDimProps,
+    useMarkInvalid,
     useConfirmation,
     useUpdateOnEntityIndexChanges,
     HighlightMatches,
@@ -1550,5 +1769,6 @@ export {
     EntityStack,
     EntityPicker,
     FocusMatrix,
-    BodyTextarea
+    BodyTextarea,
+    JsonPathInput
 }

@@ -1,27 +1,69 @@
 import { useMemo, useState, useContext } from "react"
 import { useModalWindow } from "components/modal"
 import { AppContext } from "components/context"
-import { d, isObject, without } from "core/helper"
-import { OkCancelLayout } from "components/layout"
-import { EntityStack, useUpdateOnEntityIndexChanges } from "components/common"
+import {
+    d,
+    ClassNames,
+    isObject,
+    isArray,
+    isString,
+    without,
+    getParsedJson
+} from "core/helper"
+import { OkCancelLayout, Icon } from "components/layout"
+import {
+    EntityStack,
+    useUpdateOnEntityIndexChanges,
+    BodyTextarea,
+    JsonPathInput
+} from "components/common"
 import { FormGrid } from "components/form"
-import { isMethodWithRequestBody } from "core/http"
+import {
+    isMethodWithRequestBody,
+    startAbortableApiBodyRequest
+} from "core/http"
 import {
     CustomCells,
     InputCells,
     SelectCells,
+    NumberCells,
+    RadioCells,
     Select,
     Button
 } from "components/form"
-import { ClassNames } from "core/helper"
-import { Icon } from "../components/layout"
 import { ConstantManagerWindow } from "entities/constants"
-import { MappingIndex } from "core/entity"
-import { extractLcProps } from "../core/entity"
+import { MappingIndex, extractLcProps } from "core/entity"
+import { isBool, isNumber } from "../core/helper"
+
+const ASSIGNMENT = {
+    ACTION: {
+        SET: 1,
+        DEFAULT: 2,
+        IGNORE: 3,
+        CONST: 4,
+        PROMPT: 5,
+        EXTRACT: 6
+    },
+    TYPE: {
+        STRING: 1,
+        JSON: 2
+    }
+}
+
+const action2boxName = {
+    [ASSIGNMENT.ACTION.PROMPT]: "Prompt",
+    [ASSIGNMENT.ACTION.CONST]: "Const",
+    [ASSIGNMENT.ACTION.EXTRACT]: "Request"
+}
 
 class AssignmentIndex extends MappingIndex {
-    constructor(model) {
-        super(model, ["type", "assignmentValue"])
+    constructor(model, types = [ASSIGNMENT.TYPE.STRING]) {
+        super(model, ["action", "type", "assignmentValue"])
+        this.types = types
+    }
+
+    hasMultiType() {
+        return this.types.length > 1
     }
 
     syncToDefaults(defaults) {
@@ -40,11 +82,11 @@ class AssignmentIndex extends MappingIndex {
             if (hasDefault) {
                 this.setEntityPropValue(i, "value", lcKey2defaultKey[lcKey])
             }
-            switch (this.getEntityPropValue(i, "type")) {
-                case "ignore":
+            switch (this.getEntityPropValue(i, "action")) {
+                case ASSIGNMENT.ACTION.IGNORE:
                     if (hasDefault) break
 
-                case "default":
+                case ASSIGNMENT.ACTION.DEFAULT:
                     indices.push(i)
                     break
             }
@@ -58,9 +100,78 @@ class AssignmentIndex extends MappingIndex {
         for (const key of Object.keys(defaults)) {
             if (lcKeys.includes(key.toLowerCase())) continue
 
-            add.push({ value: key, type: "default", assignmentValue: "" })
+            add.push({
+                value: key,
+                action: ASSIGNMENT.ACTION.DEFAULT,
+                type: ASSIGNMENT.TYPE.STRING,
+                assignmentValue: ""
+            })
         }
         this.setEntityObjects(add)
+    }
+}
+
+function getQueryNormalized(json) {
+    if (undefined) return
+
+    if (isString(json)) return json
+
+    if (isArray(json)) {
+        const normalized = []
+        for (const elem of json) {
+            const normElem = getQueryNormalized(elem)
+            if (normElem !== undefined) normalized.push(normElem)
+        }
+        return normalized.length === 0 ? [""] : normalized
+    }
+
+    if (isObject(json)) {
+        const normalized = {}
+        let no = 0
+        for (const [key, value] of Object.entries(json)) {
+            const normValue = getQueryNormalized(value)
+            if (normValue !== undefined) {
+                no++
+                normalized[key] = normValue
+            }
+        }
+        return no === 0 ? undefined : normalized
+    }
+    if (isNumber(json)) {
+        return "" + json
+    }
+    if (isBool(json)) {
+        return json ? "true" : "false"
+    }
+    return
+}
+
+class QueryAssignmentIndex extends AssignmentIndex {
+    constructor(model) {
+        super(model, [ASSIGNMENT.TYPE.STRING, ASSIGNMENT.TYPE.JSON])
+        this.validator = (value) => {
+            if (value === "") return true
+
+            const parsed = getParsedJson(value)
+            if (parsed === undefined) return false
+
+            return (
+                isString(parsed) ||
+                isArray(parsed) ||
+                isObject(parsed) ||
+                isBool(parsed) ||
+                isNumber(parsed)
+            )
+        }
+        this.normalize = (value) => getQueryNormalized(value)
+    }
+}
+
+class HeadersAssignmentIndex extends AssignmentIndex {}
+
+class BodyAssignmentIndex extends AssignmentIndex {
+    constructor(model) {
+        super(model, [ASSIGNMENT.TYPE.STRING, ASSIGNMENT.TYPE.JSON])
     }
 }
 
@@ -71,12 +182,12 @@ function extractContentTypeFromAssignments(assignments) {
     for (const [name, assignment] of Object.entries(assignments)) {
         if (name.toLocaleLowerCase() !== "content-type") continue
 
-        const { type, assignmentValue } = assignment
-        if (type === "set") {
+        const { action, assignmentValue } = assignment
+        if (action === ASSIGNMENT.ACTION.SET) {
             contentType = assignmentValue
-        } else if (type === "default") {
+        } else if (action === ASSIGNMENT.ACTION.DEFAULT) {
             contentType = null
-        } else if (type === "ignore") {
+        } else if (action === ASSIGNMENT.ACTION.IGNORE) {
             contentType = "raw"
         }
         break
@@ -89,11 +200,11 @@ function getNonDefaultAssignments(assignments, mode) {
 
     const result = []
     for (const [name, assignment] of Object.entries(assignments)) {
-        const { type, assignmentValue } = assignment
+        const { action, assignmentValue } = assignment
 
-        if (mode === 1 && type === "default") continue
+        if (mode === 1 && action === ASSIGNMENT.ACTION.DEFAULT) continue
 
-        result.push({ name, type, value: assignmentValue })
+        result.push({ name, action, value: assignmentValue })
     }
     return result
 }
@@ -106,9 +217,19 @@ function getAllNonDefaultAssignments(assignments, mode) {
     }
 }
 
+function getExtractPathForString(path, source = "") {
+    const parts = source ? [source] : []
+    const parsed = getParsedJson(path)
+    if (isArray(parsed)) {
+        parts.push(...parsed.map((x) => (isString(x) ? JSON.stringify(x) : x)))
+    }
+    return parts.join(" → ")
+}
+
 function AssignmentBox({
-    type,
+    action,
     name,
+    type,
     value,
     defaulted = false,
     className,
@@ -118,13 +239,22 @@ function AssignmentBox({
     const aContext = useContext(AppContext)
     useUpdateOnEntityIndexChanges(aContext.constantIndex)
 
-    const boxName = ["const", "prompt"].includes(type) ? type : undefined
+    const boxName = action2boxName[action]
     const cls = ClassNames("", className)
     cls.addIf(vertical, "stack-v", "stack-h")
 
-    const resolved =
-        type === "const" ? aContext.getConstName(value, env) : value
-
+    let resolved = value
+    if (action === ASSIGNMENT.ACTION.CONST) {
+        resolved = aContext.getConstName(value, env)
+    } else if (action === ASSIGNMENT.ACTION.EXTRACT) {
+        const { request, from, path } = getExtractParts(value)
+        resolved = `${JSON.stringify(aContext.getRequestName(request))}: ${getExtractPathForString(path, from)}`
+    } else if (
+        action === ASSIGNMENT.ACTION.SET &&
+        type === ASSIGNMENT.TYPE.JSON
+    ) {
+        resolved = getParsedJson(value)
+    }
     const boxCls = ClassNames("px-1 text-xs")
     boxCls.addIf(
         resolved === undefined,
@@ -138,12 +268,32 @@ function AssignmentBox({
                 {resolved === undefined ? (
                     <span className="opacity-50">{"<invalid>"}</span>
                 ) : (
-                    resolved
+                    <pre>
+                        {action === ASSIGNMENT.ACTION.EXTRACT
+                            ? resolved
+                            : JSON.stringify(
+                                  resolved,
+                                  null,
+                                  aContext.globalSettings.tabWidth
+                              )}
+                    </pre>
                 )}
             </div>
         </div>
     ) : (
-        <div>{type === "ignore" ? <Icon name="block" /> : resolved}</div>
+        <div>
+            {action === ASSIGNMENT.ACTION.IGNORE ? (
+                <Icon name="block" />
+            ) : (
+                <pre>
+                    {JSON.stringify(
+                        resolved,
+                        null,
+                        aContext.globalSettings.tabWidth
+                    )}
+                </pre>
+            )}
+        </div>
     )
     return (
         <div className={cls.value}>
@@ -153,7 +303,7 @@ function AssignmentBox({
                 </div>
             )}
             <div className="stack-h gap-1">
-                {(defaulted || type === "ignore") && (
+                {(defaulted || action === ASSIGNMENT.ACTION.IGNORE) && (
                     <Icon name="subdirectory_arrow_right" />
                 )}
                 {right}
@@ -167,29 +317,18 @@ function AssignmentsInfo({ entity, assignments }) {
     return (
         <div className="stack-h flex-wrap gap-y-1">
             <div className="text-xs">{entity}:</div>
-            {assignments.map(({ name, type, value }) => (
+            {assignments.map(({ name, action, value }) => (
                 <AssignmentBox
                     key={name}
                     className="text-xs pl-2"
                     name={name}
                     value={value}
-                    type={type}
-                    defaulted={type === "default"}
+                    action={action}
+                    defaulted={action === ASSIGNMENT.ACTION.DEFAULT}
                 />
             ))}
         </div>
     )
-}
-
-function getAssignmentFor(key, assignments, object = {}) {
-    for (const [assignmentKey, assignment] of Object.entries(assignments)) {
-        if (key !== assignmentKey.toLowerCase()) continue
-
-        return assignment.type === "set" ? assignment.value : undefined
-    }
-    const value = object[key]
-
-    return value
 }
 
 function RenderWithAssignments({
@@ -213,7 +352,13 @@ function RenderWithAssignments({
                 const parsed = JSON.parse(request.body)
                 if (isObject(parsed)) {
                     for (const [name, value] of Object.entries(parsed)) {
-                        basicBody.push({ type: "set", name, value })
+                        // TODO: type
+                        basicBody.push({
+                            action: ASSIGNMENT.ACTION.SET,
+                            type: ASSIGNMENT.TYPE.STRING,
+                            name,
+                            value
+                        })
                     }
                 } else {
                     rawBody = request.body
@@ -270,10 +415,30 @@ function RenderWithAssignments({
     )
 }
 
+const assignBodyType = "assign_json"
+
+const makeExtractParts = (request, code, from, path) => {
+    return `${request} ${code} ${from} ${path}`
+}
+
+const getExtractParts = (value) => {
+    let [request = "", code = "200", from = "", path = "[]"] = value.split(
+        " ",
+        4
+    )
+    return {
+        request,
+        code: parseInt(code),
+        from,
+        path
+    }
+}
+
 function AssignmentEditForm({
+    assignmentIndex,
     model,
     close,
-    store,
+    save,
     defaultsModel,
     edit,
     reserved = []
@@ -284,47 +449,161 @@ function AssignmentEditForm({
     const isDefaultable = useMemo(() => {
         return !!(defaultsModel && defaultsModel[model.value])
     }, [])
-    const typeOptions = useMemo(() => {
-        const types = []
+    const actionOptions = useMemo(() => {
+        const actions = []
         if (isDefaultable)
-            types.push(
-                { id: "default", name: "Default" },
-                { id: "ignore", name: "Block default" }
+            actions.push(
+                { id: ASSIGNMENT.ACTION.DEFAULT, name: "Default" },
+                { id: ASSIGNMENT.ACTION.IGNORE, name: "Block default" }
             )
-        types.push(
-            { id: "set", name: "Set" },
-            { id: "const", name: "Constant" },
-            { id: "prompt", name: "Prompt" },
-            { id: "extract", name: "Extract from Request" }
+        actions.push(
+            { id: ASSIGNMENT.ACTION.SET, name: "Set" },
+            { id: ASSIGNMENT.ACTION.CONST, name: "Constant" },
+            { id: ASSIGNMENT.ACTION.PROMPT, name: "Prompt" },
+            { id: ASSIGNMENT.ACTION.EXTRACT, name: "Extract from Request" }
         )
-        return types
+        return actions
     })
+    const typeOptions = [
+        { id: ASSIGNMENT.TYPE.STRING, name: "String" },
+        { id: ASSIGNMENT.TYPE.JSON, name: "JSON" }
+    ]
     const constantOptions = aContext.getConstOptions()
     const requestsOptions = aContext.getRequestOptions()
 
     const [value, setValue] = useState(model.value)
-    const [type, setType] = useState(model.type)
-    const [assignmentValue, setAssignmentValue] = useState(
-        model.assignmentValue
+    const [mode, setMode] = useState(
+        aContext.getLastBodyTypeMode(assignBodyType)
     )
-    const blocked = type === "ignore"
+    const [assignmentValue, setAssignmentValue] = useState(() => {
+        return model.type === ASSIGNMENT.TYPE.JSON
+            ? aContext.getFormatedBody(mode, model.assignmentValue)
+            : model.assignmentValue
+    })
+    const [type, setTypeRaw] = useState(model.type)
+    const setType = (newType) => {
+        if (newType === ASSIGNMENT.TYPE.JSON) {
+            setAssignmentValue(JSON.stringify(assignmentValue))
+        } else {
+            const resolved = aContext.getResolvedBodyForMode(
+                mode,
+                assignmentValue
+            )
+            const parsed = getParsedJson(resolved)
+            if (isString(parsed)) {
+                setAssignmentValue(parsed)
+            } else if (parsed !== undefined) {
+                setAssignmentValue(JSON.stringify(parsed))
+            }
+        }
+        setTypeRaw(newType)
+    }
+    const [action, setActionRaw] = useState(model.action)
+    const setAction = (newAction) => {
+        setAssignmentValue("")
+        setTypeRaw(ASSIGNMENT.TYPE.STRING)
+        setExtractRequest("")
+        setExtractCode(200)
+        setExtractFrom("body")
+        setExtractPath("[]")
+        setActionRaw(newAction)
+    }
+    const extractFromOptions = [
+        { id: "body", name: "Body" },
+        { id: "header", name: "Header" },
+        { id: "cookie", name: "Cookie" }
+    ]
+    const extractDefault = useMemo(() => {
+        if (action !== ASSIGNMENT.ACTION.EXTRACT) return {}
+
+        return getExtractParts(model.assignmentValue)
+    }, [])
+    const [extractRequest, setExtractRequest] = useState(
+        extractDefault.request ?? ""
+    )
+    const [extractCode, setExtractCode] = useState(extractDefault.code ?? 200)
+    const [extractFrom, setExtractFrom] = useState(
+        extractDefault.from ?? "body"
+    )
+    const [extractPath, setExtractPath] = useState(extractDefault.path ?? "[]")
+    const loadTree = useMemo(() => {
+        if (action !== ASSIGNMENT.ACTION.EXTRACT || !extractRequest) return
+
+        const idx = aContext.requestIndex.getEntityByPropValue(
+            "value",
+            extractRequest
+        )
+        if (idx === undefined) return
+
+        const { request, assignments } =
+            aContext.requestIndex.getEntityObject(idx)
+        return () =>
+            aContext
+                .fetchApiResponse(request, d(assignments))
+                .fetchPromise.then((result) => {
+                    if (extractFrom === "body")
+                        return getParsedJson(result.body)
+                    if (extractFrom === "header") return result.headers
+                })
+    }, [extractFrom, extractRequest, extractCode])
+
+    const blocked = action === ASSIGNMENT.ACTION.IGNORE
     return (
         <OkCancelLayout
             ok={() => {
-                store({ value, type, assignmentValue })
+                let assignValue = assignmentValue
+                let assignType = type
+                if (
+                    action === ASSIGNMENT.ACTION.SET &&
+                    type === ASSIGNMENT.TYPE.JSON
+                ) {
+                    const resolved = aContext.getResolvedBodyForMode(
+                        mode,
+                        assignmentValue
+                    )
+                    assignValue = getParsedJson(resolved)
+                    if (
+                        assignValue !== undefined &&
+                        assignmentIndex.normalize
+                    ) {
+                        assignValue = assignmentIndex.normalize(assignValue)
+                    }
+                    if (isString(parsed)) {
+                        assignType = ASSIGNMENT.TYPE.STRING
+                    } else if (parsed !== undefined) {
+                        assignValue = JSON.stringify(assignValue)
+                    } else {
+                        assignType = ASSIGNMENT.TYPE.STRING
+                        assignValue = ""
+                    }
+                }
+                if (action === ASSIGNMENT.ACTION.EXTRACT) {
+                    assignValue = makeExtractParts(
+                        extractRequest,
+                        extractCode,
+                        extractFrom,
+                        extractPath
+                    )
+                }
+                save({
+                    value,
+                    action,
+                    type: assignType,
+                    assignmentValue: assignValue
+                })
             }}
             cancel={() => close()}
             submit
         >
             <FormGrid>
                 {isDefaultable && (
-                    <CustomCells name="Name">
-                        <div>{value}</div>
+                    <CustomCells name="Name:">
+                        <div className="text-sm">{value}</div>
                     </CustomCells>
                 )}
                 {!isDefaultable && (
                     <InputCells
-                        name="Name"
+                        name="Name:"
                         value={value}
                         set={setValue}
                         readOnly={isDefaultable}
@@ -336,22 +615,62 @@ function AssignmentEditForm({
                     />
                 )}
                 <SelectCells
-                    name="Type"
-                    value={type}
-                    set={setType}
-                    options={typeOptions}
+                    name="Action:"
+                    value={action}
+                    set={setAction}
+                    options={actionOptions}
                 />
-                {!["ignore", "default", "const", "extract"].includes(type) && (
-                    <InputCells
-                        name={type === "prompt" ? "Question" : "Value"}
-                        value={assignmentValue}
-                        set={setAssignmentValue}
-                        required
-                        autoFocus={edit}
-                    />
-                )}
-                {type === "const" && (
-                    <CustomCells name="Constant">
+                {assignmentIndex.hasMultiType() &&
+                    action === ASSIGNMENT.ACTION.SET && (
+                        <RadioCells
+                            name="Type:"
+                            value={type}
+                            set={setType}
+                            options={typeOptions}
+                        />
+                    )}
+                {![
+                    ASSIGNMENT.ACTION.IGNORE,
+                    ASSIGNMENT.ACTION.DEFAULT,
+                    ASSIGNMENT.ACTION.CONST,
+                    ASSIGNMENT.ACTION.EXTRACT
+                ].includes(action) &&
+                    (type === ASSIGNMENT.TYPE.STRING ? (
+                        <InputCells
+                            name={
+                                action === ASSIGNMENT.ACTION.PROMPT
+                                    ? "Question:"
+                                    : "Value:"
+                            }
+                            value={assignmentValue}
+                            set={setAssignmentValue}
+                            autoFocus={edit}
+                        />
+                    ) : (
+                        <CustomCells
+                            name={
+                                action === ASSIGNMENT.ACTION.PROMPT
+                                    ? "Question:"
+                                    : "Value:"
+                            }
+                        >
+                            <BodyTextarea
+                                type={assignBodyType}
+                                value={assignmentValue}
+                                set={setAssignmentValue}
+                                reverse
+                                rows={10}
+                                mode={mode}
+                                setMode={setMode}
+                                markInvalid
+                                validator={assignmentIndex.validator}
+                                required
+                                autoFocus={edit}
+                            />
+                        </CustomCells>
+                    ))}
+                {action === ASSIGNMENT.ACTION.CONST && (
+                    <CustomCells name="Constant:">
                         <div className="stack-h gap-2">
                             <Select
                                 required
@@ -366,20 +685,44 @@ function AssignmentEditForm({
                         </div>
                     </CustomCells>
                 )}
-                {type === "extract" && (
-                    <CustomCells name="Extract">
-                        <div className="stack-h gap-2">
-                            <Select
-                                required
-                                options={requestsOptions}
-                                value={assignmentValue}
-                                set={setAssignmentValue}
+                {action === ASSIGNMENT.ACTION.EXTRACT && (
+                    <>
+                        <SelectCells
+                            name="Request:"
+                            required
+                            options={requestsOptions}
+                            value={extractRequest}
+                            set={setExtractRequest}
+                        />
+                        <NumberCells
+                            name="Http code:"
+                            required
+                            min={100}
+                            max={599}
+                            value={extractCode}
+                            set={setExtractCode}
+                        />
+                        <RadioCells
+                            name="From:"
+                            options={extractFromOptions}
+                            value={extractFrom}
+                            set={setExtractFrom}
+                        />
+                        <CustomCells name="Property:">
+                            <JsonPathInput
+                                root={extractFrom}
+                                loadTree={loadTree}
+                                disabled={!extractRequest}
+                                path={extractPath}
+                                setPath={setExtractPath}
                             />
-                        </div>
-                    </CustomCells>
+                        </CustomCells>
+                    </>
                 )}
-                {["default", "ignore"].includes(type) && (
-                    <CustomCells name="Value">
+                {[ASSIGNMENT.ACTION.DEFAULT, ASSIGNMENT.ACTION.IGNORE].includes(
+                    action
+                ) && (
+                    <CustomCells name="Value:">
                         <AssignmentBox
                             className="border text-sm p-2 bg-input-bg border-input-border text-input-text"
                             defaulted={true}
@@ -388,7 +731,9 @@ function AssignmentEditForm({
                                     ? undefined
                                     : defaultsModel[value].assignmentValue
                             }
-                            type={blocked ? type : defaultsModel[value].type}
+                            action={
+                                blocked ? action : defaultsModel[value].action
+                            }
                         />
                     </CustomCells>
                 )}
@@ -418,16 +763,18 @@ function AssignmentStack({ assignmentIndex, defaultsModel = {}, matcher }) {
                 exec: () => {
                     const allLcKeys = extractLcProps(assignmentIndex, "value")
                     EditModal.open({
+                        assignmentIndex,
                         defaultsModel,
                         model: {
                             name: "",
-                            type: "set",
+                            type: ASSIGNMENT.TYPE.STRING,
+                            action: ASSIGNMENT.ACTION.SET,
                             assignmentValue: ""
                         },
                         reserved: checkDefaults
                             ? without(allLcKeys, defaultLcKeys)
                             : allLcKeys,
-                        store: (newModel) => {
+                        save: (newModel) => {
                             const lcValue = newModel.value.toLowerCase()
                             if (
                                 checkDefaults &&
@@ -444,6 +791,7 @@ function AssignmentStack({ assignmentIndex, defaultsModel = {}, matcher }) {
                                 oldModel.assignmentValue =
                                     newModel.assignmentValue
                                 oldModel.type = newModel.type
+                                oldModel.action = newModel.action
                                 assignmentIndex.setEntityObject(
                                     { ...oldModel },
                                     true
@@ -465,11 +813,12 @@ function AssignmentStack({ assignmentIndex, defaultsModel = {}, matcher }) {
             action: (index) => {
                 const model = assignmentIndex.getEntityObject(index)
                 EditModal.open({
+                    assignmentIndex,
                     defaultsModel,
                     model,
                     edit: true,
                     reserved: extractLcProps(assignmentIndex, "value", model),
-                    store: (newModel) => {
+                    save: (newModel) => {
                         assignmentIndex.setEntityObject(
                             { ...model, ...newModel },
                             true
@@ -485,7 +834,11 @@ function AssignmentStack({ assignmentIndex, defaultsModel = {}, matcher }) {
                 const value = assignmentIndex.getEntityValue(index)
                 const isDefaultable = !!(defaultsModel && defaultsModel[value])
                 if (isDefaultable) {
-                    assignmentIndex.setEntityPropValue(index, "type", "ignore")
+                    assignmentIndex.setEntityPropValue(
+                        index,
+                        "action",
+                        ASSIGNMENT.ACTION.IGNORE
+                    )
                     assignmentIndex.setEntityPropValue(
                         index,
                         "assignmentValue",
@@ -507,7 +860,7 @@ function AssignmentStack({ assignmentIndex, defaultsModel = {}, matcher }) {
                 matcher={matcher}
                 render={(item) => {
                     const defaultAssignment =
-                        item.type === "default" &&
+                        item.action === ASSIGNMENT.ACTION.DEFAULT &&
                         defaultsModel &&
                         defaultsModel[item.value]
                     return (
@@ -526,6 +879,11 @@ function AssignmentStack({ assignmentIndex, defaultsModel = {}, matcher }) {
                                     ? defaultAssignment.type
                                     : item.type
                             }
+                            action={
+                                defaultAssignment
+                                    ? defaultAssignment.action
+                                    : item.action
+                            }
                         />
                     )
                 }}
@@ -539,8 +897,13 @@ function AssignmentStack({ assignmentIndex, defaultsModel = {}, matcher }) {
 }
 
 export {
+    ASSIGNMENT,
     RenderWithAssignments,
     AssignmentStack,
     AssignmentIndex,
-    extractContentTypeFromAssignments
+    QueryAssignmentIndex,
+    HeadersAssignmentIndex,
+    BodyAssignmentIndex,
+    extractContentTypeFromAssignments,
+    getExtractPathForString
 }

@@ -1,11 +1,12 @@
-import { useMemo, useEffect, useContext } from "react"
+import { useEffect, useContext } from "react"
 import { useModalWindow } from "components/modal"
 import { PluginRegistry } from "core/plugin"
 import { Button } from "components/form"
 import { AppContext } from "components/context"
 import { Tabs, Tab } from "components/layout"
-import { getPathParams, formatDate, d } from "core/helper"
-import { EntityStack, EntityPicker } from "components/common"
+import { formatDate, d } from "core/helper"
+import { getPathParams } from "core/http"
+import { EntityStack } from "components/common"
 import { RoutePath } from "plugins/route-selector/components"
 import { RenderWithAssignments } from "entities/assignments"
 
@@ -21,15 +22,15 @@ function HistoryWidget({}) {
         if (elems.length > 10) break
 
         elems.push(
-            <div key={elems.length} className="py-1 stack-h gap-x-2 w-full">
-                <pre
-                    className="auto cursor-pointer"
+            <div key={elems.length} className="py-1 stack-h gap-x-2 xw-full">
+                <div
+                    className="auto cursor-pointer truncate"
                     onClick={() =>
                         aContext.startContentStream(request, assignments)
                     }
                 >
                     {request.method} {request.path}
-                </pre>
+                </div>
                 {routePlugin && (
                     <div>
                         <Button

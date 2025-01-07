@@ -102,7 +102,7 @@ function HistoryEntryPicker({ historyEntryIndex, api, ...props }) {
             matcher={matchesApi}
             render={({ request, timestamp }) => (
                 <div className="stack-v w-full text-xs">
-                    <div className="text-xs">{request.path}</div>
+                    <div className="text-xs break-words">{request.path}</div>
                     <div className="stack-h w-full opacity-50">
                         <div>{request.method}</div>
                         <div className="auto text-right">

@@ -3,17 +3,19 @@ import { treeBuilder } from "core/tree"
 import {
     startAbortableApiRequestStream,
     startAbortableApiBodyRequest,
-    isMethodWithRequestBody
+    isMethodWithRequestBody,
+    getQueryStringForJson,
+    getPathInfo
 } from "core/http"
 import { useComponentUpdate, useLoadingSpinner } from "./common"
-import { d, getPathInfo, apply, md5, isObject } from "core/helper"
+import { d, getParsedJson, apply, isObject } from "core/helper"
 import { PluginRegistry } from "core/plugin"
 import {
     defaultApiSettings,
     defaultGlobalSettings,
     defaultKeyBindings
 } from "./settings"
-import { AssignmentIndex } from "entities/assignments"
+import { ASSIGNMENT } from "entities/assignments"
 import { RouteIndex } from "entities/routes"
 import { ConstantIndex } from "entities/constants"
 import { ApiIndex, APIS } from "entities/apis"
@@ -152,7 +154,8 @@ function PromptDiv() {
 function registerRouteApi({ config }) {
     const routeIndex = new RouteIndex(config.routes)
 
-    const getMatchingRoutePath = (matchApi, resolvedPath, method) => {
+    const getMatchingRoutePath = (matchApi, resolvedFullpath, method) => {
+        const [resolvedPath] = resolvedFullpath.split("?")
         for (const { path, methods, api } of routeIndex.getEntityObjects()) {
             if (!methods.includes(method) || matchApi !== api) continue
 
@@ -500,11 +503,6 @@ function registerContentApi({ registry, register, apiRef }) {
     register("lastOverwriteHeaders", {})
     register("streamAbort", null)
 
-    const baseHeaderIndex = new AssignmentIndex(
-        registry("apiStorage").getJson("baseHeaders", {})
-    )
-    register("baseHeaderIndex", baseHeaderIndex)
-
     const getAssignments = (
         section,
         allAssignments,
@@ -515,48 +513,52 @@ function registerContentApi({ registry, register, apiRef }) {
         const assignments = allAssignments[section] ?? {}
         const defaults = allDefaults[section] ?? {}
         const resolved = {}
-        const resolveAssignment = (key, value, type) => {
-            switch (type) {
-                case "set":
-                    resolved[key] = value
+        const resolveAssignment = (key, type, value, action) => {
+            switch (action) {
+                case ASSIGNMENT.ACTION.SET:
+                    resolved[key] =
+                        type === ASSIGNMENT.TYPE.JSON
+                            ? getParsedJson(value)
+                            : value
                     break
 
-                case "const":
+                case ASSIGNMENT.ACTION.CONST:
                     const constValue = apiRef.current.getConstValue(value, env)
                     if (constValue !== undefined) {
                         resolved[key] = constValue
                     }
                     break
 
-                case "prompt":
+                case ASSIGNMENT.ACTION.PROMPT:
                     if (prompts[value] === undefined) {
                         prompts[value] = { key, targets: [] }
                     }
                     prompts[value].targets.push(section)
                     break
 
-                case "extract":
+                case ASSIGNMENT.ACTION.EXTRACT:
                     break
             }
         }
         for (const [key, assignment] of Object.entries(assignments)) {
-            const { type, assignmentValue } = assignment
+            const { action, type, assignmentValue } = assignment
 
-            if (type === "default") {
+            if (action === ASSIGNMENT.ACTION.DEFAULT) {
                 const defaultValue = defaults[key]
                 resolveAssignment(
                     key,
+                    defaultValue.type,
                     defaultValue.assignmentValue,
-                    defaultValue.type
+                    defaultValue.action
                 )
             } else {
-                resolveAssignment(key, assignmentValue, type)
+                resolveAssignment(key, type, assignmentValue, action)
             }
         }
         for (const [key, assignment] of Object.entries(defaults)) {
             if (resolved[key] !== undefined) continue
-            const { type, assignmentValue } = assignment
-            resolveAssignment(key, assignmentValue, type)
+            const { action, type, assignmentValue } = assignment
+            resolveAssignment(key, type, assignmentValue, action)
         }
         return resolved
     }
@@ -719,7 +721,7 @@ function registerContentApi({ registry, register, apiRef }) {
         resBody,
         overwriteHeaders = {}
     ) => {
-        const query = new URLSearchParams(resQuery).toString()
+        const query = getQueryStringForJson(resQuery)
         const { headers, body, inputMode, ...options } = request
 
         const finalHeaders = {
@@ -747,9 +749,7 @@ function registerContentApi({ registry, register, apiRef }) {
         register("lastStatus", null)
 
         const { treeBuilder, spinner, config } = registry()
-
         const historyEntryIndex = apiRef.current.historyEntryIndex
-
         const isCurrentApi = request.api === APIS.OPTION.CURRENT
 
         const fireRequest = (resHeaders, resQuery, resBody) => {
@@ -853,7 +853,7 @@ function registerContentApi({ registry, register, apiRef }) {
                 return httpStream
             }
 
-            doRequest(fireRequest, request, assignments)
+            return doRequest(fireRequest, request, assignments)
         },
         getEnvContentPromise: (env) => {
             const { lastRequest, lastAssignments } = registry()
@@ -886,7 +886,7 @@ function registerContentApi({ registry, register, apiRef }) {
             treeBuilder.reset()
         },
         getLastStatus: () => registry("lastStatus"),
-        getBaseHeaderIndex: () => registry("baseHeaderIndex"),
+        // getBaseHeaderIndex: () => registry("baseHeaderIndex"),
         hasPromptAnswers: () => {
             return rememberPrompts && !!Object.keys(rememberAnswers).length
         },
@@ -1247,11 +1247,12 @@ function registerBodyModeApi({ apiRef }) {
         }
     }
     const bodyType2modes = {
-        json: ["json"]
+        json: ["json"],
+        assign_json: ["json"]
     }
 
     const getModeOptionsForBodyType = (bodyType) => {
-        const modes = ["raw"]
+        const modes = bodyType.startsWith("assign_") ? [] : ["raw"]
 
         const extraModes = bodyType2modes[bodyType.toLowerCase()] ?? []
         modes.push(...extraModes)
@@ -1263,14 +1264,18 @@ function registerBodyModeApi({ apiRef }) {
         }
         return options
     }
-
     const doBodyConversion = (body, fromMode, toMode) => {
         const mode = id2mode[fromMode.toLowerCase()]
         if (!mode || !mode.convertTo) return body
 
         return mode.convertTo(body, toMode)
     }
+    const getResolvedBodyForMode = (modeId, body) => {
+        const mode = id2mode[modeId.toLowerCase()]
+        if (!mode || !mode.targetMode) return body
 
+        return doBodyConversion(body, modeId, mode.targetMode)
+    }
     return {
         registerMode: (id, mode) => {
             id2mode[id] = mode
@@ -1283,11 +1288,16 @@ function registerBodyModeApi({ apiRef }) {
             links.push(id)
         },
         getModeOptionsForBodyType,
-        isValidBody: (modeId, body) => {
+        isValidBody: (modeId, body, validator) => {
             const mode = id2mode[modeId.toLowerCase()]
             if (!mode) return true
 
-            return mode.isValid && mode.isValid(body)
+            const isValidSyntax = mode.isValid && mode.isValid(body)
+            if (!validator) return isValidSyntax
+
+            return (
+                isValidSyntax && validator(getResolvedBodyForMode(modeId, body))
+            )
         },
         getFormatedBody: (modeId, body) => {
             const mode = id2mode[modeId.toLowerCase()]
@@ -1318,14 +1328,10 @@ function registerBodyModeApi({ apiRef }) {
         },
         getLastBodyTypeMode: (bodyType) => {
             const { apiSettings } = apiRef.current
-            return apiSettings.lastBodyTypeModes[bodyType] ?? "raw"
+            const firstMode = (bodyType2modes[bodyType] ?? ["raw"])[0]
+            return apiSettings.lastBodyTypeModes[bodyType] ?? firstMode
         },
-        getResolvedBodyForMode: (modeId, body) => {
-            const mode = id2mode[modeId.toLowerCase()]
-            if (!mode || !mode.targetMode) return body
-
-            return doBodyConversion(body, modeId, mode.targetMode)
-        }
+        getResolvedBodyForMode
     }
 }
 

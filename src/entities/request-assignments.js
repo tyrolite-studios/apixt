@@ -10,7 +10,12 @@ import {
     ButtonGroup,
     FormGrid
 } from "components/form"
-import { AssignmentIndex, AssignmentStack } from "entities/assignments"
+import {
+    QueryAssignmentIndex,
+    HeadersAssignmentIndex,
+    BodyAssignmentIndex,
+    AssignmentStack
+} from "entities/assignments"
 import { AppContext } from "components/context"
 import { d } from "core/helper"
 
@@ -29,13 +34,13 @@ class RequestAssignmentsIndex extends MappingIndex {
 function RequestAssignmentsForm({ model, save, edit, reserved, close }) {
     const [name, setName] = useState(model.name)
     const queryAssignmentsIndex = useMemo(() => {
-        return new AssignmentIndex(model.query)
+        return new QueryAssignmentIndex(model.query)
     }, [])
     const headersAssignmentsIndex = useMemo(() => {
-        return new AssignmentIndex(model.headers)
+        return new HeadersAssignmentIndex(model.headers)
     }, [])
     const bodyAssignmentsIndex = useMemo(() => {
-        return new AssignmentIndex(model.body)
+        return new BodyAssignmentIndex(model.body)
     }, [])
     return (
         <OkCancelLayout

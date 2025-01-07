@@ -2,26 +2,35 @@ import { useMemo, useState, useContext, useEffect } from "react"
 import { useModalWindow } from "components/modal"
 import { AppContext } from "components/context"
 import { Input, Textarea } from "components/form"
-import { d, getPathInfo, getResolvedPath, getPathParams } from "core/helper"
+import { d } from "core/helper"
 import { Tabs, Tab, OkCancelLayout } from "components/layout"
 import { EntityStack, useComponentUpdate } from "components/common"
 import { FormGrid, Radio } from "components/form"
-import { isMethodWithRequestBody } from "core/http"
+import {
+    isMethodWithRequestBody,
+    getPathInfo,
+    getResolvedPath,
+    getPathParams
+} from "core/http"
 import { CustomCells } from "components/form"
 import {
     RenderWithAssignments,
     AssignmentStack,
-    AssignmentIndex
+    QueryAssignmentIndex,
+    HeadersAssignmentIndex,
+    BodyAssignmentIndex
 } from "entities/assignments"
 import { RoutePath } from "entities/routes"
+import { ASSIGNMENT } from "entities/assignments"
 
 function getDefaultedAssignments(assignments, defaults) {
     for (const key of Object.keys(defaults)) {
         if (assignments[key] !== undefined) continue
 
         assignments[key] = {
-            type: "default",
-            value: ""
+            action: ASSIGNMENT.ACTION.DEFAULT,
+            value: "",
+            type: ASSIGNMENT.TYPE.STRING
         }
     }
     return assignments
@@ -45,24 +54,24 @@ function RouteLauncher({ close, request, assignments = {} }) {
     const defaults = useMemo(() => {
         // TODO get from defaults associated with the pathMatch
         return {
-            headers: pathInfo ? aContext.getBaseHeaderIndex().model : {},
+            headers: {},
             query: {},
             body: {}
         }
     }, [])
 
     const queryAssignmentIndex = useMemo(() => {
-        return new AssignmentIndex(
+        return new QueryAssignmentIndex(
             getDefaultedAssignments(assignments.query ?? {}, defaults.query)
         )
     }, [])
     const headersAssignmentIndex = useMemo(() => {
-        return new AssignmentIndex(
+        return new HeadersAssignmentIndex(
             getDefaultedAssignments(assignments.headers ?? {}, defaults.headers)
         )
     }, [])
     const bodyAssignmentIndex = useMemo(() => {
-        return new AssignmentIndex(assignments.body ?? {})
+        return new BodyAssignmentIndex(assignments.body ?? {})
     }, [])
 
     const [pathParams, setPathParams] = useState(() => {
@@ -307,18 +316,6 @@ function RouteSelector({ close, plugin }) {
         )
     }, [])
 
-    const headerIndex = aContext.getBaseHeaderIndex()
-
-    useEffect(() => {
-        const listener = () => {
-            aContext.apiStorage.setJson("baseHeaders", headerIndex.model)
-        }
-        headerIndex.addListener(listener)
-        return () => {
-            headerIndex.removeListener(listener)
-        }
-    }, [])
-
     const modeOptions = [
         { id: 0, name: "compact" },
         { id: 1, name: "detailed" }
@@ -338,11 +335,6 @@ function RouteSelector({ close, plugin }) {
                                     gapped={false}
                                 />
                             </div>
-                            <div>Headers</div>
-                            <AssignmentStack
-                                mode={mode}
-                                assignmentIndex={headerIndex}
-                            />
                             <div>Routes</div>
                             <RouteStack
                                 mode={mode}
