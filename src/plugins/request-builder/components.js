@@ -50,13 +50,7 @@ import { SimpleRoutePath } from "entities/routes"
 import { HistoryEntryPicker } from "entities/history-entry"
 import { useRouteParamsModal } from "entities/routes"
 import { isString } from "../../core/helper"
-import {
-    startFetchProcessing,
-    setPromptsAndExtracts,
-    fireRequestStage,
-    retryAuthorization
-} from "core/processor"
-import { useLoadingSpinner } from "../../components/common"
+import { useErrorWindow, useLoadingSpinner } from "../../components/common"
 
 const httpMethodOptions = [
     { id: "POST", name: "POST" },
@@ -780,29 +774,8 @@ function RequestBuilder({ close, request, assignments }) {
         "opacity-50 text-sm"
     )
     const spinner = useLoadingSpinner()
-    // TODO just for testing, delete before merge
-    const testButtons = [
-        {
-            name: "Process",
-            onPressed: async () => {
-                const processing = await startFetchProcessing({
-                    request: {},
-                    assignments: {},
-                    signals: [],
-                    preprocessors: [setPromptsAndExtracts],
-                    stages: [fireRequestStage, retryAuthorization]
-                })
-                spinner.start(processing.promise, processing.abort)
-                processing.promise
-                    .then((response) => {
-                        d("GOT RESPONSE", response)
-                    })
-                    .catch((e) => {
-                        d("ERROR", e)
-                    })
-            }
-        }
-    ]
+    const errorMessage = useErrorWindow()
+
     return (
         <OkCancelLayout
             scroll={false}
@@ -810,10 +783,10 @@ function RequestBuilder({ close, request, assignments }) {
             submit
             ok={startRequest}
             okLabel="Launch"
-            buttons={testButtons}
         >
             <>
                 {spinner.Modal}
+                {errorMessage.Modal}
                 <div className="w-full h-full divide-x divide-header-border stack-h overflow-hidden">
                     <div className="stack-v h-full overflow-hidden max-w-[50%]">
                         <div className="stack-h gap-2 p-2">

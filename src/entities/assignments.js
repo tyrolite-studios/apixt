@@ -18,10 +18,7 @@ import {
     JsonPathInput
 } from "components/common"
 import { FormGrid } from "components/form"
-import {
-    isMethodWithRequestBody,
-    startAbortableApiBodyRequest
-} from "core/http"
+import { isMethodWithRequestBody } from "core/http"
 import {
     CustomCells,
     InputCells,
@@ -34,6 +31,7 @@ import {
 import { ConstantManagerWindow } from "entities/constants"
 import { MappingIndex, extractLcProps } from "core/entity"
 import { isBool, isNumber } from "../core/helper"
+import { isMethodWithResponseBody } from "../core/http"
 
 const ASSIGNMENT = {
     ACTION: {
@@ -537,15 +535,38 @@ function AssignmentEditForm({
 
         const { request, assignments } =
             aContext.requestIndex.getEntityObject(idx)
-        return () =>
-            aContext
-                .fetchApiResponse(request, d(assignments))
-                .fetchPromise.then((result) => {
-                    if (extractFrom === "body")
-                        return getParsedJson(result.body)
-                    if (extractFrom === "header") return result.headers
-                })
-    }, [extractFrom, extractRequest, extractCode])
+        return async () => {
+            const processing = await aContext.fetchApiResponse(
+                request,
+                assignments,
+                { expect: extractCode }
+            )
+            return processing.promise.then((result) => {
+                const { method, headers, body, bodyType, cookies } = result
+                const failPrefix = `Request "${aContext.getRequestName(extractRequest)}":`
+
+                if (extractFrom === "body") {
+                    if (!isMethodWithResponseBody(method))
+                        throw Error(
+                            `${failPrefix} request method ${method} has no body`
+                        )
+                    if (!isSupportedExtractBodyType(bodyType))
+                        throw Error(
+                            `${failPrefix} body type is ${bodyType ?? "unknown"} which is not supported for extraction`
+                        )
+
+                    return bodyType === "json" ? getParsedJson(body) : body
+                }
+                if (extractFrom === "header") return headers
+
+                if (extractFrom === "cookies") return cookies
+
+                throw Error(
+                    `${failPrefix} unknown extract-from "${extractFrom}" given`
+                )
+            })
+        }
+    }, [extractFrom, extractCode, extractRequest, extractCode])
 
     const blocked = action === ASSIGNMENT.ACTION.IGNORE
     return (
@@ -896,6 +917,10 @@ function AssignmentStack({ assignmentIndex, defaultsModel = {}, matcher }) {
     )
 }
 
+function isSupportedExtractBodyType(type) {
+    return type === "json"
+}
+
 export {
     ASSIGNMENT,
     RenderWithAssignments,
@@ -905,5 +930,7 @@ export {
     HeadersAssignmentIndex,
     BodyAssignmentIndex,
     extractContentTypeFromAssignments,
-    getExtractPathForString
+    getExtractPathForString,
+    getExtractParts,
+    isSupportedExtractBodyType
 }

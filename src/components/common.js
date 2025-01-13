@@ -493,10 +493,14 @@ function DualRing({ size = 48, className }) {
     )
 }
 
-function LoadingSpinner({ abort, close }) {
+function LoadingSpinner({ abort, statusRef, close }) {
+    const [status, setStatus] = useState(statusRef?.status ?? "Loading...")
+    if (statusRef) {
+        statusRef.setStatus = setStatus
+    }
     return (
         <div className="stack-v gaps-1 p-4 text-center">
-            <div className="px-4 py-2">Loading...</div>
+            <div className="px-4 py-2">{status}</div>
 
             <div>
                 <DualRing />
@@ -521,21 +525,21 @@ function useLoadingSpinner() {
     openRef.current = open
 
     return {
-        start: (promise, abort) => {
+        start: (promise, abort, statusRef) => {
             setOpen(true)
             SpinnerWindow.open({
                 abort,
+                statusRef,
                 cleanUp: (source) => {
                     if (source) abort()
                 }
             })
-            promise.finally(() => {
+            return promise.finally(() => {
                 if (openRef.current) {
                     SpinnerWindow.close()
                     setOpen(false)
                 }
             })
-            return promise
         },
         close: () => {
             if (!openRef.current) return
@@ -585,6 +589,38 @@ function useConfirmation() {
             <ConfirmModal.content name="Please confirm" width="300px">
                 <ConfirmDialog {...ConfirmModal.props} />
             </ConfirmModal.content>
+        )
+    }
+}
+
+function ErrorDialog({ message, title = "An error occured:", close }) {
+    return (
+        <OkCancelLayout ok={() => close()} cancel={() => close()}>
+            <div className="p-2 bg-warning-bg text-warning-text">
+                <div className="stack-v gap-2 items-center">
+                    <div className="opacity-75 text-xs">{title}</div>
+                    <div className="text-xs">{message}</div>
+                </div>
+            </div>
+        </OkCancelLayout>
+    )
+}
+
+function useErrorWindow() {
+    const ErrorModal = useModalWindow()
+    return {
+        open: ({ ...props }) => {
+            ErrorModal.open({
+                ...props,
+                ok: () => {
+                    ErrorModal.close()
+                }
+            })
+        },
+        Modal: (
+            <ErrorModal.content width="300px">
+                <ErrorDialog {...ErrorModal.props} />
+            </ErrorModal.content>
         )
     }
 }
@@ -1757,6 +1793,7 @@ export {
     useMarkInvalid,
     useConfirmation,
     useUpdateOnEntityIndexChanges,
+    useErrorWindow,
     HighlightMatches,
     splitByMatch,
     useLoadingSpinner,

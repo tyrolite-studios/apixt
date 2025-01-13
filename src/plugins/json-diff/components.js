@@ -116,25 +116,31 @@ function JsonDiffWindow({ plugin }) {
                 overwrite: true
             })
             plugin.setButtonHandler(id, async ({ content }) => {
-                try {
-                    const request = await aContext.getEnvContentPromise(value)
+                const processing = await aContext.getEnvContentPromise(value)
 
-                    spinner.start(request.fetchPromise, request.abort)
-                    const { status, body } = await request.fetchPromise
+                spinner
+                    .start(
+                        processing.promise,
+                        processing.abort,
+                        processing.statusRef
+                    )
+                    .then((response) => {
+                        const { status, body } = d(response, "<-")
 
-                    const expectedStatus = aContext.getLastStatus()
-                    if (status !== expectedStatus) {
-                        MismatchWindow.open({ status, expectedStatus })
-                        return
-                    }
-                    const json = JSON.parse(body)
-                    DiffWindow.open({
-                        content,
-                        newJson: json
+                        const expectedStatus = aContext.getLastStatus()
+                        if (status !== expectedStatus) {
+                            MismatchWindow.open({ status, expectedStatus })
+                            return
+                        }
+                        const json = JSON.parse(body)
+                        DiffWindow.open({
+                            content,
+                            newJson: json
+                        })
                     })
-                } catch (e) {
-                    console.error(e)
-                }
+                    .catch((e) => {
+                        console.log(e)
+                    })
             })
         }
     }, [aContext.apiEnvIndex.lastModified])

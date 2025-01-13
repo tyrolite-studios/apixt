@@ -134,8 +134,8 @@ const startAbortableArrayStream = (
     })
     const reader = stream.getReader()
     return {
-        status,
-        fetchPromise: Promise.resolve(reader),
+        status: "Streaming...",
+        promise: Promise.resolve(reader),
         abort: async () => {
             if (stream.locked) {
                 clearInterval(timeout)
@@ -409,10 +409,71 @@ function getResolvedPath(path, params = [], strict = false) {
     )
 }
 
+function getBodyTypeForMime(mime) {
+    const [main, sub] = mime.split("/")
+
+    switch (sub) {
+        case "json":
+        case "xml":
+        case "html":
+        case "csv":
+            return sub
+
+        case "plain":
+            if (main === "text") return "text"
+    }
+    return
+}
+
+function getBodyTypeFromResponseHeaders(headers) {
+    let contentType
+    if (headers instanceof Headers) {
+        contentType = headers.get("content-type")
+    } else if (isObject(headers)) {
+        const names = Object.keys(headers)
+        for (const name of names) {
+            if (name.toLowerCase() === "content-type") {
+                contentType = headers[name]
+                break
+            }
+        }
+    }
+    if (!contentType) return
+
+    const [mime] = contentType.split(";")
+    return getBodyTypeForMime(mime)
+}
+
+const simpleHeaders = [
+    "Cache-Control",
+    "Content-Language",
+    "Content-Type",
+    "Expires",
+    "Last-Modified",
+    "Pragma"
+]
+
+function getJsonForApiResponseHeaders(headers) {
+    const keys = [...simpleHeaders, ...headers.keys()]
+
+    const result = {}
+    for (const key of keys) {
+        const lcKey = key.toLowerCase()
+        if (result[lcKey]) continue
+
+        const value = headers.get(key)
+        if (value === null) continue
+
+        result[lcKey] = value
+    }
+    return result
+}
+
 export {
     startAbortableApiBodyRequest,
     startAbortableApiRequestStream,
     startAbortableApiRequest,
+    startAbortableArrayStream,
     isMethodWithRequestBody,
     isMethodWithResponseBody,
     getParsedQueryString,
@@ -420,5 +481,8 @@ export {
     getWithoutProtocol,
     getPathInfo,
     getPathParams,
-    getResolvedPath
+    getResolvedPath,
+    getBodyTypeForMime,
+    getBodyTypeFromResponseHeaders,
+    getJsonForApiResponseHeaders
 }

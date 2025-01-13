@@ -1,28 +1,46 @@
 import { d, without } from "./helper"
 
-const startFetchProcessing = async (fetchOp) => {
-    // execute preprocessors
+const startStageProcessing = async (fetchOp) => {
     const processing = {
-        abort: () => {
-            for (const signal of fetchOp.signals) {
-                signal.abort()
-            }
-        }
+        abort: () => {},
+        op: fetchOp,
+        promise: Promise.resolve(),
+        statusRef: { setStatus: null, status: "Preprocessing..." }
     }
+    // execute preprocessors
     while (fetchOp.preprocessors.length) {
         const processor = fetchOp.preprocessors.shift()
-        const error = await processor(fetchOp)
-        if (error) {
-            processing.promise = new Promise.reject(error)
-            return response
+        try {
+            await processor(fetchOp)
+        } catch (error) {
+            processing.promise = Promise.reject(error)
+            return processing
         }
     }
     processing.promise = new Promise(async (resolve, reject) => {
+        processing.abort = () => {
+            let error = new DOMException(
+                "The operation was aborted.",
+                "AbortError"
+            )
+            try {
+                for (const abort of fetchOp.aborts) abort()
+            } catch (e) {
+                error = e
+            }
+            reject(error)
+        }
+        const updateStatus = (newStatus) => {
+            const setStatus = processing.statusRef.setStatus
+            processing.statusRef.status = newStatus
+            if (setStatus) setStatus(newStatus)
+        }
         while (fetchOp.stages.length) {
             const stage = fetchOp.stages.shift()
             try {
-                await stage(fetchOp)
+                await stage(fetchOp, updateStatus)
             } catch (e) {
+                // TODO catch abort errors here?
                 reject(e)
                 return
             }
@@ -32,45 +50,4 @@ const startFetchProcessing = async (fetchOp) => {
     return processing
 }
 
-const setPromptsAndExtracts = async (fetchOp) => {
-    const prompts = ["test"]
-    const extracts = []
-    fetchOp.prompts = prompts
-    fetchOp.extracts = extracts
-}
-
-const fireRequestStage = async (fetchOp) => {
-    const promise = new Promise((resolve, reject) => {
-        const timeout = setTimeout(() => {
-            fetchOp.signals = without(fetchOp.signals, signal)
-            resolve()
-        }, 2000)
-        const signal = {
-            abort: () => {
-                clearTimeout(timeout)
-                reject("Aborted")
-            }
-        }
-        fetchOp.signals.push(signal)
-    }).catch((e) => {
-        throw e
-    })
-
-    await promise
-
-    fetchOp.status = 401
-    fetchOp.result = "Unauthorized"
-}
-
-const retryAuthorization = async (fetchOp) => {
-    if (fetchOp.status === 401) {
-        fetchOp.stages.unshift(fireRequestStage)
-    }
-}
-
-export {
-    startFetchProcessing,
-    setPromptsAndExtracts,
-    fireRequestStage,
-    retryAuthorization
-}
+export { startStageProcessing }
