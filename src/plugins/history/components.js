@@ -1,4 +1,4 @@
-import { useEffect, useContext } from "react"
+import { useEffect, useContext, useMemo } from "react"
 import { useModalWindow } from "components/modal"
 import { PluginRegistry } from "core/plugin"
 import { Button } from "components/form"
@@ -9,11 +9,28 @@ import { getPathParams } from "core/http"
 import { EntityStack } from "components/common"
 import { RoutePath } from "plugins/route-selector/components"
 import { RenderWithAssignments } from "entities/assignments"
+import { ListTest } from "../../components/common"
+import { MappingIndex } from "../../core/entity"
+
+class TestIndex extends MappingIndex {
+    constructor(model) {
+        super(model, ["name"])
+    }
+}
 
 function HistoryWidget({}) {
     const aContext = useContext(AppContext)
     const routePlugin = PluginRegistry.getActivePlugin("routeSelector")
 
+    const index = useMemo(() => {
+        return new TestIndex({
+            foo: { name: "wweww wew" },
+            bar: { name: "gewdf sdfsd" },
+            foo2: { name: "inebnre ner" }
+        })
+    }, [])
+
+    return <ListTest entityIndex={index} />
     const elems = []
     for (const {
         request,

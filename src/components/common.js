@@ -26,6 +26,7 @@ import { Centered, Div, Stack, Icon, OkCancelLayout } from "./layout"
 import { AppContext } from "./context"
 import { getExtractPathForString } from "entities/assignments"
 import { PreBlockContent } from "./content"
+import { Attributes, without } from "../core/helper"
 
 function useComponentUpdate() {
     const mounted = useMounted()
@@ -119,7 +120,7 @@ function useGetAttrWithDimProps({
     maxHeight,
     ...attr
 }) {
-    const style = attr.style ? attr.style : {}
+    const style = attr.style ? { ...attr.style } : {}
     if (width) {
         style.width = width
     }
@@ -176,6 +177,376 @@ function useCallAfterwards() {
 }
 
 const doubleClickMs = 200
+
+function ListTest({ entityIndex }) {
+    useUpdateOnEntityIndexChanges(entityIndex)
+    const items = entityIndex.getView({}).matches.slice(0, 10)
+
+    const container = useManagedContainer({ items })
+    const { open, Modals } = useConfirmation()
+    const [selection, setSelection] = useState([])
+    useItemFocusOnContainer({
+        container,
+        item2value: (item) => entityIndex.getEntityPropValue(item, "value"),
+        value2item: (value) => entityIndex.getEntityByPropValue("value", value)
+    })
+    usePickerOnContainer({
+        container,
+        pick: (entity) => entityIndex.getEntityObject(entity)
+    })
+    useSelectionOnContainer({
+        container,
+        selection,
+        setSelection
+    })
+
+    const elems = []
+    const entities = entityIndex.getEntityObjects(items)
+    for (const [index, entity] of entities.entries()) {
+        const elem = container.getItem(index)
+        const cls = new ClassNames("hover:brightness-110")
+        cls.addIf(
+            elem.marked,
+            "bg-active-bg text-active-text",
+            "bg-input-bg text-input-text"
+        )
+        cls.add(
+            "focus:outline-none focus:ring focus:ring-inset focus:ring-focus-border focus:border-0"
+        )
+        elems.push(
+            <Div key={index} {...elem.attr.props} className={cls.value}>
+                {entityIndex.getEntityPropValue(index, "name")}
+            </Div>
+        )
+    }
+    const buttons = [
+        { name: "All", onPressed: () => container.selectInverse() }
+    ]
+    const containerCls = ClassNames("stack-v")
+    containerCls.addIf(container.invalid, "invalid")
+    return (
+        <>
+            <div
+                className="stack-v"
+                onKeyDown={(e) => {
+                    if (e.key !== "d" && container.tabIndex !== undefined)
+                        return
+
+                    open({
+                        confirmed: () => {
+                            entityIndex.deleteEntity(items[container.tabIndex])
+                            container.syncSelection()
+                        }
+                    })
+                    e.preventDefault()
+                }}
+            >
+                <Div {...container.attr.props} className={containerCls.value}>
+                    {elems}
+                </Div>
+                <ButtonGroup buttons={buttons} />
+            </div>
+            {Modals}
+        </>
+    )
+}
+
+function useManagedContainer({
+    items,
+    count,
+    item2value = (x) => x,
+    value2item = (x) => x
+}) {
+    const mounted = useMounted()
+    const ref = useRef(null)
+    const attr = Attributes({ ref })
+
+    if (items) count = items.length
+
+    const itemBuilders = []
+    const addItemBuilder = (builder) => itemBuilders.push(builder)
+
+    const getItem = (index) => {
+        const item = { index, attr: Attributes() }
+        for (const builder of itemBuilders) {
+            builder(index, item)
+        }
+        return item
+    }
+
+    const container = {
+        ref,
+        attr,
+        items,
+        count,
+        item2value,
+        value2item,
+        isMounted: () => ref.current && mounted.current,
+        addItemBuilder,
+        getItem
+    }
+    return container
+}
+
+const arrowMove = {
+    prevNext: (container, x, y, shift) => {
+        const next = x > 0 || y > 0
+        const prev = x < 0 || y < 0
+
+        const lastIndex = container.count - 1
+        if (prev) {
+            if (container.tabIndex === 0) {
+                return lastIndex
+            }
+            return shift ? 0 : clamp(0, container.tabIndex - 1)
+        }
+        if (next) {
+            if (container.tabIndex === lastIndex) {
+                return 0
+            }
+            return shift
+                ? lastIndex
+                : Math.min(lastIndex, container.tabIndex + 1)
+        }
+        return container.tabIndex
+    }
+}
+
+function usePickerOnContainer({ container, pick }) {
+    const pickIndex = (index) => {
+        pick(container.items[index])
+    }
+
+    container.attr.addListeners({
+        onKeyDown: (e) => {
+            if (!container.focused) return
+
+            if (e.key === " ") {
+                pickIndex(container.tabIndex)
+                e.preventDefault()
+            }
+        }
+    })
+
+    container.addItemBuilder((index, item) => {
+        item.attr.addListener("onClick", (e) => {
+            pickIndex(index)
+        })
+    })
+}
+
+function useSelectionOnContainer({
+    container,
+    min = 0,
+    max,
+    selection,
+    setSelection
+}) {
+    const { item2value, value2item } = container
+    const syncSelection = () => {
+        requestAnimationFrame(() => {
+            const newSelection = []
+            for (const value of selection) {
+                const index = value2item(value)
+                if (index !== undefined) newSelection.push(value)
+            }
+            setSelection(newSelection)
+            container.refocus()
+        })
+    }
+
+    const toggle = (index) => {
+        const value = item2value(container.items[index])
+        if (selection.includes(value)) {
+            if (selection.length > min) {
+                setSelection(without(selection, value))
+            }
+            return
+        }
+        if (max === 1) {
+            setSelection([value])
+        } else if (max === undefined || selection.length < max) {
+            setSelection([...selection, value])
+        }
+    }
+
+    container.attr.addListeners({
+        onKeyDown: (e) => {
+            if (!container.focused) return
+
+            if (e.key === " ") {
+                toggle(container.tabIndex)
+                e.preventDefault()
+            }
+        }
+    })
+
+    container.addItemBuilder((index, item) => {
+        item.attr.addListener("onClick", (e) => {
+            toggle(index)
+        })
+        const value = item2value(container.items[index])
+        item.marked = selection.includes(value)
+    })
+    container.selection = selection
+    container.syncSelection = syncSelection
+    if (min > 0 && selection.length < min) {
+        container.invalid = true
+    }
+    if (max !== undefined) return
+
+    container.selectAll = () => {
+        const allValues = container.items.map((x) => item2value(x))
+        setSelection(without(allValues, selection).length ? allValues : [])
+    }
+    container.selectInverse = () => {
+        const invValues = []
+        for (const item of container.items) {
+            const value = item2value(item)
+            if (!selection.includes(value)) {
+                invValues.push(value)
+            }
+        }
+        setSelection(invValues)
+    }
+}
+
+function useItemFocusOnContainer({
+    container,
+    cursor = true,
+    moveFocus = arrowMove.prevNext
+}) {
+    const aContext = useContext(AppContext)
+    const callAfterwards = useCallAfterwards()
+    const [focused, setFocused] = useState(false)
+    const [catchFocus, setCatchFocus] = useState(true)
+    const [tabIndex, setTabIndexRaw] = useState(0)
+    const setTabIndex = (index) => {
+        setTabIndexRaw(index)
+        refocus()
+    }
+    const initCatchRef = useRef(false)
+    const levelRef = useRef(null)
+    if (levelRef.current === null) {
+        levelRef.current = aContext.getModalLevel()
+    }
+
+    const { ref, count } = container
+    const refocus = () => {
+        requestAnimationFrame(() => {
+            if (!container.isMounted()) return
+
+            const elems = ref.current.querySelectorAll(".tabbed")
+            if (elems.length) {
+                elems[elems.length - 1].focus()
+                setCatchFocus(false)
+            }
+        })
+    }
+
+    // current tab index exceeds limit? then reset to last index
+    if (tabIndex !== null && count > 0 && tabIndex >= count && !catchFocus) {
+        callAfterwards(() => {
+            setTabIndex(count - 1)
+            refocus()
+        })
+    }
+
+    const handleCatchedFocus = (e) => {
+        if (!container.isMounted()) return
+
+        // the catcher got the focus, so we can disable the focus catching
+        // because from now on, we will move the focus within the container
+        setCatchFocus(false)
+        let minSelected = 0
+        // if we have a selection then set the focus on the first item which is
+        // included in the selection
+        if (container.selection && container.selection.length) {
+            while (
+                minSelected < container.count &&
+                !container.selection.includes(
+                    container.item2value(container.items[minSelected])
+                )
+            ) {
+                minSelected++
+            }
+        }
+        const newTabIndex = minSelected
+
+        // the newly calculated tabIndex might differ from the last
+        // so set it and move the focus to it
+        setTabIndex(newTabIndex)
+    }
+
+    container.attr.addListeners({
+        onFocus: (e) => {
+            // an element within the container has the focus
+            setFocused(true)
+            // that means we don't have to enable the focus catcher element
+            initCatchRef.current = false
+        },
+        onBlur: (e) => {
+            // no element within the container has the focus
+            setFocused(false)
+            // a modal was opened while the container had focus
+            // keep tab on current element because it gets focused on model close
+            if (aContext.getModalLevel() !== levelRef.current) return
+
+            // the container should enable focus catcher element...
+            initCatchRef.current = true
+            // ...but only if the blur was not directly followed by a focus
+            requestAnimationFrame(() => {
+                // container destroyed then exit
+                if (!container.isMounted()) return
+
+                // container didn't get focus in the meantime?
+                if (initCatchRef.current) {
+                    // enable focus catcher
+                    setCatchFocus(true)
+                    // this triggers a re-render where one of the container elements
+                    // will get a tabIndex and act as a focus catcher
+                }
+                // no more checking for setting a focus catcher
+                initCatchRef.current = false
+            })
+        },
+        onKeyDown: (e) => {
+            let x = 0
+            let y = 0
+            if (e.key === "ArrowUp") y--
+            if (e.key === "ArrowDown") y++
+            if (e.key === "ArrowLeft") x--
+            if (e.key === "ArrowRight") x++
+            if (x === 0 && y === 0) return
+
+            e.preventDefault()
+            const newTabIndex = moveFocus(container, x, y, e.shiftKey)
+            if (newTabIndex !== tabIndex) setTabIndex(newTabIndex)
+        }
+    })
+    container.addItemBuilder((index, item) => {
+        item.isFocused = tabIndex === index
+        const isCatcher = catchFocus && index === 0
+        item.attr.add("tab", (tabIndex === index && !catchFocus) || isCatcher)
+        item.attr.addListener("onMouseDown", (e) => {
+            if (!container.isMounted()) return
+
+            setTabIndex(index)
+            setCatchFocus(false)
+        })
+        if (isCatcher) {
+            item.attr.addListener("onFocus", handleCatchedFocus)
+        }
+        if (cursor) {
+            item.attr.setStyle("cursor", "pointer")
+        }
+    })
+
+    container.focused = focused
+    container.refocus = refocus
+    container.tabIndex = tabIndex
+    container.setTabIndex = setTabIndex
+}
 
 function useFocusManager({
     name,
@@ -1278,7 +1649,8 @@ function EntityList({
 
         const onBlur = () => {
             requestAnimationFrame(() => {
-                if (!mounted.current) return
+                if (!mounted.current || !stackRef.current) return
+
                 if (!stackRef.current.contains(document.activeElement)) {
                     setCatchFocus(true)
                     setLastTabIndex(0)
@@ -1780,10 +2152,53 @@ function JsonPathInput({
     )
 }
 
+function Filterbox({ filter, setFilter, toggleSortDir }) {
+    const buttons = [
+        {
+            icon: "close",
+            disabled: !filter,
+            onPressed: () => setFilter("")
+        }
+    ]
+    if (toggleSortDir) {
+        buttons.push({
+            icon: "sort",
+            onPressed: () => toggleSortDir()
+        })
+    }
+    return (
+        <div key="filter" className="stack-h items-center gap-1">
+            <div
+                className={
+                    "px-1" +
+                    (filter === ""
+                        ? ""
+                        : " bg-active-bg text-active-text border border-active-text")
+                }
+            >
+                <Icon className="text-sm" name="search" />
+            </div>
+            <Input
+                padded={false}
+                sized={false}
+                className="text-xs p-1"
+                value={filter}
+                size={10}
+                set={setFilter}
+            />
+            <ButtonGroup buttons={buttons} />
+        </div>
+    )
+}
+
 export {
     useComponentUpdate,
     useMounted,
     useDebugMount,
+    useManagedContainer,
+    useSelectionOnContainer,
+    useItemFocusOnContainer,
+    usePickerOnContainer,
     useGetTabIndex,
     useGetAttrWithDimProps,
     useHotKeys,
@@ -1807,5 +2222,7 @@ export {
     EntityPicker,
     FocusMatrix,
     BodyTextarea,
-    JsonPathInput
+    JsonPathInput,
+    Filterbox,
+    ListTest
 }

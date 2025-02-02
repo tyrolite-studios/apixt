@@ -5,6 +5,7 @@ import { useModalWindow } from "components/modal"
 import { extractLcProps } from "core/entity"
 import { OkCancelLayout } from "components/layout"
 import { FormGrid, InputCells } from "components/form"
+import { FolderIndex } from "entities/folders"
 
 class RequestIndex extends MappingIndex {
     constructor(model) {

@@ -38,7 +38,9 @@ import {
     useGetAttrWithDimProps,
     useGetTabIndex,
     useFocusManager,
-    useMarkInvalid
+    useMarkInvalid,
+    useManagedContainer,
+    useItemFocusOnContainer
 } from "./common"
 
 function useFocusKeyBindings({ keyHandlers = [], disabled = false, direct }) {
@@ -610,14 +612,15 @@ function Radio({
             value,
             activated: id
         })
-        if (found) index = i
+        if (found) index = id //i
         i++
     }
+    d(buttons, options)
     return (
         <ButtonGroup
-            active={invalid ? 0 : index}
+            active={d(invalid ? 0 : index, "active")}
             {...props}
-            buttons={buttons}
+            buttons={d(buttons, "buttons")}
         />
     )
 }
@@ -1299,6 +1302,7 @@ function RailAndSled({
 
 function Button({
     name,
+    onMouseDown,
     onPressed,
     onPressedEnd,
     icon,
@@ -1431,7 +1435,7 @@ function Button({
         <button
             className={cls.value}
             onKeyDown={(e) => {
-                if (e.repeat || e.keyCode !== 32 || clicked) {
+                if (e.repeat || e.key !== " " || clicked) {
                     if (e.repeat) e.preventDefault()
                     return
                 }
@@ -1442,6 +1446,7 @@ function Button({
                     e.preventDefault()
                     return
                 }
+                if (onMouseDown) onMouseDown(e)
                 aContext.setButtonRefocus(refocus)
                 if (tab && !tabControlled) {
                     focusRef.current.focus()
@@ -1469,6 +1474,61 @@ function Submit(props) {
 }
 
 function ButtonGroup({
+    className,
+    buttons = [],
+    gapped = true,
+    wrap = true,
+    buttonProps = {},
+    autoFocus,
+    active,
+    rowChange,
+    lastTabIndex,
+    setLastTabIndex,
+    ...props
+}) {
+    const containerProps =
+        buttons.length && buttons[0].activated !== undefined
+            ? { items: buttons.map((x) => x.activated) }
+            : { count: buttons.length }
+    const container = useManagedContainer(containerProps)
+    useItemFocusOnContainer({ container, cursor: false })
+
+    if (active !== undefined) {
+        container.selection = active !== undefined ? [active] : []
+    }
+    const style = useExtractDimProps(props)
+    const cls = new ClassNames("stack-h", className)
+    cls.addIf(gapped, "gap-2")
+    cls.addIf(wrap, "flex-wrap", "flex-nowrap overflow-auto")
+
+    const elems = []
+    let i = 0
+    for (const [i, button] of buttons.entries()) {
+        const curr = i
+        const itemAttr = container.getItem(curr)
+        const elemProps = {
+            ...itemAttr.attr.props,
+            ...buttonProps,
+            ...button,
+            autoFocus
+        }
+        elems.push(
+            <Button
+                key={i}
+                {...elemProps}
+                tabControlled
+                refocus={container.refocus}
+            />
+        )
+    }
+    return (
+        <Div {...container.attr.props} className={cls.value}>
+            {elems}
+        </Div>
+    )
+}
+
+function ButtonGroup2({
     className,
     buttons = [],
     gapped = true,

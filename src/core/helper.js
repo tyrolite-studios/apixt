@@ -141,6 +141,7 @@ function Attributes(props) {
 class AttriutesCls {
     constructor(props = {}) {
         this._props = {}
+        this.listeners = {}
 
         this.add(props)
     }
@@ -152,6 +153,26 @@ class AttriutesCls {
             this._props.style = style
         }
         return style
+    }
+
+    addListener(onEvent, eventHandler) {
+        if (!this._props[onEvent]) {
+            this.listeners[onEvent] = []
+            this._props[onEvent] = (e) => {
+                for (const handler of this.listeners[onEvent]) {
+                    if (handler(e) === false) return false
+                }
+            }
+        }
+        this.listeners[onEvent].push(eventHandler)
+        return this
+    }
+
+    addListeners(onEvent2listener) {
+        for (const [onEvent, listener] of Object.entries(onEvent2listener)) {
+            this.addListener(onEvent, listener)
+        }
+        return this
     }
 
     get props() {

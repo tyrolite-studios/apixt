@@ -51,6 +51,7 @@ import { HistoryEntryPicker } from "entities/history-entry"
 import { useRouteParamsModal } from "entities/routes"
 import { isString } from "../../core/helper"
 import { useErrorWindow, useLoadingSpinner } from "../../components/common"
+import { StorageTree } from "entities/folders"
 
 const httpMethodOptions = [
     { id: "POST", name: "POST" },
@@ -802,6 +803,11 @@ function RequestBuilder({ close, request, assignments }) {
                             className="overflow-hidden"
                             persistId="request-builder.picker"
                         >
+                            <Tab name="Test">
+                                <StorageTree
+                                    xmatch={(type) => type === "folder"}
+                                />
+                            </Tab>
                             <Tab name="Stored" active>
                                 <div className="p-2 h-full">
                                     <EntityPicker

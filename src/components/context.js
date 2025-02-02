@@ -596,7 +596,19 @@ function registerContentApi({ registry, register, apiRef }) {
         const prompts = {}
         const extracts = {}
 
+        const requestTree = getRequestTree(assignments)
+        d("RT", requestTree)
+
         const { method } = request
+
+        // bilde resolved für baseRequest
+        //   - prompts (die nicht im Cache?) merken
+        //   - extracts (reqId => section => path für resolve-key)
+
+        // durchlaufe request tree ids:
+        //   baseReq <= value aus reqX <= value aus reqY
+        //     => reqY abfeuern und die Werte für die extract-Assignments von reqX cachen
+        //     => reqX abfeuern und die Werte für die extract-Assignments aus baseRequest cachen
 
         const defaults = apiRef.current.getDefaults(request.defaults)
         const queryAssignments = getAssignments(
@@ -632,7 +644,7 @@ function registerContentApi({ registry, register, apiRef }) {
             headersAssignments,
             bodyAssignments,
             prompts,
-            extracts,
+            extracts: getExtractsFromTree(requestTree),
             hasBody
         }
     }
@@ -871,9 +883,91 @@ function registerContentApi({ registry, register, apiRef }) {
         }
     }
 
+    function getRequestTree(
+        assignments,
+        id,
+        level = 0,
+        pathIds = [],
+        id2details = {}
+    ) {
+        const keys = ["headers", "body", "query"]
+
+        const requestIndex = apiRef.current.requestIndex
+        const children = []
+        for (const key of keys) {
+            for (const [name, item] of Object.entries(assignments[key])) {
+                const { action, assignmentValue } = item
+                if (action === ASSIGNMENT.ACTION.EXTRACT) {
+                    const { request, from, path, code } =
+                        getExtractParts(assignmentValue)
+                    const requestName = apiRef.current.getRequestName(request)
+                    if (pathIds.includes(request))
+                        throw Error(
+                            `Cyclic dependency for request "${requestName}"`
+                        )
+
+                    let visited = !!id2details[request]
+                    if (!visited) {
+                        id2details[request] = { expect: code, extractions: {} }
+                    }
+                    const details = id2details[request]
+                    if (details.expect !== code)
+                        throw Error(
+                            `Request ${requestName} cannot have different expected status`
+                        )
+                    details.extractions[name] = [
+                        assignmentValue,
+                        key,
+                        from,
+                        ...getParsedJson(path)
+                    ]
+                    if (visited) continue
+
+                    const index = requestIndex.getEntityByPropValue(
+                        "value",
+                        request
+                    )
+                    if (index === undefined)
+                        throw Error(`Invalid request id "${request}"`)
+
+                    const reqDetails = requestIndex.getEntityObject(index)
+                    children.push(
+                        getRequestTree(
+                            reqDetails.assignments,
+                            request,
+                            level + 1,
+                            [...pathIds, request],
+                            id2details
+                        )
+                    )
+                    continue
+                }
+                if (action !== ASSIGNMENT.ACTION.PROMPT) continue
+            }
+        }
+        return { id, children, level, details: id2details[id] }
+    }
+
+    const getExtractsFromTree = (tree, flat = []) => {
+        const { children, id, level, details } = tree
+
+        if (level > 0) {
+            const index = level - 1
+            if (flat.length <= index) {
+                flat.push({})
+            }
+            flat[index][id] = details
+        }
+        for (const child of children) {
+            getExtractsFromTree(child, flat)
+        }
+        return flat
+    }
+
     const promptInputsAndResolve = async (fetchOp) => {
         const { request, assignments, env } = fetchOp
         const { openPrompt, closePrompt } = registry()
+
         const {
             prompts,
             extracts,
@@ -936,7 +1030,7 @@ function registerContentApi({ registry, register, apiRef }) {
             query: { ...queryAssignments, ...query },
             body: { ...bodyAssignments, ...body }
         }
-        fetchOp.extracts = Object.keys(extracts).length ? [extracts] : []
+        fetchOp.extracts = extracts
     }
 
     const getPathValue = (obj, path) => {
