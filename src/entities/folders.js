@@ -6,9 +6,9 @@ import { Filterbox } from "components/common"
 import { ButtonGroup, FormGrid, InputCells, Button } from "components/form"
 import {
     arrowMove,
-    useManagedContainer,
-    useItemFocusOnContainer,
-    usePickerOnContainer,
+    useItemContainer,
+    useFocusOnItemContainer,
+    usePickerOnItemContainer,
     useUpdateOnEntityIndexChanges
 } from "components/common"
 import { useModalWindow } from "components/modal"
@@ -268,7 +268,7 @@ function StorageTree({
             }
         }
     }
-    const container = useManagedContainer({
+    const container = useItemContainer({
         items: nodes
     })
     const moveFocus = (container, x, y, shift) => {
@@ -281,8 +281,8 @@ function StorageTree({
         }
         return arrowMove.prevNext(container, x, y, shift)
     }
-    useItemFocusOnContainer({ container, moveFocus })
-    usePickerOnContainer({ container, pick })
+    useFocusOnItemContainer({ container, moveFocus })
+    usePickerOnItemContainer({ container, pick })
 
     const render = (item) => item.name
     const elems = []

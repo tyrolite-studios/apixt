@@ -38,9 +38,9 @@ import {
     useGetAttrWithDimProps,
     useGetTabIndex,
     useMarkInvalid,
-    useManagedContainer,
-    useItemFocusOnContainer,
-    usePickerOnContainer
+    useItemContainer,
+    useFocusOnItemContainer,
+    usePickerOnItemContainer
 } from "./common"
 
 function useFocusKeyBindings({ keyHandlers = [], disabled = false, direct }) {
@@ -640,9 +640,9 @@ function Picker({
     cls.addIf(styled && divided, "divide-y")
     cls.addIf(styled && divided && colored, "divide-input-border")
 
-    const container = useManagedContainer({ items: options })
-    useItemFocusOnContainer({ container })
-    usePickerOnContainer({ container, pick })
+    const container = useItemContainer({ items: options })
+    useFocusOnItemContainer({ container })
+    usePickerOnItemContainer({ container, pick })
     const divAttr = useGetAttrWithDimProps(props)
     // cls.addIf(!divAttr.style?.width && !full, "max-w-max")
     cls.addIf(full, "w-full")
@@ -1464,8 +1464,8 @@ function ButtonGroup({
         buttons.length && buttons[0].activated !== undefined
             ? { items: buttons.map((x) => x.activated) }
             : { count: buttons.length }
-    const container = useManagedContainer(containerProps)
-    useItemFocusOnContainer({ container, cursor: false })
+    const container = useItemContainer(containerProps)
+    useFocusOnItemContainer({ container, cursor: false })
 
     if (active !== undefined) {
         container.selection = active !== undefined ? [active] : []

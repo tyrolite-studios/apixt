@@ -182,19 +182,19 @@ function ListTest({ entityIndex }) {
     useUpdateOnEntityIndexChanges(entityIndex)
     const items = entityIndex.getView({}).matches.slice(0, 10)
 
-    const container = useManagedContainer({ items })
+    const container = useItemContainer({ items })
     const { open, Modals } = useConfirmation()
     const [selection, setSelection] = useState([])
-    useItemFocusOnContainer({
+    useFocusOnItemContainer({
         container,
         item2value: (item) => entityIndex.getEntityPropValue(item, "value"),
         value2item: (value) => entityIndex.getEntityByPropValue("value", value)
     })
-    usePickerOnContainer({
+    usePickerOnItemContainer({
         container,
         pick: (entity) => entityIndex.getEntityObject(entity)
     })
-    useSelectionOnContainer({
+    useSelectionOnItemContainer({
         container,
         selection,
         setSelection
@@ -251,7 +251,7 @@ function ListTest({ entityIndex }) {
     )
 }
 
-function useManagedContainer({
+function useItemContainer({
     items,
     count,
     item2value = (x) => x,
@@ -312,7 +312,7 @@ const arrowMove = {
     }
 }
 
-function usePickerOnContainer({ container, pick }) {
+function usePickerOnItemContainer({ container, pick }) {
     const pickIndex = (index) => {
         pick(container.item2value(container.items[index]))
     }
@@ -335,7 +335,7 @@ function usePickerOnContainer({ container, pick }) {
     })
 }
 
-function useSelectionOnContainer({
+function useSelectionOnItemContainer({
     container,
     min = 0,
     max,
@@ -411,7 +411,7 @@ function useSelectionOnContainer({
     }
 }
 
-function useItemFocusOnContainer({
+function useFocusOnItemContainer({
     container,
     cursor = true,
     moveFocus = arrowMove.prevNext
@@ -1282,12 +1282,12 @@ function EntityPicker({
         filter
     })
 
-    const container = useManagedContainer({
+    const container = useItemContainer({
         items: matches,
         item2value: (item) => entityIndex.getEntityObject(item)
     })
-    useItemFocusOnContainer({ container })
-    usePickerOnContainer({
+    useFocusOnItemContainer({ container })
+    usePickerOnItemContainer({
         container,
         pick
     })
@@ -2080,10 +2080,10 @@ export {
     useComponentUpdate,
     useMounted,
     useDebugMount,
-    useManagedContainer,
-    useSelectionOnContainer,
-    useItemFocusOnContainer,
-    usePickerOnContainer,
+    useItemContainer,
+    useSelectionOnItemContainer,
+    useFocusOnItemContainer,
+    usePickerOnItemContainer,
     useGetTabIndex,
     useGetAttrWithDimProps,
     useHotKeys,
