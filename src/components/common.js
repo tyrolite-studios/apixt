@@ -314,7 +314,7 @@ const arrowMove = {
 
 function usePickerOnContainer({ container, pick }) {
     const pickIndex = (index) => {
-        pick(container.items[index])
+        pick(container.item2value(container.items[index]))
     }
 
     container.attr.addListeners({
@@ -470,6 +470,8 @@ function useItemFocusOnContainer({
             ) {
                 minSelected++
             }
+            // no item was found, so we select the first one
+            if (minSelected >= container.count) minSelected = 0
         }
         const newTabIndex = minSelected
 
@@ -1225,112 +1227,6 @@ function ColorBox({ color, width, height, className }) {
     )
 }
 
-function EntityList2({
-    className,
-    itemClassName,
-    render = (item) => item.value,
-    pick = () => {},
-    entityIndex,
-    full,
-    selected,
-    setSelected,
-    wrap = true,
-    bordered = true,
-    divided = true,
-    padded = true,
-    sized = true,
-    colored = true,
-    styled = true,
-    emptyMsg = "No items available",
-    ...props
-}) {
-    let [active, setActive] = useState(
-        props.active === undefined || entityIndex.getLength() === 0
-            ? null
-            : props.active
-    )
-    const entities = entityIndex.getEntityObjects()
-    if (props.setActive !== undefined) {
-        setActive = props.setActive
-        active = props.active
-    }
-    const update = useUpdateOnEntityIndexChanges(entityIndex)
-
-    const cls = new ClassNames("stack-v overflow-y-auto", className)
-    cls.addIf(styled && colored, "bg-input-bg text-input-text")
-    cls.addIf(styled && bordered, "border")
-    cls.addIf(styled && bordered && colored, "border-input-border")
-    cls.addIf(styled && divided, "divide-y")
-    cls.addIf(styled && divided && colored, "divide-input-border")
-    const stackRef = useRef(null)
-    const { focusItem, hasFocus, attr, tabIndex, ...focus } = useFocusManager({
-        setActive: (index) => {
-            if (!selected.includes(index)) {
-                setSelected([...selected, index])
-            } else {
-                setSelected(selected.filter((item) => index !== item))
-            }
-            setActive(index)
-        },
-        update,
-        active,
-        deselect: true,
-        divRef: stackRef,
-        count: entityIndex.length,
-        handleSpace: true
-    })
-    const divAttr = useGetAttrWithDimProps(props)
-    cls.addIf(!divAttr.style?.width && !full, "max-w-max")
-    cls.addIf(full, "w-full")
-    cls.addIf(!wrap, "text-nowrap")
-
-    const elems = []
-    let i = 0
-
-    for (const option of entities) {
-        const isFocused = hasFocus && i === tabIndex
-
-        const itemCls = new ClassNames(
-            "hover:brightness-110 focus:outline-none focus:ring focus:ring-inset focus:ring-focus-border focus:border-0",
-            itemClassName
-        )
-        itemCls.addIf(styled && sized, "text-sm")
-        itemCls.addIf(styled && padded, "p-2")
-        itemCls.addIf(!wrap, "truncate")
-        if (styled && colored) {
-            itemCls.addIf(
-                selected.includes(i),
-                "bg-active-bg text-active-text",
-                "bg-input-bg text-input-text"
-            )
-        }
-        const itemAttr = focus.itemAttr(i)
-        itemAttr.style = {
-            cursor: "pointer"
-        }
-        if (isFocused) {
-            itemAttr.style.zIndex = 40
-        }
-        elems.push(
-            <Div key={i} className={itemCls.value} {...itemAttr}>
-                {render(option)}
-            </Div>
-        )
-        i++
-    }
-    return (
-        <div ref={stackRef} className={cls.value} {...attr} {...divAttr}>
-            {elems.length ? (
-                elems
-            ) : (
-                <Centered className="text-xs text-input-text/75 p-2">
-                    {emptyMsg}
-                </Centered>
-            )}
-        </div>
-    )
-}
-
 function useUpdateOnEntityIndexChanges(entityIndex, callback) {
     const update = useComponentUpdate()
 
@@ -1378,28 +1274,25 @@ function EntityPicker({
     render = (item) => item.name,
     ...props
 }) {
-    const update = useUpdateOnEntityIndexChanges(entityIndex)
+    useUpdateOnEntityIndexChanges(entityIndex)
 
     const [filter, setFilter] = useState("")
     const { matches, isFiltered } = entityIndex.getView({
         match: matcher,
         filter
     })
-    const items = entityIndex.getEntityObjects(matches)
 
-    const stackRef = useRef(null)
-
-    const { focusItem, hasFocus, attr, tabIndex, ...focus } = useFocusManager({
-        setActive: (index) => {
-            pick(items[index])
-        },
-        update,
-        active: -1,
-        deselect: true,
-        divRef: stackRef,
-        count: items.length,
-        handleSpace: true
+    const container = useManagedContainer({
+        items: matches,
+        item2value: (item) => entityIndex.getEntityObject(item)
     })
+    useItemFocusOnContainer({ container })
+    usePickerOnContainer({
+        container,
+        pick
+    })
+
+    const items = entityIndex.getEntityObjects(matches)
 
     const cls = ClassNames("stack-v overflow-auto auto", className)
     cls.addIf(styled && colored, "bg-input-bg text-input-text")
@@ -1433,9 +1326,8 @@ function EntityPicker({
         )
     }
 
-    for (const item of items) {
-        const isFocused = hasFocus && i === tabIndex
-
+    for (const [index, entity] of items.entries()) {
+        const item = container.getItem(index)
         const itemCls = new ClassNames(
             "focus:outline-none focus:ring focus:ring-inset focus:ring-focus-border focus:border-0 hover:brightness-110",
             itemClassName
@@ -1445,16 +1337,9 @@ function EntityPicker({
         itemCls.addIf(!wrap, "truncate")
         itemCls.addIf(styled && colored, "bg-input-bg text-input-text")
 
-        const itemAttr = focus.itemAttr(i)
-        itemAttr.style = {
-            cursor: "pointer"
-        }
-        if (isFocused) {
-            itemAttr.style.zIndex = 40
-        }
         let elem = (
-            <Div key={item.index} className={itemCls.value} {...itemAttr}>
-                {render(item)}
+            <Div key={index} className={itemCls.value} {...item.attr.props}>
+                {render(entity)}
             </Div>
         )
         elems.push(elem)
@@ -1471,7 +1356,7 @@ function EntityPicker({
     )
 
     const itemsDiv = (
-        <Div ref={stackRef} className={cls.value} {...attr}>
+        <Div className={cls.value} {...container.attr.props}>
             {elems}
         </Div>
     )
@@ -2203,7 +2088,6 @@ export {
     useGetAttrWithDimProps,
     useHotKeys,
     useCallAfterwards,
-    useFocusManager,
     useExtractDimProps,
     useMarkInvalid,
     useConfirmation,
@@ -2224,5 +2108,6 @@ export {
     BodyTextarea,
     JsonPathInput,
     Filterbox,
-    ListTest
+    ListTest,
+    arrowMove
 }

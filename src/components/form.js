@@ -37,10 +37,10 @@ import {
     useExtractDimProps,
     useGetAttrWithDimProps,
     useGetTabIndex,
-    useFocusManager,
     useMarkInvalid,
     useManagedContainer,
-    useItemFocusOnContainer
+    useItemFocusOnContainer,
+    usePickerOnContainer
 } from "./common"
 
 function useFocusKeyBindings({ keyHandlers = [], disabled = false, direct }) {
@@ -592,13 +592,12 @@ function Radio({
     const invalid = !ids.includes(value)
 
     const buttons = []
-    let index = 0
+    let active = value
     let i = 0
     for (const { id, name } of options) {
         const found = !invalid && id === value
         buttons.push({
             name,
-            tab,
             invalid,
             autoFocus: !autoFocus ? null : true,
             disabled,
@@ -612,17 +611,10 @@ function Radio({
             value,
             activated: id
         })
-        if (found) index = id //i
+        if (found) active = id
         i++
     }
-    d(buttons, options)
-    return (
-        <ButtonGroup
-            active={d(invalid ? 0 : index, "active")}
-            {...props}
-            buttons={d(buttons, "buttons")}
-        />
-    )
+    return <ButtonGroup active={active} {...props} buttons={buttons} />
 }
 
 function Picker({
@@ -647,28 +639,18 @@ function Picker({
     cls.addIf(styled && bordered && colored, "border-input-border")
     cls.addIf(styled && divided, "divide-y")
     cls.addIf(styled && divided && colored, "divide-input-border")
-    const stackRef = useRef(null)
-    const setActive = (index) => {
-        const option = options[index]
-        pick(option)
-    }
-    const { focusItem, hasFocus, attr, tabIndex, ...focus } = useFocusManager({
-        setActive,
-        active: 0,
-        divRef: stackRef,
-        count: options.length,
-        handleSpace: true
-    })
+
+    const container = useManagedContainer({ items: options })
+    useItemFocusOnContainer({ container })
+    usePickerOnContainer({ container, pick })
     const divAttr = useGetAttrWithDimProps(props)
-    cls.addIf(!divAttr.style?.width && !full, "max-w-max")
+    // cls.addIf(!divAttr.style?.width && !full, "max-w-max")
     cls.addIf(full, "w-full")
     cls.addIf(!wrap, "text-nowrap")
 
     const elems = []
-    let i = 0
-    for (const option of options) {
-        const isFocused = hasFocus && i === tabIndex
-
+    for (const [index, option] of options.entries()) {
+        const item = container.getItem(index)
         const itemCls = new ClassNames(
             "hover:brightness-110 focus:outline-none focus:ring focus:ring-inset focus:ring-focus-border focus:border-0",
             itemClassName
@@ -678,27 +660,19 @@ function Picker({
         itemCls.addIf(!wrap, "truncate")
         if (styled && colored) {
             itemCls.addIf(
-                isFocused,
+                item.isFocused,
                 "bg-active-bg text-active-text",
                 "bg-input-bg text-input-text"
             )
         }
-        const itemAttr = focus.itemAttr(i)
-        itemAttr.style = {
-            cursor: "pointer"
-        }
-        if (isFocused) {
-            itemAttr.style.zIndex = 40
-        }
         elems.push(
-            <Div key={i} className={itemCls.value} {...itemAttr}>
+            <Div key={index} className={itemCls.value} {...item.attr.props}>
                 {renderer(option)}
             </Div>
         )
-        i++
     }
     return (
-        <div ref={stackRef} className={cls.value} {...attr} {...divAttr}>
+        <div className={cls.value} {...container.attr.props}>
             {elems}
         </div>
     )
@@ -1523,93 +1497,6 @@ function ButtonGroup({
     }
     return (
         <Div {...container.attr.props} className={cls.value}>
-            {elems}
-        </Div>
-    )
-}
-
-function ButtonGroup2({
-    className,
-    buttons = [],
-    gapped = true,
-    wrap = true,
-    buttonProps = {},
-    autoFocus,
-    active,
-    rowChange,
-    lastTabIndex,
-    setLastTabIndex,
-    ...props
-}) {
-    const stackRef = useRef(null)
-    const { focusItem, attr, refocus, ...focus } = useFocusManager({
-        divRef: stackRef,
-        rowChange,
-        count: buttons.length,
-        lastTabIndex,
-        setLastTabIndex,
-        active: active !== undefined ? active : 0,
-        setActive: () => {}
-    })
-    const style = useExtractDimProps(props)
-
-    const cls = new ClassNames("stack-h", className)
-    cls.addIf(gapped, "gap-2")
-    cls.addIf(wrap, "flex-wrap", "flex-nowrap overflow-auto")
-
-    const elems = []
-    let i = 0
-
-    for (const button of buttons) {
-        const curr = i
-        const itemAttr = focus.itemAttr(curr)
-
-        const { tab, onMouseDown, onFocus } = itemAttr
-        const elemProps = {
-            ...buttonProps,
-            ...button,
-            tab,
-            autoFocus
-        }
-
-        if (onFocus) {
-            elemProps.onFocus = onFocus
-        }
-        let onPressedNew = null
-        if (!elemProps.readOnly) {
-            const oldHandler = elemProps.onPressed
-            if (oldHandler) {
-                onPressedNew = (e) => {
-                    oldHandler(e)
-                    onMouseDown(e)
-                }
-            } else {
-                onPressedNew = onMouseDown
-            }
-        }
-        elemProps.onPressed = onPressedNew
-        elems.push(
-            <Button
-                key={i}
-                {...elemProps}
-                tabControlled
-                refocus={refocus}
-                onPressedEnd={(outside) => {
-                    if (elemProps.onPressedEnd) {
-                        elemProps.onPressedEnd(outside)
-                    }
-                    refocus()
-                }}
-            />
-        )
-        i++
-    }
-
-    /*
-     */
-
-    return (
-        <Div ref={stackRef} className={cls.value} style={style} {...attr}>
             {elems}
         </Div>
     )

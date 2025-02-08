@@ -159,7 +159,7 @@ function PromptDiv() {
 }
 
 function registerRouteApi({ config }) {
-    const routeIndex = new RouteIndex(config.routes)
+    const routeIndex = new RouteIndex(config.routes ?? [])
 
     const getMatchingRoutePath = (matchApi, resolvedFullpath, method) => {
         const [resolvedPath] = resolvedFullpath.split("?")

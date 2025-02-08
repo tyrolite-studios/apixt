@@ -1,18 +1,14 @@
 import { useState, useRef, useMemo } from "react"
 import { MappingIndex, TreeIndex } from "core/entity"
 import { Icon, Div } from "components/layout"
-import { d, ClassNames } from "core/helper"
+import { d, clamp, ClassNames } from "core/helper"
 import { Filterbox } from "components/common"
+import { ButtonGroup, FormGrid, InputCells, Button } from "components/form"
 import {
-    ButtonGroup,
-    FormGrid,
-    InputCells,
-    SelectCells,
-    Button
-} from "components/form"
-import {
-    useComponentUpdate,
-    useFocusManager,
+    arrowMove,
+    useManagedContainer,
+    useItemFocusOnContainer,
+    usePickerOnContainer,
     useUpdateOnEntityIndexChanges
 } from "components/common"
 import { useModalWindow } from "components/modal"
@@ -247,9 +243,7 @@ function StorageTree({
     const FolderFormModal = useModalWindow()
 
     const [filter, setFilter] = useState("")
-    const stackRef = useRef(null)
     useUpdateOnEntityIndexChanges(requestStorage)
-    const update = useComponentUpdate()
 
     const nodes = requestStorage.getNodes({
         filter,
@@ -260,7 +254,8 @@ function StorageTree({
               }
             : match
     })
-    const pick = ({ index, nodeType }) => {
+    const pick = (elem) => {
+        const { nodeType, index } = elem
         if (nodeType === "folder") {
             if (folderSelect) {
                 if (props.pick) {
@@ -273,34 +268,26 @@ function StorageTree({
             }
         }
     }
-
-    let currActive = -1
-    if (props.active !== undefined) {
-        currActive = props.active
-    }
-
-    const { focusItem, hasFocus, attr, tabIndex, ...focus } = useFocusManager({
-        setActive:
-            props.setActive !== undefined
-                ? (index) => {
-                      props.setActive(index)
-                  }
-                : (index) => {
-                      pick(d(nodes[index], "PICK"))
-                  },
-        update,
-        active: d(props.active ?? -1),
-        deselect: true,
-        divRef: stackRef,
-        count: nodes.length,
-        handleSpace: true
+    const container = useManagedContainer({
+        items: nodes
     })
+    const moveFocus = (container, x, y, shift) => {
+        const { nodeType, index, closed } = nodes[container.tabIndex]
+        if (nodeType === "folder") {
+            if ((closed && x > 0) || (!closed && x < 0)) {
+                requestStorage.toggleFolder(index)
+                return container.tabIndex
+            }
+        }
+        return arrowMove.prevNext(container, x, y, shift)
+    }
+    useItemFocusOnContainer({ container, moveFocus })
+    usePickerOnContainer({ container, pick })
 
     const render = (item) => item.name
     const elems = []
-    let i = 0
-    for (const item of nodes) {
-        const isFocused = hasFocus && i === tabIndex
+    for (const [index, node] of nodes.entries()) {
+        const item = container.getItem(index)
 
         const itemCls = new ClassNames(
             "focus:outline-none focus:ring focus:ring-inset focus:ring-focus-border focus:border-0 hover:brightness-110"
@@ -309,26 +296,13 @@ function StorageTree({
         itemCls.addIf(!wrap, "truncate")
         itemCls.addIf(
             styled && colored,
-            props.setActive && i === props.active
+            props.setActive && item.marked
                 ? "bg-active-bg text-active-text"
                 : "bg-input-bg text-input-text"
         )
-
-        const itemAttr = focus.itemAttr(i)
-        itemAttr.style = {
-            cursor: "pointer"
-        }
-        if (isFocused) {
-            itemAttr.style.zIndex = 40
-        }
-
-        const { nodeType, level, closed, path } = item
+        const { nodeType, level, closed, path } = node
         let elem = (
-            <Div
-                key={nodeType + " " + item.index}
-                className={itemCls.value}
-                {...itemAttr}
-            >
+            <Div key={index} className={itemCls.value} {...item.attr.props}>
                 <div className="stack-h py-1 px-2 gap-2">
                     <div className="stack-h">
                         <LevelSpacer level={level} />
@@ -352,16 +326,14 @@ function StorageTree({
                                 (nodeType !== "leaf" ? " opacity-50" : "")
                             }
                         >
-                            {render(item)}
+                            {render(node)}
                         </div>
                     </div>
                 </div>
             </Div>
         )
         elems.push(elem)
-        i++
     }
-
     const buttons = [
         {
             icon: "build",
@@ -388,11 +360,10 @@ function StorageTree({
         "stack-v w-full border border-input-border bg-input-bg text-input-text auto"
     )
     const itemsDiv = (
-        <Div ref={stackRef} className={cls.value} {...attr}>
+        <Div {...container.attr.props} className={cls.value}>
             {elems}
         </Div>
     )
-
     return (
         <>
             <div className="stack-v p-2 h-full">
