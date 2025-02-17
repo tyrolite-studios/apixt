@@ -14,6 +14,7 @@ import {
 import { useModalWindow } from "components/modal"
 import { OkCancelLayout } from "components/layout"
 import { CustomCells } from "../components/form"
+import { useSelectionOnItemContainer } from "../components/common"
 
 class FolderIndex extends MappingIndex {
     constructor(model) {
@@ -137,24 +138,28 @@ function LevelSpacer({ level }) {
     return <Div width={px + "px"} />
 }
 
-function FolderSelector({ close, folderIndex, save }) {
-    const [active, setActiveRaw] = useState(0)
-    const setActive = (value) => setActiveRaw(value === active ? -1 : value)
+function FolderSelector({ folder, close, folderIndex, save }) {
+    const [selection, setSelection] = useState(() => {
+        if (folder === undefined) return []
+        return ["folder " + folder]
+    })
+
     return (
         <OkCancelLayout
             cancel={close}
             ok={() => {
-                save(
-                    active === -1
-                        ? "0"
-                        : folderIndex.getEntityPropValue("value", active)
-                )
+                if (selection.length === 0) {
+                    save("0")
+                    return
+                }
+                const [, value] = selection[0].split(" ", 2)
+                save(value)
             }}
         >
             <StorageTree
                 folderIndex={folderIndex}
-                active={active}
-                setActive={setActive}
+                selection={selection}
+                setSelection={setSelection}
                 folderSelect
             />
         </OkCancelLayout>
@@ -166,37 +171,13 @@ function FolderForm({ model, save, close, folderIndex, match }) {
     const [name, setName] = useState(model.name)
     const [parent, setParent] = useState(model.parent ?? "0")
 
-    /*
-    const folderOptions = useMemo(() => {
-        const indices = folderIndex.getView({ match }).matches
-
-        const options = [
-            { id: "0", name: "" },
-            ...folderIndex.getEntityObjects(indices).map((item) => {
-                const { name, value, path } = item
-                let level = path.length
-
-                let pad = ""
-                if (level > 0) {
-                    level--
-                }
-                while (level > 0) {
-                    pad += "\u00A0\u00A0\u00A0\u00A0"
-                    level--
-                }
-                return { id: value, name: pad + name }
-            })
-        ]
-        return d(options)
-    }, [])
-    */
-
     const openSelector = () => {
         FolderSelectorModal.open({
             folderIndex,
+            folder: parent,
             match,
             save: (index) => {
-                d(index)
+                setParent(index)
                 FolderSelectorModal.close()
             }
         })
@@ -237,6 +218,8 @@ function StorageTree({
     wrap = true,
     colored = true,
     folderSelect = false,
+    selection,
+    setSelection,
     match,
     ...props
 }) {
@@ -269,7 +252,13 @@ function StorageTree({
         }
     }
     const container = useItemContainer({
-        items: nodes
+        items: nodes,
+        item2value: (x) => {
+            return `${x.nodeType} ${x.value}`
+        },
+        value2item: (x) => {
+            d("???")
+        }
     })
     const moveFocus = (container, x, y, shift) => {
         const { nodeType, index, closed } = nodes[container.tabIndex]
@@ -282,7 +271,16 @@ function StorageTree({
         return arrowMove.prevNext(container, x, y, shift)
     }
     useFocusOnItemContainer({ container, moveFocus })
-    usePickerOnItemContainer({ container, pick })
+    if (selection) {
+        useSelectionOnItemContainer({
+            container,
+            max: 1,
+            selection,
+            setSelection
+        })
+    } else if (pick) {
+        usePickerOnItemContainer({ container, pick })
+    }
 
     const render = (item) => item.name
     const elems = []
@@ -296,7 +294,7 @@ function StorageTree({
         itemCls.addIf(!wrap, "truncate")
         itemCls.addIf(
             styled && colored,
-            props.setActive && item.marked
+            item.marked
                 ? "bg-active-bg text-active-text"
                 : "bg-input-bg text-input-text"
         )

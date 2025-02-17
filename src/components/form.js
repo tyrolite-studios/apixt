@@ -40,7 +40,8 @@ import {
     useMarkInvalid,
     useItemContainer,
     useFocusOnItemContainer,
-    usePickerOnItemContainer
+    usePickerOnItemContainer,
+    FocusRowContext
 } from "./common"
 
 function useFocusKeyBindings({ keyHandlers = [], disabled = false, direct }) {
@@ -1458,6 +1459,7 @@ function ButtonGroup({
     rowChange,
     lastTabIndex,
     setLastTabIndex,
+    rowIndex,
     ...props
 }) {
     const containerProps =
@@ -1465,7 +1467,7 @@ function ButtonGroup({
             ? { items: buttons.map((x) => x.activated) }
             : { count: buttons.length }
     const container = useItemContainer(containerProps)
-    useFocusOnItemContainer({ container, cursor: false })
+    useFocusOnItemContainer({ container, cursor: false, rowIndex })
 
     if (active !== undefined) {
         container.selection = active !== undefined ? [active] : []

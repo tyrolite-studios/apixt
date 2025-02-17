@@ -1,4 +1,11 @@
-import { useRef, useState, useEffect, useContext, useMemo } from "react"
+import {
+    useRef,
+    useState,
+    useEffect,
+    useContext,
+    useMemo,
+    createContext
+} from "react"
 import { useModalWindow } from "./modal"
 import {
     ClassNames,
@@ -179,6 +186,8 @@ function useCallAfterwards() {
 const doubleClickMs = 200
 
 function ListTest({ entityIndex }) {
+    return <ButtonGroups />
+
     useUpdateOnEntityIndexChanges(entityIndex)
     const items = entityIndex.getView({}).matches.slice(0, 10)
 
@@ -337,6 +346,7 @@ function usePickerOnItemContainer({ container, pick }) {
 
 function useSelectionOnItemContainer({
     container,
+    events = true,
     min = 0,
     max,
     selection,
@@ -370,21 +380,25 @@ function useSelectionOnItemContainer({
         }
     }
 
-    container.attr.addListeners({
-        onKeyDown: (e) => {
-            if (!container.focused) return
+    if (events) {
+        container.attr.addListeners({
+            onKeyDown: (e) => {
+                if (!container.focused) return
 
-            if (e.key === " ") {
-                toggle(container.tabIndex)
-                e.preventDefault()
+                if (e.key === " ") {
+                    toggle(container.tabIndex)
+                    e.preventDefault()
+                }
             }
-        }
-    })
+        })
+    }
 
     container.addItemBuilder((index, item) => {
-        item.attr.addListener("onClick", (e) => {
-            toggle(index)
-        })
+        if (events) {
+            item.attr.addListener("onClick", (e) => {
+                toggle(index)
+            })
+        }
         const value = item2value(container.items[index])
         item.marked = selection.includes(value)
     })
@@ -395,6 +409,7 @@ function useSelectionOnItemContainer({
     }
     if (max !== undefined) return
 
+    container.toggle = toggle
     container.selectAll = () => {
         const allValues = container.items.map((x) => item2value(x))
         setSelection(without(allValues, selection).length ? allValues : [])
@@ -411,21 +426,121 @@ function useSelectionOnItemContainer({
     }
 }
 
+const FocusRowContext = createContext(null)
+
+function FocusRowCtx({ children }) {
+    const [row, setRow] = useState(0)
+    const [lastTabIndex, setLastTabIndex] = useState(0)
+    const containerRef = useRef(null)
+
+    const refocus = () => {
+        requestAnimationFrame(() => {
+            const elems = containerRef.current.querySelectorAll(".tabbed")
+            if (elems.length) {
+                elems[elems.length - 1].focus()
+            }
+        })
+    }
+    const api = {
+        row,
+        lastTabIndex,
+        setLastTabIndex,
+        nextRow: () => {
+            const max = containerRef.current.children.length
+            setRow(row + 1 >= max ? 0 : row + 1)
+            refocus()
+        },
+        prevRow: () => {
+            setRow(
+                row === 0 ? containerRef.current.children.length - 1 : row - 1
+            )
+            refocus()
+        },
+        refocus,
+        setRow,
+        setContainer: (container) => (containerRef.current = container)
+    }
+
+    return (
+        <FocusRowContext.Provider value={api}>
+            {children}
+        </FocusRowContext.Provider>
+    )
+}
+
+function useFocusGroupsOnItemContainer({ container }) {
+    const aContext = useContext(AppContext)
+    const frContext = useContext(FocusRowContext)
+    const initCatchRef = useRef(false)
+    const levelRef = useRef(null)
+    if (levelRef.current === null) {
+        levelRef.current = aContext.getModalLevel()
+    }
+
+    container.attr.addListeners({
+        onFocus: (e) => {
+            initCatchRef.current = false
+        },
+        onBlur: (e) => {
+            if (aContext.getModalLevel() !== levelRef.current) return
+
+            initCatchRef.current = true
+            requestAnimationFrame(() => {
+                if (!container.isMounted()) return
+
+                if (initCatchRef.current) {
+                    // reset
+                    frContext.setRow(0)
+                    frContext.setLastTabIndex(0)
+                }
+                initCatchRef.current = false
+            })
+        }
+    })
+    useEffect(() => {
+        frContext.setContainer(container.ref.current)
+    }, [])
+}
+
 function useFocusOnItemContainer({
     container,
+    rowIndex,
     cursor = true,
-    moveFocus = arrowMove.prevNext
+    moveFocus
 }) {
     const aContext = useContext(AppContext)
+    let frContext = useContext(FocusRowContext)
+    if (rowIndex === undefined) frContext = undefined
     const callAfterwards = useCallAfterwards()
+
+    if (moveFocus === undefined) {
+        moveFocus = frContext
+            ? (container, x, y, shift) => {
+                  if (y === 0) return arrowMove.prevNext(container, x, y, shift)
+                  if (y > 0) {
+                      frContext.nextRow()
+                  } else {
+                      frContext.prevRow()
+                  }
+                  return frContext.lastTabIndex
+              }
+            : arrowMove.prevNext
+    }
+
     const [focused, setFocused] = useState(false)
     const [catchFocus, setCatchFocus] = useState(true)
     const [tabIndex, setTabIndexRaw] = useState(0)
     const setTabIndex = (index) => {
         setTabIndexRaw(index)
-        refocus()
+        if (frContext) {
+            frContext.setLastTabIndex(index)
+        }
+        if (tabIndex !== index || initCatchRef.current) {
+            refocus()
+        }
     }
     const initCatchRef = useRef(false)
+    const minSelectRef = useRef(0)
     const levelRef = useRef(null)
     if (levelRef.current === null) {
         levelRef.current = aContext.getModalLevel()
@@ -455,13 +570,16 @@ function useFocusOnItemContainer({
     const handleCatchedFocus = (e) => {
         if (!container.isMounted()) return
 
+        if (frContext) e.target.blur()
         // the catcher got the focus, so we can disable the focus catching
         // because from now on, we will move the focus within the container
         setCatchFocus(false)
         let minSelected = 0
         // if we have a selection then set the focus on the first item which is
         // included in the selection
-        if (container.selection && container.selection.length) {
+        if (frContext) {
+            minSelected = frContext.lastTabIndex
+        } else if (container.selection && container.selection.length) {
             while (
                 minSelected < container.count &&
                 !container.selection.includes(
@@ -474,12 +592,12 @@ function useFocusOnItemContainer({
             if (minSelected >= container.count) minSelected = 0
         }
         const newTabIndex = minSelected
+        minSelectRef.current = minSelected
 
         // the newly calculated tabIndex might differ from the last
         // so set it and move the focus to it
         setTabIndex(newTabIndex)
     }
-
     container.attr.addListeners({
         onFocus: (e) => {
             // an element within the container has the focus
@@ -526,17 +644,30 @@ function useFocusOnItemContainer({
             if (newTabIndex !== tabIndex) setTabIndex(newTabIndex)
         }
     })
+    const isTabRow = !frContext || frContext.row === rowIndex
     container.addItemBuilder((index, item) => {
         item.isFocused = tabIndex === index
-        const isCatcher = catchFocus && index === 0
-        item.attr.add("tab", (tabIndex === index && !catchFocus) || isCatcher)
+        const isCatcher =
+            catchFocus &&
+            index ===
+                (!minSelectRef.current ||
+                minSelectRef.current >= container.count
+                    ? 0
+                    : minSelectRef.current)
+        item.attr.add(
+            "tab",
+            isTabRow && ((tabIndex === index && !catchFocus) || isCatcher)
+        )
         item.attr.addListener("onMouseDown", (e) => {
             if (!container.isMounted()) return
 
             setTabIndex(index)
             setCatchFocus(false)
+            if (frContext) {
+                frContext.setRow(rowIndex)
+            }
         })
-        if (isCatcher) {
+        if (isTabRow && isCatcher) {
             item.attr.addListener("onFocus", handleCatchedFocus)
         }
         if (cursor) {
@@ -548,310 +679,6 @@ function useFocusOnItemContainer({
     container.refocus = refocus
     container.tabIndex = tabIndex
     container.setTabIndex = setTabIndex
-}
-
-function useFocusManager({
-    name,
-    treeView,
-    selector,
-    syncSelection,
-    rootSelect,
-    dblAction,
-    active,
-    rowChange,
-    items,
-    lastTabIndex,
-    pos = 0,
-    setPos = () => null,
-    page,
-    reset,
-    keyTracking = () => {},
-    handleSpace,
-    update,
-    ...props
-}) {
-    const aContext = useContext(AppContext)
-    const callAfterwards = useCallAfterwards()
-
-    const doubleRef = useRef({})
-    const [catchFocus, setCatchFocus] = useState(true)
-
-    const [focused, setFocused] = useState(false)
-    const [tabIndex, setTabIndexRaw] = useState(0)
-    const setTabIndex = (value) => {
-        // keyTracking(value)
-        setTabIndexRaw(value)
-    }
-    // if (treeView) items = treeView.getViewIndices()
-    const initCatchRef = useRef(false)
-    const autoRef = useRef(null)
-    // ??
-    const divRef = props.divRef ? props.divRef : autoRef
-    const setActive = (value) => {
-        if (value !== null) {
-            setTabIndex(getItemIndex(value))
-        }
-        selector ? selector.select(value) : props.setActive(value)
-    }
-
-    const mounted = useMounted()
-    const levelRef = useRef(null)
-    if (levelRef.current === null) {
-        levelRef.current = aContext.getModalLevel()
-    }
-    const count = items ? items.length : props.count
-    const getItem = items ? (index) => items[index] : (index) => index
-    const getItemIndex = items
-        ? (item) => items.indexOf(item)
-        : (item) => (item >= count || item < 0 ? -1 : item)
-    if (!page) {
-        page = count
-    }
-    const lastPos = Math.max(count - page, 0)
-    let currPos = pos
-    if (lastPos > 0 && currPos > lastPos) {
-        callAfterwards(setPos, lastPos)
-        currPos = lastPos
-    }
-    const refocus = () => {
-        requestAnimationFrame(() => {
-            if (!mounted.current || !divRef.current) return
-
-            const elems = divRef.current.querySelectorAll(".tabbed")
-            if (elems.length) {
-                elems[elems.length - 1].focus()
-                setCatchFocus(false)
-            }
-        })
-    }
-    // current tab index exceeds limit? then reset to last index
-    if (tabIndex !== null && count > 0 && tabIndex >= count && !catchFocus) {
-        callAfterwards(setTabIndex, count - 1)
-        callAfterwards(refocus)
-    }
-    const lastIndex = count - 1
-    const last = Math.min(lastIndex, lastPos + page - 1, currPos + page - 1)
-    const nextPageStart = currPos + page
-
-    const hasPaging = page < count
-    let activeIndex = -1
-    if (selector) {
-        for (let i = pos; i < nextPageStart; i++) {
-            if (selector.isSelected(getItem(i))) {
-                activeIndex = i
-                break
-            }
-        }
-    } else {
-        activeIndex = getItemIndex(active)
-    }
-    /*
-    if (syncSelection && treeView && selector && selector.selection) {
-        selector.syncWithTreeView(treeView, getItem)
-    }
-    */
-
-    const activateIndex = (index, e = null) => {
-        const curr = Date.now()
-        const hasEvent = e !== null
-        const { last, hadEvent, lastX, lastY } = doubleRef.current
-        let isDouble = false
-        let newX = hasEvent ? e.clientX : null
-        let newY = hasEvent ? e.clientY : null
-        if (dblAction && last && hasEvent === hadEvent) {
-            if (
-                doubleClickMs > curr - last &&
-                (!hasEvent ||
-                    (Math.abs(lastX - newX) < 10 &&
-                        Math.abs(lastY - newY) < 10))
-            ) {
-                isDouble = true
-            }
-        }
-        doubleRef.current = {
-            last: curr,
-            hadEvent: hasEvent,
-            lastX: newX,
-            lastY: newY
-        }
-        const newActive = getItem(index)
-        if (selector) {
-            const isSelected = selector.isSelected(newActive)
-            const handleClick = () => {
-                doubleRef.current.delayed = null
-                if (rootSelect && treeView && !isSelected) {
-                    selector.selectAsRoot(treeView, newActive)
-                } else {
-                    selector.select(newActive)
-                }
-            }
-
-            if (dblAction && !isDouble && isSelected) {
-                doubleRef.current.delayed = handleClick
-                setTimeout(() => {
-                    if (doubleRef.current.delayed) doubleRef.current.delayed()
-                }, doubleClickMs)
-            } else {
-                if (isDouble) {
-                    doubleRef.current.delayed = null
-                    dblAction(index)
-                } else handleClick()
-            }
-        } else {
-            setActive(
-                reset && newActive !== null && newActive === active
-                    ? null
-                    : newActive
-            )
-        }
-    }
-
-    const isOutsideFocus =
-        hasPaging && (activeIndex < currPos || activeIndex >= nextPageStart)
-
-    const autoFocus = (e) => {
-        if (!mounted.current) return
-
-        setCatchFocus(false)
-        const newTabIndex =
-            lastTabIndex !== undefined
-                ? lastTabIndex
-                : activeIndex === -1
-                  ? 0
-                  : activeIndex
-        setTabIndex(
-            isOutsideFocus || newTabIndex === null ? currPos : newTabIndex
-        )
-        refocus()
-    }
-    const onBlur = (e) => {
-        setFocused(false)
-        if (aContext.getModalLevel() !== levelRef.current) return
-        initCatchRef.current = true
-        requestAnimationFrame(() => {
-            if (!mounted.current) return
-            if (initCatchRef.current) {
-                setCatchFocus(true)
-                keyTracking(null)
-            }
-            initCatchRef.current = false
-        })
-    }
-    const onKeyDown = (e) => {
-        if (["ArrowLeft", "ArrowUp"].includes(e.key)) {
-            if (rowChange && e.key === "ArrowUp") {
-                rowChange("arrow", -1, tabIndex)
-            } else if (
-                treeView &&
-                e.key === "ArrowLeft" &&
-                !treeView.isLeafByViewIndex(tabIndex) &&
-                !treeView.isClosedByViewIndex(tabIndex)
-            ) {
-                treeView.toggleNodeByViewIndex(tabIndex, true)
-                return
-            }
-            if (tabIndex === 0) {
-                setTabIndex(lastIndex)
-                setPos(lastPos)
-            } else if (!hasPaging) {
-                setTabIndex(e.shiftKey ? 0 : clamp(0, tabIndex - 1))
-            } else {
-                let newPos = clamp(0, tabIndex - (e.shiftKey ? page : 1))
-                if (newPos < currPos) {
-                    setPos(clamp(0, currPos - page))
-                }
-                setTabIndex(newPos)
-            }
-            e.preventDefault()
-        } else if (["ArrowRight", "ArrowDown"].includes(e.key)) {
-            if (rowChange && e.key === "ArrowDown") {
-                rowChange("arrow", 1, tabIndex)
-            } else if (
-                treeView &&
-                e.key === "ArrowRight" &&
-                !treeView.isLeafByViewIndex(tabIndex) &&
-                treeView.isClosedByViewIndex(tabIndex)
-            ) {
-                treeView.toggleNodeByViewIndex(tabIndex, false)
-                return
-            }
-            if (tabIndex === lastIndex) {
-                setTabIndex(0)
-                setPos(0)
-            } else if (!hasPaging) {
-                setTabIndex(
-                    e.shiftKey ? lastIndex : Math.min(lastIndex, tabIndex + 1)
-                )
-            } else {
-                const newPos = Math.min(
-                    tabIndex + (e.shiftKey ? page : 1),
-                    lastIndex
-                )
-                if (newPos >= nextPageStart) {
-                    setPos(Math.min(nextPageStart, lastPos))
-                }
-                setTabIndex(newPos)
-            }
-            e.preventDefault()
-        } else if (handleSpace && e.key === " ") {
-            if (e.repeat) return
-            activateIndex(tabIndex)
-            // prevent scrolling
-            e.preventDefault()
-        } else if (rowChange && e.key === "Tab") {
-            rowChange("tab", e.shiftKey ? -1 : 1)
-            e.preventDefault()
-            return
-        } else {
-            return
-        }
-        refocus()
-    }
-    const itemAttr = (index) => {
-        const isCatcher = catchFocus && index === pos
-        const params = {
-            tab: (tabIndex === index && !catchFocus) || isCatcher,
-            onMouseDown: (e) => {
-                if (!mounted.current) return
-
-                if (rowChange) {
-                    rowChange("row", e.target)
-                }
-                setTabIndex(index)
-                activateIndex(index, e)
-                setCatchFocus(false)
-            }
-        }
-        if (isCatcher) {
-            params.onFocus = autoFocus
-        }
-        return params
-    }
-    const attr = {
-        onBlur,
-        onFocus: () => {
-            setFocused(true)
-            initCatchRef.current = false
-        },
-        onKeyDown
-    }
-    if (!props.divRef) {
-        attr.ref = divRef
-    }
-    return {
-        attr,
-        hasFocus: focused,
-        last,
-        tabIndex,
-        itemAttr,
-        refocus,
-        focusItem: tabIndex,
-        setTabIndex: (index) => {
-            setCatchFocus(false)
-            setTabIndex(index)
-        },
-        setActiveFocus: setActive
-    }
 }
 
 function DualRing({ size = 48, className }) {
@@ -1376,7 +1203,7 @@ function EntityStack({
     entityIndex,
     emptyMsg,
     actions = [],
-    itemActions = [],
+    itemActions,
     matcher,
     compact,
     render = (item) => item.name
@@ -1398,7 +1225,6 @@ function EntityStack({
         })
     }
     useHotKeys(stackRef, hotKeys)
-
     const isCompact = compact && entityIndex.length === 0
 
     return (
@@ -1449,7 +1275,7 @@ function EntityStack({
     )
 }
 
-function EntityList({
+function EntityActionList({
     className,
     itemClassName,
     render = (item) => item.value,
@@ -1471,23 +1297,10 @@ function EntityList({
     emptyMsg = "No items available",
     ...props
 }) {
-    const mounted = useMounted()
-    const [catchFocus, setCatchFocus] = useState(true)
-    const [focusRow, setFocusRow] = useState(0)
-    const [lastTabIndex, setLastTabIndex] = useState(0)
-    let [active, setActive] = useState(
-        props.active === undefined || entityIndex.getLength() === 0
-            ? null
-            : props.active
-    )
-    const entities = entityIndex.getEntityObjects(
-        matcher ? entityIndex.getView({ match: matcher }).matches : undefined
-    )
-    if (props.setActive !== undefined) {
-        setActive = props.setActive
-        active = props.active
-    }
-    const update = useUpdateOnEntityIndexChanges(entityIndex)
+    const viewOptions = matcher ? { match: matcher } : {}
+    const { matches } = entityIndex.getView(viewOptions)
+    const entities = entityIndex.getEntityObjects(matches)
+    useUpdateOnEntityIndexChanges(entityIndex)
 
     const cls = new ClassNames("stack-v overflow-y-auto", className)
     cls.addIf(styled && colored, "bg-input-bg text-input-text")
@@ -1495,28 +1308,23 @@ function EntityList({
     cls.addIf(styled && bordered && colored, "border-input-border")
     cls.addIf(styled && divided, "divide-y")
     cls.addIf(styled && divided && colored, "divide-input-border")
-    const stackRef = useRef(null)
 
-    let { focusItem, hasFocus, attr, tabIndex, ...focus } = useFocusManager({
-        setActive: (index) => {
-            if (!selected.includes(index)) {
-                setSelected([...selected, index])
-            } else {
-                setSelected(selected.filter((item) => index !== item))
-            }
-            setActive(index)
-        },
-        update,
-        active,
-        deselect: true,
-        divRef: stackRef,
-        count: entities.length,
-        handleSpace: true
+    const container = useItemContainer({
+        items: matches,
+        item2value: (x) => entityIndex.getEntityPropValue(x, "value"),
+        value2item: (x) => entityIndex.getEntityByPropValue("value", x)
     })
     if (itemActions) {
-        attr = {}
-        tabIndex = -1
+        useFocusGroupsOnItemContainer({ container })
+    } else {
+        useFocusOnItemContainer({ container })
     }
+    useSelectionOnItemContainer({
+        container,
+        events: false,
+        selection: selected,
+        setSelection: setSelected
+    })
 
     const divAttr = useGetAttrWithDimProps(props)
     cls.addIf(!divAttr.style?.width && !full, "max-w-max")
@@ -1525,106 +1333,22 @@ function EntityList({
 
     let getItemActions = () => []
     if (itemActions) {
-        const refocus = () => {
-            const elems = stackRef.current.querySelectorAll(".focus-row")
-            const elem = elems[focusRow].querySelector(".tabbed")
-            elem.focus()
-            setCatchFocus(false)
-        }
-
-        const onBlur = () => {
-            requestAnimationFrame(() => {
-                if (!mounted.current || !stackRef.current) return
-
-                if (!stackRef.current.contains(document.activeElement)) {
-                    setCatchFocus(true)
-                    setLastTabIndex(0)
-                    setFocusRow(0)
-                }
-            })
-        }
-
-        const nextRow = (key, dir, tabIndex) => {
-            const maxRow = entityIndex.length - 1
-            if (key === "tab") {
-                const all = [...document.querySelectorAll(".tabbed")]
-                if (dir === -1) all.reverse()
-
-                let found = false
-                for (const elem of all) {
-                    if (
-                        elem === stackRef.current ||
-                        stackRef.current.contains(elem)
-                    ) {
-                        found = true
-                    } else if (found) {
-                        elem.focus()
-                        break
-                    }
-                }
-                return
-            } else if (key === "row") {
-                let elem = dir
-                let buttonElem = dir
-                while (!elem.classList.contains("focus-row")) {
-                    if (elem.tagName === "BUTTON") buttonElem = elem
-                    if (elem === stackRef.current) {
-                        elem = null
-                        break
-                    }
-                    elem = elem.parentNode
-                }
-                const rowButtons = [...elem.querySelectorAll("button")]
-                setLastTabIndex(rowButtons.indexOf(buttonElem))
-                if (elem) {
-                    const all = [
-                        ...stackRef.current.querySelectorAll(".focus-row")
-                    ]
-                    const index = all.indexOf(elem)
-                    setFocusRow(index)
-                }
-                return
-            }
-            let newRow = focusRow + dir
-            if (newRow > maxRow) {
-                newRow = 0
-            } else if (newRow < 0) {
-                newRow = maxRow
-            }
-            setFocusRow(newRow)
-            setLastTabIndex(tabIndex)
-            requestAnimationFrame(refocus)
-        }
-
-        attr.tab = entityIndex.length && catchFocus ? "true" : undefined
-        attr.onFocus = refocus
-        attr.onBlur = onBlur
-
-        getItemActions = (item) => {
+        getItemActions = (index) => {
             const buttons = []
             for (const { action, ...button } of itemActions) {
                 buttons.push({
-                    onPressed: () => action(item, selected, setSelected),
+                    onPressed: () =>
+                        action(entities[index].index, selected, setSelected),
                     ...button
                 })
             }
-            return (
-                <ButtonGroup
-                    lastTabIndex={lastTabIndex}
-                    setLastTabIndex={setLastTabIndex}
-                    rowChange={nextRow}
-                    buttons={buttons}
-                    className="focus-row"
-                />
-            )
+            return <ButtonGroup rowIndex={index} buttons={buttons} />
         }
     }
 
     const elems = []
-    let i = 0
-
-    for (const entity of entities) {
-        const isFocused = hasFocus && i === tabIndex
+    for (const [index, entity] of entities.entries()) {
+        const item = container.getItem(index)
 
         const itemCls = new ClassNames("hover:brightness-110", itemClassName)
         itemCls.addIf(
@@ -1636,43 +1360,40 @@ function EntityList({
         itemCls.addIf(!wrap, "truncate")
         if (styled && colored) {
             itemCls.addIf(
-                selected.includes(i),
+                item.marked,
                 "bg-active-bg text-active-text",
                 "bg-input-bg text-input-text"
             )
         }
-        const itemAttr = focus.itemAttr(i)
-        itemAttr.style = {
-            cursor: "pointer"
-        }
-        if (isFocused) {
-            itemAttr.style.zIndex = 40
-        }
         const args = [entity]
-        // if (itemActions) args.push(getItemActions(i))
+        // if (itemActions) args.push(getItemActions(index))
         itemCls.add("auto")
 
-        let item = (
-            <Div key={entity.index} className={itemCls.value} {...itemAttr}>
+        let elem = itemActions ? (
+            <Div
+                key={entity.index}
+                {...item.attr.props}
+                className="stack-h gap-2 w-full items-start"
+            >
+                <div className="p-2">{getItemActions(index)}</div>
+                <Div className={itemCls.value}>{render(...args)}</Div>
+            </Div>
+        ) : (
+            <Div
+                key={entity.index}
+                {...item.attr.props}
+                className={itemCls.value}
+            >
                 {render(...args)}
             </Div>
         )
-        if (itemActions) {
-            item = (
-                <div key={entity.index} className="stack-h w-full">
-                    <div className="p-2">{getItemActions(entity.index)}</div>
-                    {item}
-                </div>
-            )
-        }
-        elems.push(item)
-        i++
+        elems.push(elem)
     }
 
     if (compact && !elems.length) return
 
     return (
-        <div ref={stackRef} className={cls.value} {...attr} {...divAttr}>
+        <Div className={cls.value} {...container.attr.props} {...divAttr}>
             {elems.length ? (
                 elems
             ) : (
@@ -1680,108 +1401,98 @@ function EntityList({
                     {emptyMsg}
                 </Centered>
             )}
-        </div>
+        </Div>
     )
 }
 
-function FocusMatrix({}) {
-    const [catchFocus, setCatchFocusRaw] = useState(true)
-    const [focusRow, setFocusRow] = useState(0)
-    const [lastTabIndex, setLastTabIndex] = useState(0)
-    const divRef = useRef()
+function EntityMarkerList() {
+    return <div>TODO</div>
+}
 
-    const buttons = [{ name: "Mark" }, { name: "Edit" }, { name: "Delete" }]
-
-    const items = ["Foo", "Bar", "Damn"]
-    const setCatchFocus = (value) => setCatchFocusRaw(value)
-
-    const refocus = () => {
-        const elems = divRef.current.querySelectorAll(".focus-row")
-        const elem = elems[focusRow].querySelector(".tabbed")
-        elem.focus()
-        setCatchFocus(false)
+function EntityList(props) {
+    if (props.itemActions && props.itemActions.length) {
+        return (
+            <FocusRowCtx>
+                <EntityActionList {...props} />
+            </FocusRowCtx>
+        )
     }
+    return <EntityActionList {...props} />
+}
 
-    const onBlur = () => {
-        requestAnimationFrame(() => {
-            if (!divRef.current.contains(document.activeElement)) {
-                setCatchFocus(true)
-                setLastTabIndex(0)
-                setFocusRow(0)
-            }
-        })
-    }
-
-    const nextRow = (key, dir, tabIndex) => {
-        const maxRow = items.length - 1
-        if (key === "tab") {
-            const all = [...document.querySelectorAll(".tabbed")]
-            if (dir === -1) all.reverse()
-
-            let found = false
-            for (const elem of all) {
-                if (elem === divRef.current || divRef.current.contains(elem)) {
-                    found = true
-                } else if (found) {
-                    elem.focus()
-                    break
+function ButtonGroupsInner() {
+    const { open, Modals } = useConfirmation()
+    const items = [0, 1, 2, 3]
+    const [selection, setSelection] = useState([])
+    const container = useItemContainer({
+        items
+    })
+    useFocusGroupsOnItemContainer({ container })
+    useSelectionOnItemContainer({
+        container,
+        selection,
+        setSelection,
+        events: false
+    })
+    const elems = []
+    for (const [index, entity] of items.entries()) {
+        const item = container.getItem(index)
+        const buttons = [
+            {
+                icon: "edit",
+                onPressed: () => {
+                    container.toggle(index)
                 }
-            }
-            return
-        } else if (key === "row") {
-            let elem = dir
-            let buttonElem = dir
-            while (!elem.classList.contains("focus-row")) {
-                if (elem.tagName === "BUTTON") buttonElem = elem
-                if (elem === divRef.current) {
-                    elem = null
-                    break
+            },
+            {
+                icon: "delete",
+                onPressed: () => {
+                    open({
+                        confirmed: () => {
+                            d("HEY!")
+                        }
+                    })
                 }
-                elem = elem.parentNode
-            }
-            const rowButtons = [...elem.querySelectorAll("button")]
-            setLastTabIndex(rowButtons.indexOf(buttonElem))
-            if (elem) {
-                const all = [...divRef.current.querySelectorAll(".focus-row")]
-                const index = all.indexOf(elem)
-                setFocusRow(index)
-            }
-            return
-        }
-        let newRow = focusRow + dir
-        if (newRow > maxRow) {
-            newRow = 0
-        } else if (newRow < 0) {
-            newRow = maxRow
-        }
-        setFocusRow(newRow)
-        setLastTabIndex(tabIndex)
-        requestAnimationFrame(refocus)
+            },
+            { icon: "arrow_right" }
+        ]
+        const cls = ClassNames("p-2 auto")
+        cls.addIf(
+            item.marked,
+            "bg-active-bg text-active-text",
+            "bg-input-bg text-input-text"
+        )
+        const elem = (
+            <Div key={index} {...item.attr.props}>
+                <div className="stack-h gap-2 w-full">
+                    <ButtonGroup rowIndex={index} buttons={buttons} />
+                    <Div
+                        onMouseDown={() => container.toggle(index)}
+                        className={cls.value}
+                    >
+                        {entity}
+                    </Div>
+                </div>
+            </Div>
+        )
+        elems.push(elem)
     }
 
     return (
-        <Div
-            ref={divRef}
-            tab={items.length && catchFocus}
-            className="stack-v gap-2 divide-y"
-            onFocus={refocus}
-            onBlur={onBlur}
-        >
-            {items.map((item) => {
-                return (
-                    <div key={item} className="stack-h items-center">
-                        <ButtonGroup
-                            lastTabIndex={lastTabIndex}
-                            setLastTabIndex={setLastTabIndex}
-                            rowChange={nextRow}
-                            buttons={buttons}
-                            className="focus-row"
-                        />
-                        <div className="p-2">{item}</div>
-                    </div>
-                )
-            })}
-        </Div>
+        <>
+            <Div {...container.attr.props} className="stack-v gap-2 p-2 border">
+                {elems}
+            </Div>
+            {Modals}
+        </>
+    )
+}
+
+function ButtonGroups(props) {
+    return (
+        <FocusRowCtx>
+            <ButtonGroupsInner {...props} />
+        </FocusRowCtx>
     )
 }
 
@@ -2082,6 +1793,7 @@ export {
     useDebugMount,
     useItemContainer,
     useSelectionOnItemContainer,
+    useFocusGroupsOnItemContainer,
     useFocusOnItemContainer,
     usePickerOnItemContainer,
     useGetTabIndex,
@@ -2104,10 +1816,10 @@ export {
     EntityList,
     EntityStack,
     EntityPicker,
-    FocusMatrix,
     BodyTextarea,
     JsonPathInput,
     Filterbox,
     ListTest,
-    arrowMove
+    arrowMove,
+    FocusRowContext
 }
