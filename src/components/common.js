@@ -1405,10 +1405,6 @@ function EntityActionList({
     )
 }
 
-function EntityMarkerList() {
-    return <div>TODO</div>
-}
-
 function EntityList(props) {
     if (props.itemActions && props.itemActions.length) {
         return (
@@ -1585,7 +1581,6 @@ function getPathElem(tree, path) {
 }
 
 function JsonPathBrowser({ close, loadTree, root, save, ...props }) {
-    const aContext = useContext(AppContext)
     const [ready, setReady] = useState(false)
     const [tree, setTree] = useState({})
     const [path, setPath] = useState(() => {
@@ -1821,5 +1816,6 @@ export {
     Filterbox,
     ListTest,
     arrowMove,
-    FocusRowContext
+    FocusRowContext,
+    FocusRowCtx
 }

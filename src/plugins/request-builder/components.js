@@ -51,7 +51,7 @@ import { HistoryEntryPicker } from "entities/history-entry"
 import { useRouteParamsModal } from "entities/routes"
 import { isString } from "../../core/helper"
 import { useErrorWindow, useLoadingSpinner } from "../../components/common"
-import { StorageTree } from "entities/folders"
+import { TreeNodeListManager } from "entities/folders"
 
 const httpMethodOptions = [
     { id: "POST", name: "POST" },
@@ -804,7 +804,7 @@ function RequestBuilder({ close, request, assignments }) {
                             persistId="request-builder.picker"
                         >
                             <Tab name="Test">
-                                <StorageTree
+                                <TreeNodeListManager
                                     xmatch={(type) => type === "folder"}
                                 />
                             </Tab>
