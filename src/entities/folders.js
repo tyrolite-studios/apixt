@@ -29,7 +29,7 @@ class FolderIndex extends MappingIndex {
     getEntityPropValue(index, prop) {
         if (prop === "path") {
             let value = this.items[index]
-            let path = this.value2path[value]
+            let path = this.value2path[value] ?? []
 
             return path
         }
@@ -269,180 +269,6 @@ function FolderForm({ model, save, close, folderIndex, match }) {
     )
 }
 
-function StorageTree({
-    styled = true,
-    sized = true,
-    padded = true,
-    wrap = true,
-    colored = true,
-    folderSelect = false,
-    selection,
-    setSelection,
-    match,
-    ...props
-}) {
-    const FolderFormModal = useModalWindow()
-
-    const [filter, setFilter] = useState("")
-    useUpdateOnEntityIndexChanges(requestStorage)
-
-    const nodes = requestStorage.getNodes({
-        filter,
-        match: folderSelect
-            ? (type, ...params) => {
-                  if (type !== "folder") return false
-                  return !match || match(type, ...params)
-              }
-            : match
-    })
-    const pick = (typeAndValue) => {
-        const [nodeType, value] = typeAndValue.split(" ", 2)
-        if (nodeType === "folder") {
-            if (folderSelect) {
-                if (props.pick) {
-                    props.pick(value ?? ROOT_FOLDER_ID)
-                }
-            } else {
-                const index = folderIndex.getEntityByPropValue("value", value)
-                requestStorage.toggleFolder(index)
-            }
-        }
-    }
-    const container = useItemContainer({
-        items: nodes,
-        item2value: (x) => {
-            return `${x.nodeType} ${x.value}`
-        },
-        value2item: (x) => {
-            d("???")
-        }
-    })
-    const moveFocus = (container, x, y, shift) => {
-        const { nodeType, index, closed } = nodes[container.tabIndex]
-        if (nodeType === "folder") {
-            if ((closed && x > 0) || (!closed && x < 0)) {
-                requestStorage.toggleFolder(index)
-                return container.tabIndex
-            }
-        }
-        return arrowMove.prevNext(container, x, y, shift)
-    }
-    useFocusOnItemContainer({ container, moveFocus })
-    if (selection) {
-        useSelectionOnItemContainer({
-            container,
-            max: folderSelect ? 1 : undefined,
-            selection,
-            setSelection
-        })
-    } else if (pick) {
-        usePickerOnItemContainer({ container, pick })
-    }
-
-    const render = (item) => item.name
-    const elems = []
-    for (const [index, node] of nodes.entries()) {
-        const item = container.getItem(index)
-
-        const itemCls = new ClassNames(
-            "focus:outline-none focus:ring focus:ring-inset focus:ring-focus-border focus:border-0 hover:brightness-110"
-        )
-        itemCls.addIf(styled && sized, "text-xs")
-        itemCls.addIf(!wrap, "truncate")
-        itemCls.addIf(
-            styled && colored,
-            item.marked
-                ? "bg-active-bg text-active-text"
-                : "bg-input-bg text-input-text"
-        )
-        const { nodeType, level, closed, path } = node
-        let elem = (
-            <Div key={index} className={itemCls.value} {...item.attr.props}>
-                <div className="stack-h py-1 px-2 gap-2">
-                    <div className="stack-h">
-                        <LevelSpacer level={level} />
-                        <Icon
-                            name={
-                                nodeType === "leaf"
-                                    ? "arrow_right"
-                                    : "folder" +
-                                      (closed && !folderSelect ? "" : "_open")
-                            }
-                            className={nodeType === "leaf" ? "opacity-50" : ""}
-                        />
-                    </div>
-                    <div className="stack-v auto text-xs">
-                        {nodeType === "leaf" && path && (
-                            <div className="opacity-50">{path}</div>
-                        )}
-                        <div
-                            className={
-                                "auto text-xs" +
-                                (nodeType !== "leaf" ? " opacity-50" : "")
-                            }
-                        >
-                            {render(node)}
-                        </div>
-                    </div>
-                </div>
-            </Div>
-        )
-        elems.push(elem)
-    }
-    const buttons = [
-        {
-            icon: "build",
-            onPressed: () => {
-                const model = {
-                    value: crypto.randomUUID(),
-                    closed: false,
-                    name: "",
-                    parent: "0"
-                }
-                FolderFormModal.open({
-                    model,
-                    save: (newModel) => {
-                        folderIndex.setEntityObject({ ...model, ...newModel })
-                        FolderFormModal.close()
-                    },
-                    folderIndex,
-                    match
-                })
-            }
-        }
-    ]
-    const cls = ClassNames(
-        "stack-v w-full border border-input-border bg-input-bg text-input-text auto"
-    )
-    const itemsDiv = (
-        <Div {...container.attr.props} className={cls.value}>
-            {elems}
-        </Div>
-    )
-    return (
-        <>
-            <div className="stack-v p-2 h-full">
-                {!folderSelect && (
-                    <div className="stack-h gap-2 py-1 w-full">
-                        <ButtonGroup buttons={buttons} />
-                        <div className="auto" />
-                        <Filterbox
-                            filter={filter}
-                            setFilter={setFilter}
-                            toggleSortDir={() => requestStorage.toggleSortDir()}
-                        />
-                    </div>
-                )}
-                {itemsDiv}
-            </div>
-
-            <FolderFormModal.content>
-                <FolderForm {...FolderFormModal.props} />
-            </FolderFormModal.content>
-        </>
-    )
-}
-
 function TreeNodeListInner({
     treeIndex,
     className,
@@ -537,8 +363,8 @@ function TreeNodeListInner({
         }
         usePickerOnItemContainer({ container, pick })
     }
-    const divAttr = useGetAttrWithDimProps(props)
-    cls.addIf(!divAttr.style?.width && !full, "max-w-max")
+    // const divAttr = useGetAttrWithDimProps(props)
+    // cls.addIf(!divAttr.style?.width && !full, "max-w-max")
     cls.addIf(full, "w-full")
     cls.addIf(!wrap, "text-nowrap")
 
@@ -632,7 +458,11 @@ function TreeNodeListInner({
     if (compact && !elems.length) return
 
     return (
-        <Div className={cls.value} {...container.attr.props} {...divAttr}>
+        <Div
+            className={cls.value}
+            {...container.attr.props}
+            //    {...divAttr}
+        >
             {elems.length ? (
                 elems
             ) : (
@@ -655,32 +485,99 @@ function TreeNodeList({ itemActions, ...props }) {
     return <TreeNodeListInner {...props} />
 }
 
-function TreeNodeListManager({ buttons = [], ...props }) {
-    const [filter, setFilter] = useState("")
-    // const [selection, setSelection] = useState([])
+function TreeNodeListManager({ buttons = [], filter, ...props }) {
+    const [filterRaw, setFilter] = useState("")
     return (
         <div className="stack-v gap-1 p-2">
             <div className="stack-h gap-2 py-1 w-full">
                 {buttons.length > 0 && <ButtonGroup buttons={buttons} />}
                 {buttons.length > 0 && <div className="auto" />}
-                <Filterbox
-                    filter={filter}
-                    setFilter={setFilter}
-                    toggleSortDir={() => requestStorage.toggleSortDir()}
-                />
+                {filter === true && (
+                    <Filterbox
+                        filter={filterRaw}
+                        setFilter={setFilter}
+                        toggleSortDir={() => requestStorage.toggleSortDir()}
+                    />
+                )}
             </div>
 
             <TreeNodeList
-                //                selection={selection}
-                //                setSelection={setSelection}
                 pick={(x) => d(x)}
-                filter={filter}
+                filter={filterRaw}
                 full
-                folderSelect
                 treeIndex={requestStorage}
                 {...props}
             />
         </div>
+    )
+}
+
+function StorageTree({ match, ...props }) {
+    const FolderFormModal = useModalWindow()
+    const folderIndex = requestStorage.folderIndex
+    const buttons = [
+        {
+            icon: "build",
+            onPressed: () => {
+                const model = {
+                    value: crypto.randomUUID(),
+                    closed: false,
+                    name: "",
+                    parent: "0"
+                }
+                FolderFormModal.open({
+                    model,
+                    save: (newModel) => {
+                        folderIndex.setEntityObject({ ...model, ...newModel })
+                        FolderFormModal.close()
+                    },
+                    folderIndex,
+                    match
+                })
+            }
+        }
+    ]
+    const [selection, setSelection] = useState([])
+    const itemActions = [
+        {
+            icon: "edit",
+            action: ({ nodeType, ...model }) => {
+                if (nodeType === "folder") {
+                    FolderFormModal.open({
+                        edit: true,
+                        model,
+                        save: (newModel) => {
+                            folderIndex.setEntityObject(
+                                { ...model, ...newModel },
+                                true
+                            )
+                            FolderFormModal.close()
+                        },
+                        folderIndex,
+                        match
+                    })
+                }
+            }
+        },
+        { icon: "delete" }
+    ]
+    return (
+        <>
+            <TreeNodeListManager
+                treeIndex={requestStorage}
+                match={match}
+                buttons={buttons}
+                selection={selection}
+                setSelection={setSelection}
+                itemActions={itemActions}
+                filter
+                {...props}
+            />
+
+            <FolderFormModal.content>
+                <FolderForm {...FolderFormModal.props} />
+            </FolderFormModal.content>
+        </>
     )
 }
 
