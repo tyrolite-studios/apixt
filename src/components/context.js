@@ -22,11 +22,12 @@ import {
     getExtractParts,
     isSupportedExtractBodyType
 } from "entities/assignments"
+import { TreeIndex } from "core/entity"
 import { RouteIndex } from "entities/routes"
 import { ConstantIndex } from "entities/constants"
 import { ApiIndex, APIS } from "entities/apis"
 import { ApiEnvIndex } from "entities/api-envs"
-import { RequestIndex } from "entities/requests"
+import { RequestIndex, RequestFolderIndex } from "entities/requests"
 import { RequestAssignmentsIndex } from "entities/request-assignments"
 import { useModalWindow } from "./modal"
 import { OkCancelLayout } from "./layout"
@@ -597,7 +598,6 @@ function registerContentApi({ registry, register, apiRef }) {
         const extracts = {}
 
         const requestTree = getRequestTree(assignments)
-        d("RT", requestTree)
 
         const { method } = request
 
@@ -1451,8 +1451,11 @@ function registerConstantsApi({ registry }) {
 function registerRequestsApi({ registry, apiRef }) {
     const { apiSettings } = registry()
     const requestIndex = new RequestIndex(apiSettings.requests)
-    requestIndex.addListener(() => {
+    const requestFolderIndex = new RequestFolderIndex(apiSettings.requestFolders)
+    const requestTreeIndex = new TreeIndex(requestFolderIndex, requestIndex)
+    requestTreeIndex.addListener(() => {
         apiSettings.requests = requestIndex.model
+        apiSettings.requestFolders = requestFolderIndex.model
         apiRef.current.persistApiSettings()
     })
     const getRequestOptions = () => {
@@ -1471,6 +1474,8 @@ function registerRequestsApi({ registry, apiRef }) {
     }
     return {
         requestIndex,
+        requestFolderIndex,
+        requestTreeIndex,
         getRequestName,
         getRequestOptions
     }
@@ -1536,7 +1541,7 @@ function registerApiEnvApi({ registry, apiRef }) {
                 if (index !== undefined)
                     url = apiEnvIndex.getEntityPropValue(index, "url")
             }
-            return d(url)
+            return url
         }
         const index = apiIndex.getEntityByPropValue("value", id)
         if (index === undefined) return

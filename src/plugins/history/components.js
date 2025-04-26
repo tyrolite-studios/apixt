@@ -9,7 +9,6 @@ import { getPathParams } from "core/http"
 import { EntityStack } from "components/common"
 import { RoutePath } from "plugins/route-selector/components"
 import { RenderWithAssignments } from "entities/assignments"
-import { ListTest } from "../../components/common"
 import { MappingIndex } from "../../core/entity"
 
 class TestIndex extends MappingIndex {
@@ -30,7 +29,6 @@ function HistoryWidget({}) {
         })
     }, [])
 
-    return <ListTest entityIndex={index} />
     const elems = []
     for (const {
         request,

@@ -35,7 +35,7 @@ import {
     AssignmentStack,
     extractContentTypeFromAssignments
 } from "entities/assignments"
-import { SaveRequestForm } from "entities/requests"
+import { SaveRequestForm, RequestTree } from "entities/requests"
 import {
     ClassNames,
     d,
@@ -477,6 +477,15 @@ function getDefaultlessClone(model) {
     return obj
 }
 
+function RequestName({ active, requestIndex }) {
+    const aContext = useContext(AppContext)
+    useUpdateOnEntityIndexChanges(requestIndex)
+    return <span>{active === ""
+        ? "New Request..."
+        : aContext.getRequestName(active)}</span>
+
+}
+
 function RequestBuilder({ close, request, assignments }) {
     const aContext = useContext(AppContext)
     const SaveAsModal = useModalWindow()
@@ -601,6 +610,13 @@ function RequestBuilder({ close, request, assignments }) {
         aContext.defaultsIndex.notify()
     }
 
+    const loadByValue = (value) => {
+        const index = aContext.requestIndex.getEntityByPropValue('value', value)
+        if (index === null) return
+
+        load(aContext.requestIndex.getEntityObject(index))
+    }
+
     const launcherParams = {
         api,
         setApi,
@@ -623,6 +639,16 @@ function RequestBuilder({ close, request, assignments }) {
         bodyAssignmentIndex
     }
 
+    const apiFolderMatch = (nodeType, entityIndex, index) => {
+        let itemApi
+        if (nodeType === 'file') {
+            const request = entityIndex.getEntityPropValue(index, 'request')
+            if (request) itemApi = request.api
+        } else {
+            itemApi = entityIndex.getEntityPropValue(index, 'api')
+        }
+        return itemApi === api
+    }
     const buttons = [
         {
             name: "New",
@@ -732,12 +758,15 @@ function RequestBuilder({ close, request, assignments }) {
             name: "Save As…",
             onPressed: () => {
                 SaveAsModal.open({
+                    api,
+                    match: apiFolderMatch,
                     model: { name: "" },
                     reserved: extractLcProps(aContext.requestIndex, "name"),
-                    save: ({ name }) => {
+                    save: ({ name, folder }) => {
                         const value = crypto.randomUUID()
                         aContext.requestIndex.setEntityObject({
                             value,
+                            folder,
                             name,
                             request: {
                                 api,
@@ -793,7 +822,10 @@ function RequestBuilder({ close, request, assignments }) {
                         <div className="stack-h gap-2 p-2">
                             <ApiSelect
                                 api={api}
-                                setApi={setApi}
+                                setApi={newApi => {
+                                    setApi(newApi)
+                                    setActive("")
+                                }}
                                 apiIndex={aContext.apiIndex}
                                 apiEnvIndex={aContext.apiEnvIndex}
                             />
@@ -803,35 +835,8 @@ function RequestBuilder({ close, request, assignments }) {
                             className="overflow-hidden"
                             persistId="request-builder.picker"
                         >
-                            <Tab name="Test">
-                                <StorageTree />
-                            </Tab>
                             <Tab name="Stored" active>
-                                <div className="p-2 h-full">
-                                    <EntityPicker
-                                        className="h-full"
-                                        entityIndex={aContext.requestIndex}
-                                        pick={load}
-                                        filter
-                                        matcher={(idx) =>
-                                            aContext.requestIndex.getEntityPropValue(
-                                                idx,
-                                                "request"
-                                            ).api === api
-                                        }
-                                        render={({ name, request }) => (
-                                            <div className="stack-v">
-                                                <div className="text-sm">
-                                                    {name}
-                                                </div>
-                                                <div className="text-xs opacity-50">
-                                                    {request.method}{" "}
-                                                    {request.path}
-                                                </div>
-                                            </div>
-                                        )}
-                                    />
-                                </div>
+                                <RequestTree api={api} match={apiFolderMatch} pick={loadByValue} />
                             </Tab>
                             <Tab name="History">
                                 <div className="p-2 h-full">
@@ -892,9 +897,7 @@ function RequestBuilder({ close, request, assignments }) {
                         <div className="px-2 pt-2 w-full">
                             <div className="stack-h items-center w-full gap-2 bg-header-bg/25 p-1 border border-header-border/50">
                                 <div className={requestCls.value}>
-                                    {active === ""
-                                        ? "New Request..."
-                                        : aContext.getRequestName(active)}
+                                    <RequestName active={active} requestIndex={aContext.requestIndex} />
                                 </div>
                                 <ButtonGroup buttons={buttons} />
                             </div>

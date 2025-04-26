@@ -61,6 +61,7 @@ const defaultApiSettings = {
     apis: {},
     constants: {},
     requests: {},
+    requestFolders: {},
     defaults: {},
     preselectedDefaults: REQUEST_DEFAULTS.OPTION.NONE,
     showDefaults: true,

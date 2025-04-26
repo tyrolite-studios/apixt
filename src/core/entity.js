@@ -449,7 +449,7 @@ class EntityIndex {
 
         this.setItems(newItems)
         if (updates.length) {
-            this.doUpdates(d(updates), true)
+            this.doUpdates(updates, true)
         }
         this.suspendNotifications = false
         this.notify()
@@ -595,7 +595,7 @@ function extractLcProps(entityIndex, prop, except) {
 }
 
 class TreeIndex {
-    constructor(folderIndex, leafIndex, options) {
+    constructor(folderIndex, leafIndex, options = {}) {
         const { parentProp = "folder", sortDir = 1 } = options
 
         this.lastModified = Date.now()
@@ -707,7 +707,33 @@ class TreeIndex {
         this.notify()
     }
 
-    getNodes({ filter, ...props }) {
+    getFolderTreeNodes(delFolder, match, found = { files: [], folders: [] }) {
+        const nodes = this.getNodes({ allOpen: true,
+            match
+        })
+        const { files, folders } = found
+        let level = null
+        for (const node of nodes) {
+            if (level === null) {
+                if (node.index !== delFolder || node.nodeType === 'leaf') continue
+
+                level = node.level
+                if (!folders.includes(node.index)) folders.push(node.index)
+                continue
+            }
+            if (node.level <= level) {
+                break
+            }
+            if (node.nodeType === 'leaf') {
+                if (!files.includes(node.index)) files.push(node.index)
+            } else {
+                if (!folders.includes(node.index)) folders.push(node.index)
+            }
+        }
+        return found
+    }
+
+    getNodes({ allOpen, filter, skipFolder, ...props }) {
         const fileMatch = !props.match
             ? undefined
             : (index) => {
@@ -825,10 +851,14 @@ class TreeIndex {
                 if (closedLevel < level) continue
 
                 closedLevel = null
+            } else if (skipFolder !== undefined && value === skipFolder) {
+                closedLevel = level
+                continue
             }
-            if (closed) closedLevel = level
+            if (!allOpen && closed) closedLevel = level
+
             folder2level[value] = level
-            if (closed && !closedFolders.includes(value)) {
+            if (!allOpen && closed && !closedFolders.includes(value)) {
                 closedFolders.push(value)
             }
             const hasFiles = popToLevel(level)
@@ -841,7 +871,7 @@ class TreeIndex {
                     folder,
                     value,
                     level,
-                    closed,
+                    closed: allOpen ? false : closed,
                     empty: !hasFiles
                 })
             }

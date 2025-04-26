@@ -185,81 +185,6 @@ function useCallAfterwards() {
 
 const doubleClickMs = 200
 
-function ListTest({ entityIndex }) {
-    return <ButtonGroups />
-
-    useUpdateOnEntityIndexChanges(entityIndex)
-    const items = entityIndex.getView({}).matches.slice(0, 10)
-
-    const container = useItemContainer({ items })
-    const { open, Modals } = useConfirmation()
-    const [selection, setSelection] = useState([])
-    useFocusOnItemContainer({
-        container,
-        item2value: (item) => entityIndex.getEntityPropValue(item, "value"),
-        value2item: (value) => entityIndex.getEntityByPropValue("value", value)
-    })
-    usePickerOnItemContainer({
-        container,
-        pick: (entity) => entityIndex.getEntityObject(entity)
-    })
-    useSelectionOnItemContainer({
-        container,
-        selection,
-        setSelection
-    })
-
-    const elems = []
-    const entities = entityIndex.getEntityObjects(items)
-    for (const [index, entity] of entities.entries()) {
-        const elem = container.getItem(index)
-        const cls = new ClassNames("hover:brightness-110")
-        cls.addIf(
-            elem.marked,
-            "bg-active-bg text-active-text",
-            "bg-input-bg text-input-text"
-        )
-        cls.add(
-            "focus:outline-none focus:ring focus:ring-inset focus:ring-focus-border focus:border-0"
-        )
-        elems.push(
-            <Div key={index} {...elem.attr.props} className={cls.value}>
-                {entityIndex.getEntityPropValue(index, "name")}
-            </Div>
-        )
-    }
-    const buttons = [
-        { name: "All", onPressed: () => container.selectInverse() }
-    ]
-    const containerCls = ClassNames("stack-v")
-    containerCls.addIf(container.invalid, "invalid")
-    return (
-        <>
-            <div
-                className="stack-v"
-                onKeyDown={(e) => {
-                    if (e.key !== "d" && container.tabIndex !== undefined)
-                        return
-
-                    open({
-                        confirmed: () => {
-                            entityIndex.deleteEntity(items[container.tabIndex])
-                            container.syncSelection()
-                        }
-                    })
-                    e.preventDefault()
-                }}
-            >
-                <Div {...container.attr.props} className={containerCls.value}>
-                    {elems}
-                </Div>
-                <ButtonGroup buttons={buttons} />
-            </div>
-            {Modals}
-        </>
-    )
-}
-
 function useItemContainer({
     items,
     count,
@@ -282,8 +207,7 @@ function useItemContainer({
         }
         return item
     }
-
-    const container = {
+    return {
         ref,
         attr,
         items,
@@ -294,7 +218,6 @@ function useItemContainer({
         addItemBuilder,
         getItem
     }
-    return container
 }
 
 const arrowMove = {
@@ -352,14 +275,22 @@ function useSelectionOnItemContainer({
     selection,
     setSelection
 }) {
+    const lastSelectionRef = useRef(selection)
     const { item2value, value2item } = container
     const syncSelection = () => {
         requestAnimationFrame(() => {
             const newSelection = []
+            let needsSync = false
             for (const value of selection) {
                 const index = value2item(value)
-                if (index !== undefined) newSelection.push(value)
+                if (index !== null) {
+                    newSelection.push(value)
+                } else {
+                    needsSync = true
+                }
             }
+            if (!needsSync) return
+
             setSelection(newSelection)
             container.refocus()
         })
@@ -406,6 +337,10 @@ function useSelectionOnItemContainer({
     container.syncSelection = syncSelection
     if (min > 0 && selection.length < min) {
         container.invalid = true
+    }
+
+    if (lastSelectionRef.current !== selection) {
+        syncSelection()
     }
     if (max !== undefined) return
 
@@ -500,6 +435,7 @@ function useFocusGroupsOnItemContainer({ container }) {
     useEffect(() => {
         frContext.setContainer(container.ref.current)
     }, [])
+    container.refocus = frContext.refocus
 }
 
 function useFocusOnItemContainer({
@@ -1128,7 +1064,6 @@ function EntityPicker({
     cls.addIf(styled && divided, "divide-y")
     cls.addIf(styled && divided && colored, "divide-input-border")
 
-    let i = 0
     const elems = []
     const headerGroups = []
 
@@ -1170,7 +1105,6 @@ function EntityPicker({
             </Div>
         )
         elems.push(elem)
-        i++
     }
     elems.push(
         <div key={-1} className="auto bg-black/10">
@@ -1414,82 +1348,6 @@ function EntityList(props) {
         )
     }
     return <EntityActionList {...props} />
-}
-
-function ButtonGroupsInner() {
-    const { open, Modals } = useConfirmation()
-    const items = [0, 1, 2, 3]
-    const [selection, setSelection] = useState([])
-    const container = useItemContainer({
-        items
-    })
-    useFocusGroupsOnItemContainer({ container })
-    useSelectionOnItemContainer({
-        container,
-        selection,
-        setSelection,
-        events: false
-    })
-    const elems = []
-    for (const [index, entity] of items.entries()) {
-        const item = container.getItem(index)
-        const buttons = [
-            {
-                icon: "edit",
-                onPressed: () => {
-                    container.toggle(index)
-                }
-            },
-            {
-                icon: "delete",
-                onPressed: () => {
-                    open({
-                        confirmed: () => {
-                            d("HEY!")
-                        }
-                    })
-                }
-            },
-            { icon: "arrow_right" }
-        ]
-        const cls = ClassNames("p-2 auto")
-        cls.addIf(
-            item.marked,
-            "bg-active-bg text-active-text",
-            "bg-input-bg text-input-text"
-        )
-        const elem = (
-            <Div key={index} {...item.attr.props}>
-                <div className="stack-h gap-2 w-full">
-                    <ButtonGroup rowIndex={index} buttons={buttons} />
-                    <Div
-                        onMouseDown={() => container.toggle(index)}
-                        className={cls.value}
-                    >
-                        {entity}
-                    </Div>
-                </div>
-            </Div>
-        )
-        elems.push(elem)
-    }
-
-    return (
-        <>
-            <Div {...container.attr.props} className="stack-v gap-2 p-2 border">
-                {elems}
-            </Div>
-            {Modals}
-        </>
-    )
-}
-
-function ButtonGroups(props) {
-    return (
-        <FocusRowCtx>
-            <ButtonGroupsInner {...props} />
-        </FocusRowCtx>
-    )
 }
 
 function BodyTextarea({
@@ -1814,7 +1672,6 @@ export {
     BodyTextarea,
     JsonPathInput,
     Filterbox,
-    ListTest,
     arrowMove,
     FocusRowContext,
     FocusRowCtx
