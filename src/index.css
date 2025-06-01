@@ -64,6 +64,11 @@
     }
 }
 
+.focus-fix:focus {
+    position: relative;
+    z-index: 99999;
+}
+
 .app-bounds {
     max-width: var(--app-max-width);
     max-height: var(--app-max-height);

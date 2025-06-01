@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useRef } from "react"
 import { MappingIndex } from "core/entity"
 import { Icon, Div } from "components/layout"
 import { d, ClassNames } from "core/helper"
@@ -14,8 +14,11 @@ import {
 } from "components/common"
 import { useModalWindow } from "components/modal"
 import { OkCancelLayout, Centered } from "components/layout"
-import { CustomCells } from "../components/form"
-import { FocusRowCtx, useSelectionOnItemContainer } from "../components/common"
+import { ButtonsAndDivGroup, CustomCells } from "components/form"
+import { FocusRowCtx, useSelectionOnItemContainer } from "components/common"
+import { useGetNewAttrWithDimProps } from "components/common.js"
+import { isFunction, isString, without } from "core/helper.js"
+
 
 const ROOT_FOLDER_ID = "0"
 
@@ -238,24 +241,30 @@ function FileForm({ model, save, close, treeIndex, match }) {
 }
 
 function ContainerNodeListInner({
-    container,
+        nodes,
+    containerRef,
    treeIndex,
    className,
    itemClassName,
    render = (item) => item.name,
    entityIndex,
    full,
-   skipFolder,
+   selectable,
    selection,
    setSelection,
+   maxSelection,
+   itemAction,
    itemActions,
    compact,
-   folderSelect,
    match,
    filter,
+    alwaysExpanded,
+    reverse,
+    treeSelection,
+    skip,
    wrap = true,
    bordered = true,
-   divided = true,
+   divided = false,
    padded = true,
    sized = true,
    colored = true,
@@ -263,22 +272,36 @@ function ContainerNodeListInner({
    emptyMsg = "No items available",
    ...props
 }) {
-
     const folderIndex = treeIndex.folderIndex
-    const cls = new ClassNames("stack-v item-start overflow-y-auto", className)
-    cls.addIf(styled && colored, "bg-input-bg text-input-text")
-    cls.addIf(styled && bordered, "border")
-    cls.addIf(styled && bordered && colored, "border-input-border")
+    const cls = new ClassNames("stack-v item-start", className)
+    cls.addIf(styled && padded, "p-1")
     cls.addIf(styled && divided, "divide-y")
     cls.addIf(styled && divided && colored, "divide-transparent")
+    const outerCls = new ClassNames("overflow-y-auto")
+    outerCls.addIf(styled && colored, "bg-input-bg text-input-text auto full")
+    outerCls.addIf(styled && bordered, "border")
+    outerCls.addIf(styled && bordered && colored, "border-input-border")
 
-    const nodes = container.items
+    const container = useItemContainer({
+        view: true,
+        items: nodes,
+        item2value: (x) => {
+            return `${x.nodeType} ${x.value}`
+        },
+        value2item: (x) => {
+            const [ type, value ] = x.split(" ", 2)
+            const indexName = type === "folder" ? "folderIndex" : "leafIndex"
+
+            return treeIndex[indexName].getEntityByPropValue('value', value)
+        }
+    })
+    if (containerRef) containerRef.current = container
     if (itemActions) {
         useFocusGroupsOnItemContainer({ container })
     } else {
         const moveFocus = (container, x, y, shift) => {
-            const { nodeType, index, closed } = nodes[container.tabIndex]
-            if (nodeType === "folder") {
+            const { nodeType, index, closed } = nodes[container.getIndex(container.tabIndex)]
+            if (!alwaysExpanded && nodeType === "folder") {
                 if ((closed && x > 0) || (!closed && x < 0)) {
                     treeIndex.toggleFolder(index)
                     return container.tabIndex
@@ -289,37 +312,78 @@ function ContainerNodeListInner({
         useFocusOnItemContainer({ container, moveFocus })
     }
     if (selection) {
-        useSelectionOnItemContainer({
-            container,
-            max: folderSelect ? 1 : undefined,
-            events: itemActions === undefined,
-            selection,
-            setSelection
-        })
-    } else if (props.pick) {
-        const pick = (typeAndValue) => {
-            const [nodeType, value] = typeAndValue.split(" ", 2)
-            if (nodeType === "folder") {
-                if (folderSelect) {
-                    if (props.pick) {
-                        props.pick(value ?? ROOT_FOLDER_ID)
+        if (!itemAction) {
+            itemAction = (node, index) => {
+                const [nodeType] = node.split(" ", 2)
+                if (nodeType !== "folder" || !selectable || (selectable && selectable(node))) {
+                    container.toggle(index)
+                } else if (!maxSelection) {
+                    let entityNodes = []
+
+                    const level = nodes[index].level
+                    for (let i = index + 1; i < nodes.length; i++) {
+                        const currNode = nodes[i]
+                        if (currNode.level <= level) break
+
+                        const id = currNode.nodeType + ' ' + currNode.value
+                        if (selectable && !selectable(id)) continue
+
+                        entityNodes.push(id)
                     }
-                } else {
-                    const index = folderIndex.getEntityByPropValue(
-                        "value",
-                        value
-                    )
-                    treeIndex.toggleFolder(index)
+                    if (!entityNodes.length) return
+
+                    d('HELLO?', entityNodes)
+
+                    entityNodes = container.getMinSelectables(entityNodes)
+                    let remaining = without(selection, entityNodes)
+                    if (treeSelection) {
+                        let parents = []
+                        let parent = nodes[index].folder
+                        let i = index
+                        while (i >= 0) {
+                            const item = nodes[i]
+                            i--
+                            if (item.value !== parent) continue
+
+                            parents.push("folder " + item.value)
+                            parent = item.folder
+                        }
+                        remaining = without(remaining, parents)
+                    }
+                    let newSelection =
+                        without(entityNodes, selection).length === 0 ?
+                            [ ...remaining ] : [ ...remaining, ...entityNodes ]
+                    setSelection(newSelection)
+                } else if (nodeType === "folder" && !alwaysExpanded) {
+                    treeIndex.toggleFolder(nodes[index].index)
                 }
-            } else {
-                props.pick(value)
             }
         }
-        usePickerOnItemContainer({ container, pick })
+        useSelectionOnItemContainer({
+            container,
+            max: maxSelection,
+            events: false, // itemActions === undefined,
+            selectable,
+            selection,
+            setSelection,
+            treeSelection
+        })
+    } else if (!itemAction && !alwaysExpanded) {
+        itemAction = (typeAndValue) => {
+            const [nodeType, value] = typeAndValue.split(" ", 2)
+            if (nodeType !== "folder") return
+
+            const index = folderIndex.getEntityByPropValue(
+                "value",
+                value
+            )
+            treeIndex.toggleFolder(index)
+        }
     }
-    // const divAttr = useGetAttrWithDimProps(props)
-    // cls.addIf(!divAttr.style?.width && !full, "max-w-max")
-    cls.addIf(full, "w-full")
+    if (itemAction) {
+        usePickerOnItemContainer({ container, pick: itemAction })
+    }
+    cls.addIf(full, "full")
     cls.addIf(!wrap, "text-nowrap")
 
     let getItemActions = () => []
@@ -333,14 +397,16 @@ function ContainerNodeListInner({
                     ...button
                 })
             }
-            return <ButtonGroup rowIndex={index} buttons={buttons} />
+            return buttons
         }
     }
 
     const elems = []
+    let markedLevel = null
     for (const [index, node] of nodes.entries()) {
-        const item = container.getItem(index)
+        if (!node.visible) continue
 
+        const item = container.getItem(index)
         const itemCls = new ClassNames("hover:brightness-110", itemClassName)
         itemCls.addIf(
             !itemActions,
@@ -350,32 +416,38 @@ function ContainerNodeListInner({
         itemCls.addIf(styled && padded, "p-1")
         itemCls.addIf(!wrap, "truncate")
         if (styled && colored) {
+            if (markedLevel !== null && node.level <= markedLevel) {
+                markedLevel = null
+            }
+            if (item.marked && treeSelection) {
+                markedLevel = node.level
+            }
+            const subMarked = !item.marked && markedLevel !== null
             itemCls.addIf(
-                item.marked,
-                "bg-active-bg text-active-text",
+                item.marked || subMarked,
+                subMarked ? "bg-active-bg/70 text-active-text" : "bg-active-bg text-active-text",
                 "bg-input-bg text-input-text"
             )
         }
-        // if (itemActions) args.push(getItemActions(index))
         if (itemActions) itemCls.add("auto")
 
-        const { nodeType, level, closed, path } = node
+        const { nodeType, level, closed, path, hiddenMarked = 0 } = node
         // TODO wrap-break-word should be injected or dependant on setting
         const nodeElem = (
-            <div className="stack-h py-1 px-2 gap-2">
-                <div className="stack-h">
+            <div className="stack-h py-1 gap-2">
+                <Div className="stack-h pl-2" onClick={alwaysExpanded ? undefined : (e) => {treeIndex.toggleFolder(node.index); e.stopPropagation()}}>
                     <LevelSpacer level={level} />
                     {nodeType !== 'leaf' && <Icon
                         name={
                             nodeType === "leaf"
                                 ? "arrow_right"
                                 : "folder" +
-                                (closed && !folderSelect ? "" : "_open")
+                                (closed && !alwaysExpanded ? "" : "_open")
                         }
                         className={nodeType === "leaf" ? "opacity-50" : ""}
                     />}
-                </div>
-                <div className="stack-v auto text-xs">
+                </Div>
+                <div className="stack-v auto text-xs pr-2">
                     {nodeType === "leaf" && path && (
                         <div className="opacity-50">{path}</div>
                     )}
@@ -388,20 +460,16 @@ function ContainerNodeListInner({
                         {render(node)}
                     </div>
                 </div>
+                {hiddenMarked > 0 && <div className="px-2 stack-h gap-1 items-center bg-active-bg text-active-text rounded-full text-xs"><Icon name="add_circle" /><div>{hiddenMarked}</div></div>}
             </div>
         )
-
         let elem = itemActions ? (
-            <Div
-                key={index}
-                {...item.attr.props}
-                className="stack-h w-full items-start"
-            >
-                <div className="py-1 px-2">{getItemActions(index)}</div>
+            <ButtonsAndDivGroup reverse={reverse} key={index} buttons={getItemActions(index)}
+                                action={() => container.toggle(index)} rowIndex={index} className="items-start">
                 <Div {...item.attr.props} className={itemCls.value}>
                     {nodeElem}
                 </Div>
-            </Div>
+            </ButtonsAndDivGroup>
         ) : (
             <Div key={index} {...item.attr.props} className={itemCls.value}>
                 {nodeElem}
@@ -411,24 +479,25 @@ function ContainerNodeListInner({
     }
     const isFiltered = !!filter
     elems.push(
-        <div key={-1} className="auto bg-black/10">
+        <div key={-1} className="auto shadow-inner shadow-2xl bg-black/10 full">
             {nodes.length === 0 && (
-                <Centered className="opacity-50 text-xs p-2">
-                    {isFiltered ? `No matches for "${filter}"` : emptyMsg}
-                </Centered>
+                <div className="full opacity-50 text-xs p-2">
+                    <Centered>{isFiltered ? `No matches for "${filter}"` : emptyMsg}</Centered>
+                </div>
             )}
         </div>
     )
-
-    if (compact && !elems.length) return
+    if (compact && !nodes.length) return
 
     return (
-        <Div
-            className={cls.value}
-            {...container.attr.props}
-        >
-            {elems}
-        </Div>
+        <div className={outerCls.value} tabIndex={-1}>
+            <Div
+                className={cls.value}
+                {...container.attr.props}
+            >
+                {elems}
+            </Div>
+        </div>
     )
 }
 
@@ -443,59 +512,140 @@ function ContainerNodeList({ itemActions, ...props }) {
     return <ContainerNodeListInner {...props} />
 }
 
-function TreeIndexStack({ treeIndex, filter, className, buttons = [], ...props }) {
+function MaxNumber({ className, value, maxValue = value }) {
+    const cls = ClassNames("whitespace-pre font-mono", className)
+    let pre = `${value}`
+    const preMax = `${maxValue}`
+    while (pre.length < preMax.length) {
+        pre = " " + pre
+    }
+    return <div className={cls.value}>{pre}</div>
+}
+
+function TreeIndexStack({ treeIndex, alwaysExpanded, compact, boxed, match, skip, header = "buttons", footer, className, buttons = [], ...props }) {
+    const containerRef = useRef(null)
     const [filterRaw, setFilter] = useState("")
     useUpdateOnEntityIndexChanges(treeIndex)
+
     const nodes = treeIndex.getNodes({
-        allOpen: props.itemActions || props.folderSelect,
-        skipFolder: props.skipFolder,
+        alwaysExpanded,
+        selection: props.selection,
         filter: filterRaw,
-        match: props.folderSelect
-            ? (type, ...params) => {
-                if (type !== "folder") return false
+        match: props.match,
+        skip,
+    })
 
-                return !props.match || props.match(type, ...params)
+    const getContainer = () => {
+        if (!containerRef.current) throw Error(`Container referenced before initialization`)
+
+        return containerRef.current
+    }
+
+    const getBarGroups = (value) => {
+        if (!value) return []
+
+        if (isString(value)) value = value.split(" ")
+
+        const elems = []
+        for (const [index, group] of value.entries()) {
+            if (isFunction(group)) {
+                elems.push(group({getContainer, index}))
+                continue
             }
-            : props.match
-    })
-    const container = useItemContainer({
-        items: nodes,
-        item2value: (x) => {
-            return `${x.nodeType} ${x.value}`
-        },
-        value2item: (x) => {
-            const [ type, value ] = x.split(" ", 2)
-            const indexName = type === "folder" ? "folderIndex" : "leafIndex"
-
-            return treeIndex[indexName].getEntityByPropValue('value', value)
-        }
-    })
-
-    const cls = ClassNames("stack-v gap-1 p-2", className)
-    return (
-        <div className={cls.value}>
-            <div className="stack-h gap-2 py-1 w-full">
-                {buttons.length > 0 && <ButtonGroup buttons={buttons} />}
-                {buttons.length > 0 && <div className="auto" />}
-                {filter === true && (
-                    <Filterbox
+            if (index > 0 && index < value.length - 1 && group !== 'auto') {
+                elems.push(<div key={'d' + index} className="stack-h px-1 divide-x divide-input-border divide-opacity-40"><div /><div /></div>)
+            }
+            let elem
+            switch (group) {
+                case "filter":
+                    elem = <Filterbox
+                        key={index}
                         filter={filterRaw}
                         setFilter={setFilter}
                         toggleSortDir={() => treeIndex.toggleSortDir()}
                     />
-                )}
+                    break
+
+                case "buttons":
+                    if (buttons.length) {
+                        elem = <ButtonGroup key={index} buttons={buttons} />
+                    }
+                    break
+
+                case "expand":
+                    if (!alwaysExpanded) {
+
+                        elem = <ButtonGroup key={index} buttons={
+                            [
+                                {icon: "expand_more", onPressed: () => treeIndex.expandAll(match)},
+                                {icon: "expand_less", onPressed: () => treeIndex.collapseAll(match)}
+                            ]
+                        } />
+                    }
+                    break
+
+                case "marking":
+                    if (!props.selection) break
+
+                    const markedCls = new ClassNames("auto text-xs")
+                    markedCls.addIf(props.selection.length, "rounded-full bg-active-bg text-active-text px-2", "px-2")
+                    const markButtons = [{icon: 'done_all', onPressed: () => getContainer().selectAll()}]
+                    if (!props.treeSelection) {
+                        markButtons.push({icon: 'star_half', onPressed: () => getContainer().selectInverse()})
+                    }
+                    markButtons.push({icon: 'clear', disabled: props.selection.length === 0, onPressed: () => props.setSelection([])})
+                    elem = <div key={index} className="stack-h gap-2 items-center">
+                        <div className="stack-h gap-1 text-xs">
+                            <div className="">Marked:</div>
+                            <MaxNumber value={props.selection.length} maxValue={nodes.length} className={markedCls.value} />
+                        </div>
+                        <ButtonGroup buttons={markButtons} />
+                    </div>
+                    break
+
+                case "auto":
+                    elem = <div key={index} className="auto" />
+                    break
+            }
+            if (elem) elems.push(elem)
+        }
+        return elems
+    }
+
+    const isCompact = compact && !nodes.length
+    const headerElems = getBarGroups(isCompact ? "buttons" : header)
+    const footerElems = getBarGroups(footer)
+
+    const cls = ClassNames("stack-v p-2", className)
+    cls.addIf(!boxed, "gap-1")
+
+    const wrapStackCss = "stack-h flex-wrap gap-2 py-1"
+    const headerCls = ClassNames(wrapStackCss)
+    headerCls.addIf(boxed, "px-1 border-input-border bg-header-bg/50 text-header-text")
+    headerCls.addIf(isCompact, "border", boxed ? "border-x border-t" : "")
+
+    const footerCls = ClassNames(wrapStackCss)
+    footerCls.addIf(boxed, "border-x border-b px-2 border-input-border bg-header-bg/50 text-header-text")
+
+    const attr = useGetNewAttrWithDimProps(props)
+    if (nodes.length === 0 && !(cls.has('h-full') || cls.has('full'))) {
+        // v-centering for empty message
+        cls.addIf(!attr.hasStyle('height') && attr.hasStyle('minHeight'), 'full')
+    }
+    return (
+        <div className={cls.value} {...attr.props}>
+            {headerElems.length > 0 && <div className={headerCls.value}>
+                {headerElems}
+                </div>
+            }
+
+            {!isCompact && <ContainerNodeList full containerRef={containerRef} nodes={nodes} treeIndex={treeIndex}
+                  alwaysExpanded={alwaysExpanded} filter={filterRaw} {...props} />}
+
+            {footerElems.length > 0 && !isCompact && <div className={footerCls.value}>
+                {footerElems}
             </div>
-
-            <ContainerNodeList full container={container} treeIndex={treeIndex} filter={filterRaw} {...props} />
-
-            {props.selection !== undefined && <div className="stack-h gap-2 py-1 w-full">
-                <div className="auto text-xs">Marked: {props.selection.length}</div>
-                <ButtonGroup buttons={[
-                    {icon: 'done_all', onPressed: () => container.selectAll()},
-                    {icon: 'star_half', onPressed: () => container.selectInverse()},
-                    {icon: 'clear', disabled: props.selection.length === 0, onPressed: () => props.setSelection([])}
-                ]}></ButtonGroup>
-            </div>}
+            }
         </div>
     )
 }

@@ -237,6 +237,9 @@ class EntityIndex {
     getView({ start = 0, length, page, match, sort, filter } = {}) {
         let items = this.getMatchingEntities(match)
         const isFiltered = filter && this.filterProps.length
+        if (filter && !isFiltered) {
+            console.error(`Entity list was filtered by "${filter}" but not filterable props were specified in filterProps!`)
+        }
 
         if (isFiltered) {
             const lcFilter = filter.toLowerCase()
@@ -701,6 +704,20 @@ class TreeIndex {
         this.folderIndex.setEntityPropValue(index, "closed", !closed)
     }
 
+    collapseAll(match) {
+        const folders = this.folderIndex.getView({match})
+        for (const index of folders.matches) {
+            this.folderIndex.setEntityPropValue(index, "closed", true)
+        }
+    }
+
+    expandAll(match) {
+        const folders = this.folderIndex.getView({match})
+        for (const index of folders.matches) {
+            this.folderIndex.setEntityPropValue(index, "closed", false)
+        }
+    }
+
     toggleSortDir() {
         this.sortDir = -this.sortDir
         this.rebuildFolderSortIds()
@@ -733,7 +750,7 @@ class TreeIndex {
         return found
     }
 
-    getNodes({ allOpen, filter, skipFolder, ...props }) {
+    getNodes({ alwaysExpanded, filter, selection, skip, ...props }) {
         const fileMatch = !props.match
             ? undefined
             : (index) => {
@@ -766,8 +783,9 @@ class TreeIndex {
             }
         })
         const fileNodes = this.leafIndex.getEntityObjects(filesView.matches)
-        if (filter) {
-            return fileNodes.map((x) => {
+        // TODO change this...
+        if (filter && this.leafIndex.filterProps.length) {
+            return fileNodes.map(x => {
                 const index = this.folderIndex.getEntityByPropValue(
                     "value",
                     x.folder
@@ -795,6 +813,7 @@ class TreeIndex {
         const folderNodes = this.folderIndex.getEntityObjects(folders.matches)
 
         const folder2files = {}
+        const folder2fileIds = {}
         for (const {
             index,
             name,
@@ -804,40 +823,43 @@ class TreeIndex {
         } of fileNodes) {
             if (!folder2files[folder]) {
                 folder2files[folder] = []
+                folder2fileIds[folder] = []
             }
+            if (skip && skip('leaf ' + value)) continue
             folder2files[folder].push({
                 nodeType: "leaf",
                 index,
                 folder,
                 name,
                 value,
+                visible: true,
                 ...props
             })
+            folder2fileIds[folder].push(value)
         }
         const nodes = []
-        const closedFolders = []
         let stack = []
         const folder2level = {}
-        const popToLevel = (level) => {
-            let hasFiles = false
+
+        const popToLevel = (level, closedLevel) => {
             while (stack.length > level) {
                 const folder = stack.pop()
                 const currLevel = folder2level[folder] + 1
                 const files = folder2files[folder]
-                if (!files || closedFolders.includes(folder)) continue
+                if (!files) continue
 
                 nodes.push(
-                    ...files.map((x, i) => {
+                    ...files.map(x => {
                         x.level = currLevel
                         x.folder = folder
+                        x.visible = closedLevel === null || (currLevel <= closedLevel)
                         return x
                     })
                 )
-                hasFiles = true
             }
-            return hasFiles
         }
         let closedLevel = null
+        let closedIndex = null
         folderNodes.unshift({
             name: "",
             path: [],
@@ -845,23 +867,51 @@ class TreeIndex {
             index: -1,
             closed: false
         })
+        const markedFolders = []
+        const markedFiles = []
+        const getHiddenMarked = (marked, ids) => {
+            let hidden = 0
+            for (const id of ids) {
+                if (marked.includes(id)) hidden++
+            }
+            return hidden
+        }
+        if (selection) {
+            for (const id of selection) {
+                const [type, value] = id.split(" ");
+                (type === 'leaf' ? markedFiles : markedFolders).push(value)
+            }
+        }
+        let skipLevel = null
         for (const { name, path, value, index, closed } of folderNodes) {
             let level = path.length
-            if (closedLevel !== null) {
-                if (closedLevel < level) continue
+            folder2level[value] = level
+            popToLevel(level, closedLevel)
 
-                closedLevel = null
-            } else if (skipFolder !== undefined && value === skipFolder) {
-                closedLevel = level
+            if (skipLevel !== null && level > skipLevel) continue
+            skipLevel = null
+
+            if (skip && skip('folder ' + value)) {
+                skipLevel = level
                 continue
             }
-            if (!allOpen && closed) closedLevel = level
-
-            folder2level[value] = level
-            if (!allOpen && closed && !closedFolders.includes(value)) {
-                closedFolders.push(value)
+            if (closedLevel !== null) {
+                if (level > closedLevel) {
+                    nodes[closedIndex].hiddenMarked +=
+                        getHiddenMarked(markedFiles, folder2fileIds[value] ?? []) +
+                        getHiddenMarked(markedFolders, [value])
+                } else {
+                    closedLevel = null
+                }
             }
-            const hasFiles = popToLevel(level)
+
+
+            let hiddenMarked = 0
+            if (closedLevel === null && closed && !alwaysExpanded) {
+                closedLevel = level
+                closedIndex = nodes.length
+                hiddenMarked += getHiddenMarked(markedFiles, folder2fileIds[value] ?? [])
+            }
             const folder = path.length ? path[path.length - 1] : undefined
             if (index !== -1) {
                 nodes.push({
@@ -871,13 +921,14 @@ class TreeIndex {
                     folder,
                     value,
                     level,
-                    closed: allOpen ? false : closed,
-                    empty: !hasFiles
+                    hiddenMarked,
+                    visible: closedLevel === null || level <= closedLevel,
+                    closed: alwaysExpanded ? false : closed
                 })
             }
             stack.push(value)
         }
-        popToLevel(0)
+        popToLevel(0, closedLevel)
 
         return nodes
     }

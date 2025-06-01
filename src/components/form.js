@@ -1399,7 +1399,6 @@ function Button({
         startEvent.stopPropagation()
         startEvent.preventDefault()
         setClicked(true)
-
         btnElem.focus()
 
         if (onPressed) {
@@ -1478,7 +1477,6 @@ function ButtonGroup({
     cls.addIf(wrap, "flex-wrap", "flex-nowrap overflow-auto")
 
     const elems = []
-    let i = 0
     for (const [i, button] of buttons.entries()) {
         const curr = i
         const itemAttr = container.getItem(curr)
@@ -1502,6 +1500,73 @@ function ButtonGroup({
             {elems}
         </Div>
     )
+}
+
+function ButtonsAndDivGroup({
+        className,
+        buttons = [],
+        gapped = true,
+        wrap = true,
+    reverse = false,
+        buttonProps = {},
+        autoFocus,
+        active,
+        rowChange,
+        lastTabIndex,
+        setLastTabIndex,
+        rowIndex,
+        children,
+        action,
+        ...props
+    }) {
+    const container = useItemContainer({ count: buttons.length + 1 })
+
+    useFocusOnItemContainer({ container, cursor: (index) => index !== (reverse ? 0 : buttons.length - 1), rowIndex })
+    const buttonCls = new ClassNames("stack-h")
+    const cls = new ClassNames("stack-h w-full", className)
+    cls.addIf(gapped, "gap-2")
+    buttonCls.addIf(gapped, "gap-2")
+    cls.addIf(wrap, "flex-wrap", "flex-nowrap overflow-auto")
+    buttonCls.addIf(wrap, "flex-wrap", "flex-nowrap overflow-auto")
+
+    const elems = []
+    const off = reverse ? 1 : 0
+    for (const [i, button] of buttons.entries()) {
+        const curr = i + off
+        const itemAttr = container.getItem(curr)
+        const elemProps = {
+            ...itemAttr.attr.props,
+            ...buttonProps,
+            ...button,
+            autoFocus
+        }
+        elems.push(
+            <Button
+                key={i}
+                {...elemProps}
+                tabControlled
+                refocus={container.refocus}
+            />
+        )
+    }
+    const { onKeyDown, ...divAttr } = container.attr.props
+    const keyDown = action ? (e) => {
+        if (e.key === " ") {
+            action()
+            e.preventDefault()
+            return
+        }
+        onKeyDown(e)
+    } : onKeyDown
+
+    return (
+        <Div {...divAttr} onKeyDown={keyDown} className={cls.value}>
+            {!reverse && <div className={buttonCls.value}>{elems}</div>}
+            <Div className="auto focus-fix focus:outline-none focus:ring focus:ring-focus-border" {...container.getItem(reverse ? 0 : buttons.length).attr.props}>{children}</Div>
+            {reverse && <div className={buttonCls.value}>{elems}</div>}
+        </Div>
+    )
+
 }
 
 const emptyValue = "<Enter Value>"
@@ -1922,6 +1987,7 @@ export {
     Button,
     Submit,
     ButtonGroup,
+    ButtonsAndDivGroup,
     Form,
     Input,
     Number,

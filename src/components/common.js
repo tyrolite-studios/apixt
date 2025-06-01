@@ -33,7 +33,7 @@ import { Centered, Div, Stack, Icon, OkCancelLayout } from "./layout"
 import { AppContext } from "./context"
 import { getExtractPathForString } from "entities/assignments"
 import { PreBlockContent } from "./content"
-import { Attributes, without } from "../core/helper"
+import { Attributes, isBool, isFunction, without } from "../core/helper"
 
 function useComponentUpdate() {
     const mounted = useMounted()
@@ -155,6 +155,43 @@ function useGetAttrWithDimProps({
     return attr
 }
 
+function useGetNewAttrWithDimProps({
+                                       width,
+                                       minWidth,
+                                       maxWidth,
+                                       height,
+                                       minHeight,
+                                       maxHeight,
+
+                                   }) {
+    const style = {}
+    if (width) {
+        style.width = width
+    }
+    if (minWidth) {
+        style.minWidth = maxWidth ? `min(${minWidth}, ${maxWidth})` : minWidth
+    }
+    if (maxWidth) {
+        style.maxWidth = minWidth ? `max(${minWidth}, ${maxWidth})` : maxWidth
+    }
+    if (height) {
+        style.height = height
+    }
+    if (minHeight) {
+        style.minHeight = maxHeight
+            ? `min(${minHeight}, ${maxHeight})`
+            : minHeight
+    }
+    if (maxHeight) {
+        style.maxHeight = minHeight
+            ? `max(${minHeight}, ${maxHeight})`
+            : maxHeight
+    }
+    const attr = new Attributes()
+    return attr.setStyles(style)
+}
+
+
 function useHotKeys(elemRef, hotKeys, area = null, link = null) {
     const aContext = useContext(AppContext)
     const isHot = !!(area || (hotKeys && Object.keys(hotKeys).length > 0))
@@ -183,11 +220,10 @@ function useCallAfterwards() {
     }
 }
 
-const doubleClickMs = 200
-
 function useItemContainer({
     items,
     count,
+    view = false,
     item2value = (x) => x,
     value2item = (x) => x
 }) {
@@ -207,11 +243,22 @@ function useItemContainer({
         }
         return item
     }
+    let viewCount = count
+    const viewIndices = []
+    if (view && items) {
+        for (const [index, item] of items.entries()) {
+            if (item.visible) viewIndices.push(index)
+        }
+        viewCount = viewIndices.length
+    }
     return {
         ref,
         attr,
         items,
+        getIndex: view && items ? x => viewIndices[x] : x => x,
+        getViewIndex: view && items ? x => viewIndices.indexOf(x) : x => x,
         count,
+        viewCount,
         item2value,
         value2item,
         isMounted: () => ref.current && mounted.current,
@@ -225,7 +272,7 @@ const arrowMove = {
         const next = x > 0 || y > 0
         const prev = x < 0 || y < 0
 
-        const lastIndex = container.count - 1
+        const lastIndex = container.viewCount - 1
         if (prev) {
             if (container.tabIndex === 0) {
                 return lastIndex
@@ -246,15 +293,14 @@ const arrowMove = {
 
 function usePickerOnItemContainer({ container, pick }) {
     const pickIndex = (index) => {
-        pick(container.item2value(container.items[index]))
+        pick(container.item2value(container.items[index]), index)
     }
-
     container.attr.addListeners({
         onKeyDown: (e) => {
             if (!container.focused) return
 
             if (e.key === " ") {
-                pickIndex(container.tabIndex)
+                pickIndex(container.getIndex(container.tabIndex))
                 e.preventDefault()
             }
         }
@@ -272,24 +318,53 @@ function useSelectionOnItemContainer({
     events = true,
     min = 0,
     max,
+    selectable,
     selection,
-    setSelection
+    setSelection,
+    treeSelection
 }) {
+    useEffect(() => {
+        syncSelection()
+    }, [])
+
     const lastSelectionRef = useRef(selection)
     const { item2value, value2item } = container
+
+    const isSelectableValue = (value) => {
+        const index = value2item(value)
+        if (index === null) return false
+
+        return !selectable || selectable(value)
+    }
+
+    const getMinimized = (values) => {
+        if (!treeSelection) return values
+
+        const minimized = []
+        let lastMarkedLevel = null
+        for (const { level, nodeType, value } of container.items) {
+            if (lastMarkedLevel !== null) {
+                if (level > lastMarkedLevel) continue
+                lastMarkedLevel = null
+            }
+            const checkValue = nodeType + ' ' + value
+            if (values.includes(checkValue)) {
+                lastMarkedLevel = level
+                minimized.push(checkValue)
+            }
+        }
+        return minimized
+    }
+
+    const getMinSelectables = values => {
+        return getMinimized(values.filter(isSelectableValue))
+    }
+    container.getMinSelectables = getMinSelectables
+
     const syncSelection = () => {
         requestAnimationFrame(() => {
-            const newSelection = []
-            let needsSync = false
-            for (const value of selection) {
-                const index = value2item(value)
-                if (index !== null) {
-                    newSelection.push(value)
-                } else {
-                    needsSync = true
-                }
-            }
-            if (!needsSync) return
+            const newSelection = getMinSelectables(selection)
+            if (newSelection.length === selection.length) return
 
             setSelection(newSelection)
             container.refocus()
@@ -298,6 +373,8 @@ function useSelectionOnItemContainer({
 
     const toggle = (index) => {
         const value = item2value(container.items[index])
+        if (selectable && !selectable(value)) return
+
         if (selection.includes(value)) {
             if (selection.length > min) {
                 setSelection(without(selection, value))
@@ -307,6 +384,41 @@ function useSelectionOnItemContainer({
         if (max === 1) {
             setSelection([value])
         } else if (max === undefined || selection.length < max) {
+            if (treeSelection) {
+                const parents = []
+                const [nodeType, nodeValue] = value.split(' ')
+                let i = 0
+                let j = 0
+                let nodeLevel = -1
+                let parent = null
+                while (i < container.items.length) {
+                    const item = container.items[i]
+                    if (item.nodeType === nodeType && item.value === nodeValue) {
+                        parent = item.folder
+                        nodeLevel = item.level
+                        j = i
+                    } else if (nodeLevel > -1) {
+                        if (item.level <= nodeLevel) {
+                            nodeLevel = -1
+                        } else {
+                            parents.push(item.nodeType + ' ' + item.value)
+                        }
+                    }
+                    i++
+                }
+                if (parent !== null) {
+                    while (j >= 0) {
+                        const item = container.items[j]
+                        j--
+                        if (item.value !== parent) continue
+
+                        parents.push("folder " + item.value)
+                        parent = item.folder
+                    }
+                }
+                setSelection([...without(selection, parents), value])
+                return
+            }
             setSelection([...selection, value])
         }
     }
@@ -317,7 +429,7 @@ function useSelectionOnItemContainer({
                 if (!container.focused) return
 
                 if (e.key === " ") {
-                    toggle(container.tabIndex)
+                    toggle(container.getIndex(container.tabIndex))
                     e.preventDefault()
                 }
             }
@@ -342,17 +454,20 @@ function useSelectionOnItemContainer({
     if (lastSelectionRef.current !== selection) {
         syncSelection()
     }
+    container.toggle = toggle
     if (max !== undefined) return
 
-    container.toggle = toggle
     container.selectAll = () => {
-        const allValues = container.items.map((x) => item2value(x))
-        setSelection(without(allValues, selection).length ? allValues : [])
+        let allSelectables = getMinSelectables(container.items.map((x) => item2value(x)))
+        setSelection(without(allSelectables, selection).length ? allSelectables : [])
     }
     container.selectInverse = () => {
+        let allSelectables = container.items.map((x) => item2value(x))
+        if (selectable) {
+            allSelectables = allSelectables.filter(x => selectable(x))
+        }
         const invValues = []
-        for (const item of container.items) {
-            const value = item2value(item)
+        for (const value of allSelectables) {
             if (!selection.includes(value)) {
                 invValues.push(value)
             }
@@ -376,18 +491,20 @@ function FocusRowCtx({ children }) {
             }
         })
     }
+    // TODO should be a param
+    const off = 1
     const api = {
         row,
         lastTabIndex,
         setLastTabIndex,
         nextRow: () => {
-            const max = containerRef.current.children.length
+            const max = containerRef.current.children.length - off
             setRow(row + 1 >= max ? 0 : row + 1)
             refocus()
         },
         prevRow: () => {
             setRow(
-                row === 0 ? containerRef.current.children.length - 1 : row - 1
+                row === 0 ? containerRef.current.children.length - 1 - off : row - 1
             )
             refocus()
         },
@@ -406,29 +523,38 @@ function FocusRowCtx({ children }) {
 function useFocusGroupsOnItemContainer({ container }) {
     const aContext = useContext(AppContext)
     const frContext = useContext(FocusRowContext)
+    const callAfterwards = useCallAfterwards()
     const initCatchRef = useRef(false)
     const levelRef = useRef(null)
     if (levelRef.current === null) {
         levelRef.current = aContext.getModalLevel()
     }
-
+    // current tab index exceeds limit? then reset to last index
+    if (frContext.row !== null && container.viewCount > 0 && frContext.row >= container.viewCount && initCatchRef.current !== false) {
+        d('TODO: FIX ROW!')
+        callAfterwards(() => {
+            frContext.setRow(container.viewCount - 1)
+            // refocus()
+        })
+    }
     container.attr.addListeners({
         onFocus: (e) => {
+            if (initCatchRef.current) {
+                cancelAnimationFrame(initCatchRef.current)
+            }
             initCatchRef.current = false
+
         },
         onBlur: (e) => {
-            if (aContext.getModalLevel() !== levelRef.current) return
+            if (initCatchRef.current) return
 
-            initCatchRef.current = true
-            requestAnimationFrame(() => {
-                if (!container.isMounted()) return
-
-                if (initCatchRef.current) {
-                    // reset
-                    frContext.setRow(0)
-                    frContext.setLastTabIndex(0)
-                }
+            initCatchRef.current = requestAnimationFrame(() => {
                 initCatchRef.current = false
+
+                if (!container.isMounted() || aContext.getModalLevel() !== levelRef.current) return
+
+                frContext.setRow(0)
+                frContext.setLastTabIndex(0)
             })
         }
     })
@@ -446,6 +572,7 @@ function useFocusOnItemContainer({
 }) {
     const aContext = useContext(AppContext)
     let frContext = useContext(FocusRowContext)
+
     if (rowIndex === undefined) frContext = undefined
     const callAfterwards = useCallAfterwards()
 
@@ -471,9 +598,9 @@ function useFocusOnItemContainer({
         if (frContext) {
             frContext.setLastTabIndex(index)
         }
-        if (tabIndex !== index || initCatchRef.current) {
+//        if (/*tabIndex !== index ||*/ initCatchRef.current) {
             refocus()
-        }
+//        } else d('NO REFOCUS')
     }
     const initCatchRef = useRef(false)
     const minSelectRef = useRef(0)
@@ -482,7 +609,7 @@ function useFocusOnItemContainer({
         levelRef.current = aContext.getModalLevel()
     }
 
-    const { ref, count } = container
+    const { ref, viewCount } = container
     const refocus = () => {
         requestAnimationFrame(() => {
             if (!container.isMounted()) return
@@ -494,19 +621,17 @@ function useFocusOnItemContainer({
             }
         })
     }
-
     // current tab index exceeds limit? then reset to last index
-    if (tabIndex !== null && count > 0 && tabIndex >= count && !catchFocus) {
+    if (tabIndex !== null && viewCount > 0 && tabIndex >= viewCount && !catchFocus) {
         callAfterwards(() => {
-            setTabIndex(count - 1)
-            refocus()
+            setTabIndex(viewCount - 1)
+            //refocus()
         })
     }
 
     const handleCatchedFocus = (e) => {
         if (!container.isMounted()) return
 
-        if (frContext) e.target.blur()
         // the catcher got the focus, so we can disable the focus catching
         // because from now on, we will move the focus within the container
         setCatchFocus(false)
@@ -517,15 +642,15 @@ function useFocusOnItemContainer({
             minSelected = frContext.lastTabIndex
         } else if (container.selection && container.selection.length) {
             while (
-                minSelected < container.count &&
+                minSelected < container.viewCount &&
                 !container.selection.includes(
-                    container.item2value(container.items[minSelected])
+                    container.item2value(container.items[container.getIndex(minSelected)])
                 )
             ) {
                 minSelected++
             }
             // no item was found, so we select the first one
-            if (minSelected >= container.count) minSelected = 0
+            if (minSelected >= container.viewCount) minSelected = 0
         }
         const newTabIndex = minSelected
         minSelectRef.current = minSelected
@@ -536,10 +661,10 @@ function useFocusOnItemContainer({
     }
     container.attr.addListeners({
         onFocus: (e) => {
-            // an element within the container has the focus
-            setFocused(true)
             // that means we don't have to enable the focus catcher element
             initCatchRef.current = false
+            // an element within the container has the focus
+            setFocused(true)
         },
         onBlur: (e) => {
             // no element within the container has the focus
@@ -583,21 +708,22 @@ function useFocusOnItemContainer({
     const isTabRow = !frContext || frContext.row === rowIndex
     container.addItemBuilder((index, item) => {
         item.isFocused = tabIndex === index
+        const refMin = frContext ? frContext.lastTabIndex : minSelectRef.current
         const isCatcher =
             catchFocus &&
             index ===
-                (!minSelectRef.current ||
-                minSelectRef.current >= container.count
+                (!refMin ||
+                refMin >= container.viewCount
                     ? 0
-                    : minSelectRef.current)
+                    : refMin)
         item.attr.add(
             "tab",
-            isTabRow && ((tabIndex === index && !catchFocus) || isCatcher)
+            isTabRow && ((container.getIndex(tabIndex) === index && !catchFocus) || isCatcher)
         )
         item.attr.addListener("onMouseDown", (e) => {
             if (!container.isMounted()) return
 
-            setTabIndex(index)
+            setTabIndex(container.getViewIndex(index))
             setCatchFocus(false)
             if (frContext) {
                 frContext.setRow(rowIndex)
@@ -607,7 +733,9 @@ function useFocusOnItemContainer({
             item.attr.addListener("onFocus", handleCatchedFocus)
         }
         if (cursor) {
-            item.attr.setStyle("cursor", "pointer")
+            if ((isBool(cursor) && cursor) || (isFunction(cursor) && cursor(index))) {
+                item.attr.setStyle("cursor", "pointer")
+            }
         }
     })
 
@@ -1651,6 +1779,7 @@ export {
     usePickerOnItemContainer,
     useGetTabIndex,
     useGetAttrWithDimProps,
+    useGetNewAttrWithDimProps,
     useHotKeys,
     useCallAfterwards,
     useExtractDimProps,

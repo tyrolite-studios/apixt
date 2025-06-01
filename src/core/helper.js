@@ -132,7 +132,13 @@ function Attributes(props) {
     const cls = new AttriutesCls(props)
     return new Proxy(cls, {
         set: (target, prop, value) => {
-            cls.add(prop, value)
+            if (prop === 'listeners') {
+                cls.listeners = value
+            } else if (prop === '_props') {
+                cls._props[prop] = value
+            } else {
+                cls.add(prop, value)
+            }
             return true
         }
     })
@@ -168,8 +174,8 @@ class AttriutesCls {
         return this
     }
 
-    addListeners(onEvent2listener) {
-        for (const [onEvent, listener] of Object.entries(onEvent2listener)) {
+    addListeners(onEvent2listeners) {
+        for (const [onEvent, listener] of Object.entries(onEvent2listeners)) {
             this.addListener(onEvent, listener)
         }
         return this
@@ -189,6 +195,14 @@ class AttriutesCls {
             this.setStyle(name, value)
         }
         return this
+    }
+
+    has(key) {
+        return this._props[key] !== undefined
+    }
+
+    hasStyle(key) {
+        return this.has('style') && this._props.style[key] !== undefined
     }
 
     add(name, value) {
@@ -214,6 +228,13 @@ class ClassNamesCls {
         this.overwrites = overwrites
     }
 
+    has(cls) {
+        for (const item of cls) {
+            if (item.includes(cls)) return true
+        }
+        if (this.overwrites.includes(cls)) return true
+    }
+
     add(cls = "") {
         if (!cls) return
 
@@ -229,7 +250,7 @@ class ClassNamesCls {
     }
 
     addIfProps(clsToCondition) {
-        for (const [cls, condition] of Object.entries(clsToCondition)) {
+        for (let [cls, condition] of Object.entries(clsToCondition)) {
             if (isFunction(condition)) {
                 condition = condition()
             }

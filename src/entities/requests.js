@@ -243,17 +243,6 @@ function RequestTreeManager({ treeIndex, api, match, close, ...props }) {
             }
         },
         {
-            icon: "check",
-            action: (node) => {
-                const nodeValue = `${node.nodeType} ${node.value}`
-                if (selection.includes(nodeValue)) {
-                    setSelection(without(selection, nodeValue))
-                } else {
-                    setSelection([ ...selection, nodeValue ])
-                }
-            }
-        },
-        {
             icon: "delete", action: ({ nodeType, index }) => {
                 let delFiles = []
                 let delFolders = []
