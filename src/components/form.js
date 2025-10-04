@@ -1288,6 +1288,7 @@ function Button({
     full,
     invalid,
     readOnly,
+    keepFocus,
     autoFocus,
     submit,
     refocus = null,
@@ -1373,6 +1374,7 @@ function Button({
     attr.tabIndex = useGetTabIndex({ tab, tabControlled, focused }, cls)
 
     const initPressedHandling = (startEvent, source, releaseEvent) => {
+        aContext.setButtonRefocus(refocus)
         const mode = `${source}:pressed`
         aContext.startExclusiveMode(mode, "pointer")
 
@@ -1383,7 +1385,12 @@ function Button({
             releaseEvent,
             (e) => {
                 aContext.endExclusiveMode(mode)
-                if (!mounted.current) return
+                if (!mounted.current) {
+                    if (keepFocus && refocus) {
+                        refocus()
+                    }
+                    return
+                }
 
                 setClicked(false)
                 if (onPressedEnd) {
@@ -1399,11 +1406,12 @@ function Button({
         startEvent.stopPropagation()
         startEvent.preventDefault()
         setClicked(true)
-        btnElem.focus()
 
+        btnElem.focus()
         if (onPressed) {
             onPressed(startEvent, { activated })
         }
+        aContext.setButtonRefocus(null)
     }
     return (
         <button
@@ -1421,7 +1429,6 @@ function Button({
                     return
                 }
                 if (onMouseDown) onMouseDown(e)
-                aContext.setButtonRefocus(refocus)
                 if (tab && !tabControlled) {
                     focusRef.current.focus()
                     requestAnimationFrame(() => {
@@ -1431,7 +1438,6 @@ function Button({
                     })
                 }
                 initPressedHandling(e, "mouse", "mouseup")
-                aContext.setButtonRefocus(null)
             }}
             {...attr}
         >
@@ -1473,7 +1479,7 @@ function ButtonGroup({
     }
     const style = useExtractDimProps(props)
     const cls = new ClassNames("stack-h", className)
-    cls.addIf(gapped, "gap-2")
+    cls.addIf(gapped, "gap-x-d2x")
     cls.addIf(wrap, "flex-wrap", "flex-nowrap overflow-auto")
 
     const elems = []
@@ -1504,13 +1510,15 @@ function ButtonGroup({
 
 function ButtonsAndDivGroup({
         className,
+        buttonsClassName,
         buttons = [],
         gapped = true,
         wrap = true,
-    reverse = false,
+        reverse = false,
         buttonProps = {},
         autoFocus,
         active,
+        disabled,
         rowChange,
         lastTabIndex,
         setLastTabIndex,
@@ -1521,20 +1529,32 @@ function ButtonsAndDivGroup({
     }) {
     const container = useItemContainer({ count: buttons.length + 1 })
 
-    useFocusOnItemContainer({ container, cursor: (index) => index !== (reverse ? 0 : buttons.length - 1), rowIndex })
-    const buttonCls = new ClassNames("stack-h")
+    useFocusOnItemContainer({
+        container,
+        cursor: (index) => index !== (!reverse ? 0 : buttons.length - 1),
+        rowIndex,
+        markedTabIndex: reverse ? 0 : buttons.length
+    })
+
+    const buttonCls = new ClassNames("stack-h", buttonsClassName)
     const cls = new ClassNames("stack-h w-full", className)
-    cls.addIf(gapped, "gap-2")
-    buttonCls.addIf(gapped, "gap-2")
+    cls.addIf(gapped, "gap-x-d2x")
+    buttonCls.addIf(gapped, "gap-x-d2x")
     cls.addIf(wrap, "flex-wrap", "flex-nowrap overflow-auto")
     buttonCls.addIf(wrap, "flex-wrap", "flex-nowrap overflow-auto")
 
     const elems = []
     const off = reverse ? 1 : 0
+
+    const buttonGroupRefocus = () => {
+        container.refocus()
+    }
+
     for (const [i, button] of buttons.entries()) {
         const curr = i + off
         const itemAttr = container.getItem(curr)
         const elemProps = {
+            disabled,
             ...itemAttr.attr.props,
             ...buttonProps,
             ...button,
@@ -1545,7 +1565,7 @@ function ButtonsAndDivGroup({
                 key={i}
                 {...elemProps}
                 tabControlled
-                refocus={container.refocus}
+                refocus={buttonGroupRefocus}
             />
         )
     }
@@ -1852,7 +1872,7 @@ function Form({ children, submit, onKeyDown, className, ...props }) {
                   e.key === "Enter" &&
                   !invalidRef.current &&
                   !(
-                      d(document.activeElement) &&
+                      document.activeElement &&
                       document.activeElement.tagName === "TEXTAREA"
                   )
               ) {

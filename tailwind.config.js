@@ -3,6 +3,10 @@ export default {
     theme: {
         extend: {
             spacing: {
+                d1x: "var(--spacing-small-x)",
+                d1y: "var(--spacing-small-y)",
+                d2x: "var(--spacing-medium-x)",
+                d2y: "var(--spacing-medium-y)",
                 dbx: "var(--button-padding-x)",
                 dby: "var(--button-padding-y)",
                 dix: "var(--input-padding-x)",

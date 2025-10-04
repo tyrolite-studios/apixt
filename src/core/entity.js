@@ -7,8 +7,10 @@ class EntityIndex {
         this._allIndices = null
         this.suspendNotifications = false
         this.valueIndexing = false
+        // TODO remove
         this.filterProps = []
         this._filterValueGetter = null
+        // ^^^
         this.valueTemplate = ""
     }
 
@@ -179,7 +181,7 @@ class EntityIndex {
         let i = 0
         const iMax = this.length
         while (i < iMax) {
-            if (this.getEntityPropValue(i, prop) === value) {
+            if (this.getEntityPropValue(i, prop) == value) {
                 return i
             }
             i++
@@ -202,6 +204,10 @@ class EntityIndex {
 
     getValueTemplate() {
         return this.valueTemplate
+    }
+
+    getEntityFilterString(index) {
+        return this.hasEntityProp('name') ? this.getEntityPropValue(index, 'name') : this.getEntityValue(index)
     }
 
     setValueTemplate(value) {
@@ -241,11 +247,13 @@ class EntityIndex {
             console.error(`Entity list was filtered by "${filter}" but not filterable props were specified in filterProps!`)
         }
 
+        let unfiltered = items
         if (isFiltered) {
             const lcFilter = filter.toLowerCase()
 
             const getPropValues = this.getFilterValueGetter()
-            items = items.filter((index) => {
+            unfiltered = [...items]
+            items = items.filter(index => {
                 for (const getPropValue of getPropValues) {
                     const value = getPropValue(index)
                     if (value === undefined) return false
@@ -272,6 +280,7 @@ class EntityIndex {
         }
         return {
             isFiltered,
+            unfiltered,
             matches,
             count,
             pages:
@@ -597,347 +606,9 @@ function extractLcProps(entityIndex, prop, except) {
     return without(values, except[prop].toLowerCase())
 }
 
-class TreeIndex {
-    constructor(folderIndex, leafIndex, options = {}) {
-        const { parentProp = "folder", sortDir = 1 } = options
-
-        this.lastModified = Date.now()
-        this.folderIndex = folderIndex
-        this.leafIndex = leafIndex
-        this.parentProp = parentProp
-        this.sortDir = sortDir
-
-        this.folderSort = (a, b) => {
-            const pathA = [
-                ...folderIndex.getEntityPropValue(a, "path"),
-                folderIndex.getEntityPropValue(a, "value")
-            ]
-            const pathB = [
-                ...folderIndex.getEntityPropValue(b, "path"),
-                folderIndex.getEntityPropValue(b, "value")
-            ]
-            let i = 0
-            while (
-                i < pathA.length &&
-                i < pathB.length &&
-                pathA[i] === pathB[i]
-            )
-                i++
-
-            const hasPathA = i < pathA.length
-            const hasPathB = i < pathB.length
-
-            let compA
-            let compB
-            if (hasPathA) {
-                if (!hasPathB) return 1
-
-                compA = folderIndex.model[pathA[i]].name
-                compB = folderIndex.model[pathB[i]].name
-            } else if (hasPathB) {
-                return -1
-            } else {
-                compA = folderIndex.getEntityPropValue(a, "name")
-                compB = folderIndex.getEntityPropValue(b, "name")
-            }
-            compA = compA.toLowerCase()
-            compB = compB.toLowerCase()
-            return (compA < compB ? -1 : compA > compB ? 1 : 0) * this.sortDir
-        }
-
-        folderIndex.addListener(() => {
-            this.rebuildFolderSortIds()
-            this.notify()
-        })
-        leafIndex.addListener(() => this.notify())
-        this.rebuildFolderSortIds()
-    }
-
-    addListener(listener) {
-        if (!this.listeners) {
-            this.listeners = []
-        }
-        this.listeners.push(listener)
-    }
-
-    removeListener(listener) {
-        if (!this.listeners) {
-            return
-        }
-        if (this.listeners.includes(listener)) {
-            this.listeners.splice(this.listeners.indexOf(listener), 1)
-        }
-    }
-
-    notify() {
-        this.lastModified = Date.now()
-        if (this.suspendNotifications) {
-            return false
-        }
-        this._allIndices = null
-        if (!this.listeners) {
-            return true
-        }
-        for (let listener of this.listeners) {
-            listener(this.updates)
-        }
-        this.updates = []
-        return true
-    }
-
-    rebuildFolderSortIds() {
-        const folder2sortId = {}
-        const index2sortId = {}
-        const folderIndex = this.folderIndex
-        const sorted = folderIndex.allIndices.toSorted(this.folderSort)
-        for (const [sortIndex, sortedIndex] of sorted.entries()) {
-            index2sortId[sortedIndex] = sortIndex
-            const value = folderIndex.getEntityPropValue(sortedIndex, "value")
-            folder2sortId[value] = sortIndex
-        }
-        this.folder2sortId = folder2sortId
-        this.index2sortId = index2sortId
-    }
-
-    toggleFolder(index) {
-        const closed = this.folderIndex.getEntityPropValue(index, "closed")
-        this.folderIndex.setEntityPropValue(index, "closed", !closed)
-    }
-
-    collapseAll(match) {
-        const folders = this.folderIndex.getView({match})
-        for (const index of folders.matches) {
-            this.folderIndex.setEntityPropValue(index, "closed", true)
-        }
-    }
-
-    expandAll(match) {
-        const folders = this.folderIndex.getView({match})
-        for (const index of folders.matches) {
-            this.folderIndex.setEntityPropValue(index, "closed", false)
-        }
-    }
-
-    toggleSortDir() {
-        this.sortDir = -this.sortDir
-        this.rebuildFolderSortIds()
-        this.notify()
-    }
-
-    getFolderTreeNodes(delFolder, match, found = { files: [], folders: [] }) {
-        const nodes = this.getNodes({ allOpen: true,
-            match
-        })
-        const { files, folders } = found
-        let level = null
-        for (const node of nodes) {
-            if (level === null) {
-                if (node.index !== delFolder || node.nodeType === 'leaf') continue
-
-                level = node.level
-                if (!folders.includes(node.index)) folders.push(node.index)
-                continue
-            }
-            if (node.level <= level) {
-                break
-            }
-            if (node.nodeType === 'leaf') {
-                if (!files.includes(node.index)) files.push(node.index)
-            } else {
-                if (!folders.includes(node.index)) folders.push(node.index)
-            }
-        }
-        return found
-    }
-
-    getNodes({ alwaysExpanded, filter, selection, skip, ...props }) {
-        const fileMatch = !props.match
-            ? undefined
-            : (index) => {
-                  return props.match("file", this.leafIndex, index)
-              }
-
-        const filesView = this.leafIndex.getView({
-            match: fileMatch,
-            filter,
-            sort: (a, b) => {
-                const folderA = this.leafIndex.getEntityPropValue(a, "folder")
-                const folderB = this.leafIndex.getEntityPropValue(b, "folder")
-
-                let compA
-                let compB
-                if (filter || folderA === folderB) {
-                    compA = this.leafIndex
-                        .getEntityPropValue(a, "name")
-                        .toLowerCase()
-                    compB = this.leafIndex
-                        .getEntityPropValue(b, "name")
-                        .toLowerCase()
-                } else {
-                    compA = this.folder2sortId[folderA]
-                    compB = this.folder2sortId[folderB]
-                }
-                return (
-                    (compA < compB ? -1 : compA > compB ? 1 : 0) * this.sortDir
-                )
-            }
-        })
-        const fileNodes = this.leafIndex.getEntityObjects(filesView.matches)
-        // TODO change this...
-        if (filter && this.leafIndex.filterProps.length) {
-            return fileNodes.map(x => {
-                const index = this.folderIndex.getEntityByPropValue(
-                    "value",
-                    x.folder
-                )
-                x.path = this.folderIndex.getEntityPropValue(index, "name")
-                x.level = 0
-                x.nodeType = "leaf"
-                return x
-            })
-        }
-
-        const folderMatch = !props.match
-            ? undefined
-            : (index) => {
-                  return props.match("folder", this.folderIndex, index)
-              }
-        const folders = this.folderIndex.getView({
-            match: folderMatch,
-            sort: (a, b) => {
-                const compA = this.index2sortId[a]
-                const compB = this.index2sortId[b]
-                return compA < compB ? -1 : compA === compB ? 0 : 1
-            }
-        })
-        const folderNodes = this.folderIndex.getEntityObjects(folders.matches)
-
-        const folder2files = {}
-        const folder2fileIds = {}
-        for (const {
-            index,
-            name,
-            value,
-            folder = "0",
-            ...props
-        } of fileNodes) {
-            if (!folder2files[folder]) {
-                folder2files[folder] = []
-                folder2fileIds[folder] = []
-            }
-            if (skip && skip('leaf ' + value)) continue
-            folder2files[folder].push({
-                nodeType: "leaf",
-                index,
-                folder,
-                name,
-                value,
-                visible: true,
-                ...props
-            })
-            folder2fileIds[folder].push(value)
-        }
-        const nodes = []
-        let stack = []
-        const folder2level = {}
-
-        const popToLevel = (level, closedLevel) => {
-            while (stack.length > level) {
-                const folder = stack.pop()
-                const currLevel = folder2level[folder] + 1
-                const files = folder2files[folder]
-                if (!files) continue
-
-                nodes.push(
-                    ...files.map(x => {
-                        x.level = currLevel
-                        x.folder = folder
-                        x.visible = closedLevel === null || (currLevel <= closedLevel)
-                        return x
-                    })
-                )
-            }
-        }
-        let closedLevel = null
-        let closedIndex = null
-        folderNodes.unshift({
-            name: "",
-            path: [],
-            value: "0",
-            index: -1,
-            closed: false
-        })
-        const markedFolders = []
-        const markedFiles = []
-        const getHiddenMarked = (marked, ids) => {
-            let hidden = 0
-            for (const id of ids) {
-                if (marked.includes(id)) hidden++
-            }
-            return hidden
-        }
-        if (selection) {
-            for (const id of selection) {
-                const [type, value] = id.split(" ");
-                (type === 'leaf' ? markedFiles : markedFolders).push(value)
-            }
-        }
-        let skipLevel = null
-        for (const { name, path, value, index, closed } of folderNodes) {
-            let level = path.length
-            folder2level[value] = level
-            popToLevel(level, closedLevel)
-
-            if (skipLevel !== null && level > skipLevel) continue
-            skipLevel = null
-
-            if (skip && skip('folder ' + value)) {
-                skipLevel = level
-                continue
-            }
-            if (closedLevel !== null) {
-                if (level > closedLevel) {
-                    nodes[closedIndex].hiddenMarked +=
-                        getHiddenMarked(markedFiles, folder2fileIds[value] ?? []) +
-                        getHiddenMarked(markedFolders, [value])
-                } else {
-                    closedLevel = null
-                }
-            }
-
-
-            let hiddenMarked = 0
-            if (closedLevel === null && closed && !alwaysExpanded) {
-                closedLevel = level
-                closedIndex = nodes.length
-                hiddenMarked += getHiddenMarked(markedFiles, folder2fileIds[value] ?? [])
-            }
-            const folder = path.length ? path[path.length - 1] : undefined
-            if (index !== -1) {
-                nodes.push({
-                    nodeType: "folder",
-                    index,
-                    name,
-                    folder,
-                    value,
-                    level,
-                    hiddenMarked,
-                    visible: closedLevel === null || level <= closedLevel,
-                    closed: alwaysExpanded ? false : closed
-                })
-            }
-            stack.push(value)
-        }
-        popToLevel(0, closedLevel)
-
-        return nodes
-    }
-}
-
 export {
     EntityIndex,
     MappingIndex,
     SimpleMappingIndex,
-    extractLcProps,
-    TreeIndex
+    extractLcProps
 }

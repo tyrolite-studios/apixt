@@ -22,7 +22,7 @@ import {
     getExtractParts,
     isSupportedExtractBodyType
 } from "entities/assignments"
-import { TreeIndex } from "core/entity"
+import { TreeIndex } from "core/entity-tree"
 import { RouteIndex } from "entities/routes"
 import { ConstantIndex } from "entities/constants"
 import { ApiIndex, APIS } from "entities/apis"
@@ -662,7 +662,7 @@ function registerContentApi({ registry, register, apiRef }) {
         }
         if (!contentType.endsWith("/json")) return body
 
-        const json = {}
+        let json = {}
         if (body !== "") {
             try {
                 json = JSON.parse(body)

@@ -27,7 +27,7 @@ import {
     FormContext,
     SelectCells,
     CustomCells,
-    FormGrid
+    FormGrid, Select
 } from "./form"
 import { Centered, Div, Stack, Icon, OkCancelLayout } from "./layout"
 import { AppContext } from "./context"
@@ -87,6 +87,158 @@ const useGetTabIndex = ({ tab, tabControlled, focused }, cls) => {
     if ((tabControlled && tab) || (!tabControlled && focused) || tab) return 0
 
     return tab === false ? -1 : undefined
+}
+
+function getCols(name) {
+    const [main, opacity = ''] = name.split('/')
+    let bg
+    let color;
+
+    switch (main) {
+        case 'input':
+            color = 'text-input-text'
+            switch (opacity) {
+                case '100':
+                case '':
+                    bg = 'bg-input-bg'
+                    break
+
+                case '0':
+                    bg = 'bg-transparent'
+                    color = 'text-input-text'
+                    break
+
+                case '25':
+                    bg = 'bg-input-bg/25'
+                    break
+
+                case '50':
+                    bg = 'bg-input-bg/50'
+                    break
+
+                case '75':
+                    bg = 'bg-input-bg/75'
+                    break
+            }
+            break
+
+        case 'block':
+            color = 'text-block-text'
+            switch (opacity) {
+                case '100':
+                case '':
+                    bg = 'bg-block-bg'
+                    break
+
+                case '0':
+                    bg = 'bg-transparent'
+                    color = 'text-block-text'
+                    break
+
+                case '25':
+                    bg = 'bg-block-bg/25'
+                    break
+
+                case '50':
+                    bg = 'bg-block-bg/50'
+                    break
+
+                case '75':
+                    bg = 'bg-block-bg/75'
+                    break
+            }
+            break
+
+        case 'button':
+            color = 'text-button-text'
+            switch (opacity) {
+                case '100':
+                case '':
+                    bg = 'bg-button-bg'
+                    break
+
+                case '0':
+                    bg = 'bg-transparent'
+                    color = 'text-button-text'
+                    break
+
+                case '25':
+                    bg = 'bg-button-bg/25'
+                    break
+
+                case '50':
+                    bg = 'bg-button-bg/50'
+                    break
+
+                case '75':
+                    bg = 'bg-button-bg/75'
+                    break
+            }
+            break
+
+        case 'header':
+            color = 'text-header-text'
+            switch (opacity) {
+                case '100':
+                case '':
+                    bg = 'bg-header-bg'
+                    break
+
+                case '0':
+                    bg = 'bg-transparent'
+                    color = 'text-header-text'
+                    break
+
+                case '25':
+                    bg = 'bg-header-bg/25'
+                    break
+
+                case '50':
+                    bg = 'bg-header-bg/50'
+                    break
+
+                case '75':
+                    bg = 'bg-header-bg/75'
+                    break
+            }
+            break
+
+        case 'border':
+            color = 'text-border-text'
+            switch (opacity) {
+                case '100':
+                case '':
+                    bg = 'bg-border-bg'
+                    break
+
+                case '0':
+                    bg = 'bg-transparent'
+                    color = 'text-border-text'
+                    break
+
+                case '25':
+                    bg = 'bg-border-bg/25'
+                    break
+
+                case '50':
+                    bg = 'bg-border-bg/50'
+                    break
+
+                case '75':
+                    bg = 'bg-border-bg/75'
+                    break
+            }
+            break
+
+
+    }
+    if (!bg || !color) throw Error(`Invalid color value "${name}" given!`)
+
+    if (opacity === '0') color = 'text-app-text'
+    return {
+        bg,
+        color
+    }
 }
 
 function useExtractDimProps(
@@ -222,6 +374,7 @@ function useCallAfterwards() {
 
 function useItemContainer({
     items,
+    treeOrder,
     count,
     view = false,
     item2value = (x) => x,
@@ -255,6 +408,7 @@ function useItemContainer({
         ref,
         attr,
         items,
+        treeOrder,
         getIndex: view && items ? x => viewIndices[x] : x => x,
         getViewIndex: view && items ? x => viewIndices.indexOf(x) : x => x,
         count,
@@ -340,9 +494,10 @@ function useSelectionOnItemContainer({
     const getMinimized = (values) => {
         if (!treeSelection) return values
 
+
         const minimized = []
         let lastMarkedLevel = null
-        for (const { level, nodeType, value } of container.items) {
+        for (const { level, nodeType, value } of container.treeOrder) {
             if (lastMarkedLevel !== null) {
                 if (level > lastMarkedLevel) continue
                 lastMarkedLevel = null
@@ -371,8 +526,67 @@ function useSelectionOnItemContainer({
         })
     }
 
+    const getAncestorIds = index => {
+        let parents = []
+        let parent = container.treeOrder[index].folder
+        let i = index
+        while (i >= 0) {
+            const item = container.treeOrder[i]
+            i--
+            // TODO use exact match here
+            if (item.value != parent) continue
+
+            parents.push("folder " + item.value)
+            parent = item.folder
+        }
+        return parents
+    }
+
+    const getSubtreeIdsForNode = index => {
+        const { treeOrder } = container
+        let i = index
+        let subtreeNodes = []
+        let currNode = treeOrder[i]
+        const level = currNode.level
+        while (true) {
+            const id = currNode.nodeType + ' ' + currNode.value
+            subtreeNodes.push(id)
+            i++
+            if (i === treeOrder.length) break
+
+            currNode = treeOrder[i]
+            if (currNode.level <= level) break
+        }
+        return subtreeNodes
+    }
+
+    const toggleSubtree = (index) => {
+        const elem = container.items[index]
+        const { treeOrder } = container
+
+        let i = 0
+        while (i < treeOrder.length && treeOrder[i] !== elem) i++
+
+        if (i === treeOrder.length) return
+
+        const entityNodes = container.getMinSelectables(getSubtreeIdsForNode(i))
+
+        if (!entityNodes.length) return
+
+        let remaining = without(selection, entityNodes)
+        if (treeSelection) {
+            const parents = getAncestorIds(i)
+            remaining = without(remaining, parents)
+        }
+        let newSelection =
+            without(entityNodes, selection).length === 0 ?
+                [ ...remaining ] : [ ...remaining, ...entityNodes ]
+        setSelection(newSelection)
+    }
+
     const toggle = (index) => {
-        const value = item2value(container.items[index])
+        const node = container.items[index]
+        const value = item2value(node)
         if (selectable && !selectable(value)) return
 
         if (selection.includes(value)) {
@@ -385,38 +599,17 @@ function useSelectionOnItemContainer({
             setSelection([value])
         } else if (max === undefined || selection.length < max) {
             if (treeSelection) {
-                const parents = []
-                const [nodeType, nodeValue] = value.split(' ')
-                let i = 0
-                let j = 0
-                let nodeLevel = -1
-                let parent = null
-                while (i < container.items.length) {
-                    const item = container.items[i]
-                    if (item.nodeType === nodeType && item.value === nodeValue) {
-                        parent = item.folder
-                        nodeLevel = item.level
-                        j = i
-                    } else if (nodeLevel > -1) {
-                        if (item.level <= nodeLevel) {
-                            nodeLevel = -1
-                        } else {
-                            parents.push(item.nodeType + ' ' + item.value)
-                        }
-                    }
-                    i++
-                }
-                if (parent !== null) {
-                    while (j >= 0) {
-                        const item = container.items[j]
-                        j--
-                        if (item.value !== parent) continue
 
-                        parents.push("folder " + item.value)
-                        parent = item.folder
-                    }
-                }
-                setSelection([...without(selection, parents), value])
+                const { treeOrder } = container
+                let x = 0
+                while (x < treeOrder.length && treeOrder[x] !== node) x++
+
+                if (x === treeOrder.length) return
+
+                const subtreeIds = getSubtreeIdsForNode(x)
+                const root = subtreeIds.shift()
+                const ancestorIds = getAncestorIds(x)
+                setSelection([...without(selection, [...subtreeIds, ...ancestorIds]), root])
                 return
             }
             setSelection([...selection, value])
@@ -455,6 +648,7 @@ function useSelectionOnItemContainer({
         syncSelection()
     }
     container.toggle = toggle
+    container.toggleSubtree = toggleSubtree
     if (max !== undefined) return
 
     container.selectAll = () => {
@@ -481,7 +675,9 @@ const FocusRowContext = createContext(null)
 function FocusRowCtx({ children }) {
     const [row, setRow] = useState(0)
     const [lastTabIndex, setLastTabIndex] = useState(0)
+    const rowTabIndexSetter = useRef(null)
     const containerRef = useRef(null)
+    const markedTabRef = useRef(0)
 
     const refocus = () => {
         requestAnimationFrame(() => {
@@ -496,7 +692,17 @@ function FocusRowCtx({ children }) {
     const api = {
         row,
         lastTabIndex,
+        setRowTabIndexSetter: setter => rowTabIndexSetter.current = setter,
+        setRowTabIndex: (index) => {
+            if (!rowTabIndexSetter.current) return
+
+            rowTabIndexSetter.current(index)
+        },
         setLastTabIndex,
+        setMarkedTabIndex: (index) => {
+            markedTabRef.current = index
+        },
+        getMarkedTabIndex: () => markedTabRef.current,
         nextRow: () => {
             const max = containerRef.current.children.length - off
             setRow(row + 1 >= max ? 0 : row + 1)
@@ -523,27 +729,50 @@ function FocusRowCtx({ children }) {
 function useFocusGroupsOnItemContainer({ container }) {
     const aContext = useContext(AppContext)
     const frContext = useContext(FocusRowContext)
-    const callAfterwards = useCallAfterwards()
+
     const initCatchRef = useRef(false)
+    const initFocusMinRef = useRef(true)
     const levelRef = useRef(null)
     if (levelRef.current === null) {
         levelRef.current = aContext.getModalLevel()
     }
-    // current tab index exceeds limit? then reset to last index
-    if (frContext.row !== null && container.viewCount > 0 && frContext.row >= container.viewCount && initCatchRef.current !== false) {
-        d('TODO: FIX ROW!')
-        callAfterwards(() => {
-            frContext.setRow(container.viewCount - 1)
-            // refocus()
-        })
-    }
     container.attr.addListeners({
+        onMouseDown: (e) => {
+            initFocusMinRef.current = false
+        },
         onFocus: (e) => {
             if (initCatchRef.current) {
                 cancelAnimationFrame(initCatchRef.current)
             }
-            initCatchRef.current = false
+            if (initFocusMinRef.current) {
+                let minSelected = 0
+                // if we have a selection then set the focus on the first item which is
+                // included in the selection
+                if (container.selection && container.selection.length) {
+                    while (
+                        minSelected < container.viewCount &&
+                        !container.selection.includes(
+                            container.item2value(container.items[container.getIndex(minSelected)])
+                        )) {
+                        minSelected++
+                    }
+                    // no item was found, so we select the first one
+                    if (minSelected >= container.viewCount) minSelected = 0
 
+                    const markedTabIndex = frContext.getMarkedTabIndex();
+                    frContext.setLastTabIndex(markedTabIndex)
+                    frContext.setRow(minSelected)
+                    if (minSelected > 0) {
+                        frContext.refocus()
+                    } else {
+                        requestAnimationFrame(() => {
+                            frContext.setRowTabIndex(markedTabIndex)
+                        })
+                    }
+                }
+            }
+            initFocusMinRef.current = false
+            initCatchRef.current = false
         },
         onBlur: (e) => {
             if (initCatchRef.current) return
@@ -553,6 +782,7 @@ function useFocusGroupsOnItemContainer({ container }) {
 
                 if (!container.isMounted() || aContext.getModalLevel() !== levelRef.current) return
 
+                initFocusMinRef.current = true
                 frContext.setRow(0)
                 frContext.setLastTabIndex(0)
             })
@@ -567,6 +797,7 @@ function useFocusGroupsOnItemContainer({ container }) {
 function useFocusOnItemContainer({
     container,
     rowIndex,
+    markedTabIndex = 0,
     cursor = true,
     moveFocus
 }) {
@@ -574,6 +805,8 @@ function useFocusOnItemContainer({
     let frContext = useContext(FocusRowContext)
 
     if (rowIndex === undefined) frContext = undefined
+    if (frContext) frContext.setMarkedTabIndex(markedTabIndex)
+
     const callAfterwards = useCallAfterwards()
 
     if (moveFocus === undefined) {
@@ -598,9 +831,7 @@ function useFocusOnItemContainer({
         if (frContext) {
             frContext.setLastTabIndex(index)
         }
-//        if (/*tabIndex !== index ||*/ initCatchRef.current) {
-            refocus()
-//        } else d('NO REFOCUS')
+        refocus()
     }
     const initCatchRef = useRef(false)
     const minSelectRef = useRef(0)
@@ -612,11 +843,17 @@ function useFocusOnItemContainer({
     const { ref, viewCount } = container
     const refocus = () => {
         requestAnimationFrame(() => {
-            if (!container.isMounted()) return
+            if (!container.isMounted()) {
+                if (frContext) frContext.prevRow()
+                return
+            }
 
             const elems = ref.current.querySelectorAll(".tabbed")
             if (elems.length) {
-                elems[elems.length - 1].focus()
+                const elem = elems[elems.length - 1]
+                if (document.activeElement !== elem) {
+                    elem.focus()
+                }
                 setCatchFocus(false)
             }
         })
@@ -625,7 +862,6 @@ function useFocusOnItemContainer({
     if (tabIndex !== null && viewCount > 0 && tabIndex >= viewCount && !catchFocus) {
         callAfterwards(() => {
             setTabIndex(viewCount - 1)
-            //refocus()
         })
     }
 
@@ -640,6 +876,11 @@ function useFocusOnItemContainer({
         // included in the selection
         if (frContext) {
             minSelected = frContext.lastTabIndex
+            frContext.setRowTabIndexSetter(
+                (index) => {
+                    requestAnimationFrame(() => setTabIndex(index))
+                }
+            )
         } else if (container.selection && container.selection.length) {
             while (
                 minSelected < container.viewCount &&
@@ -706,6 +947,7 @@ function useFocusOnItemContainer({
         }
     })
     const isTabRow = !frContext || frContext.row === rowIndex
+
     container.addItemBuilder((index, item) => {
         item.isFocused = tabIndex === index
         const refMin = frContext ? frContext.lastTabIndex : minSelectRef.current
@@ -1729,7 +1971,14 @@ function JsonPathInput({
     )
 }
 
-function Filterbox({ filter, setFilter, toggleSortDir }) {
+const modeOptions = [
+    {id: 'includes', name: "Include"},
+    {id: 'startsWith', name: "Prefix"},
+    {id: 'endsWith', name: "Suffix"},
+    {id: 'exact', name: "Exact"}
+]
+
+function Filterbox({ filter, setFilter, toggleSortDir, caseSensitive, setCaseSensitive, or, setOr, mode, setMode }) {
     const buttons = [
         {
             icon: "close",
@@ -1737,6 +1986,22 @@ function Filterbox({ filter, setFilter, toggleSortDir }) {
             onPressed: () => setFilter("")
         }
     ]
+    if (setCaseSensitive) {
+        buttons.push({
+            icon: "opacity",
+            activated: caseSensitive,
+            value: true,
+            onPressed: () => setCaseSensitive(!caseSensitive)
+        })
+    }
+    if (setOr) {
+        buttons.push({
+            name: "OR",
+            activated: or,
+            value: true,
+            onPressed: () => setOr(!or)
+        })
+    }
     if (toggleSortDir) {
         buttons.push({
             icon: "sort",
@@ -1745,6 +2010,7 @@ function Filterbox({ filter, setFilter, toggleSortDir }) {
     }
     return (
         <div key="filter" className="stack-h items-center gap-1">
+            {!!setMode && <Select options={modeOptions} value={mode} set={setMode} /> }
             <div
                 className={
                     "px-1" +
@@ -1787,6 +2053,7 @@ export {
     useConfirmation,
     useUpdateOnEntityIndexChanges,
     useErrorWindow,
+    getCols,
     HighlightMatches,
     splitByMatch,
     useLoadingSpinner,

@@ -1,4 +1,6 @@
 export default {
+    spacingSmall_px: 2,
+    spacingMedium_px: 4,
     buttonBg_rgb: "224 224 224",
     buttonText_rgb: "101 95 95",
     buttonBorder_rgb: "165 152 152",

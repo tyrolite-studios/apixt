@@ -9,7 +9,8 @@ import { FormGrid, InputCells } from "components/form"
 import { FolderInput } from "entities/folders"
 import { AppContext } from "components/context"
 import { CustomCells } from "components/form"
-import { FolderIndex, FileForm, FolderForm, TreeIndexStack } from "entities/folders"
+import { FileForm, FolderForm, TreeIndexStack } from "entities/folders"
+import { FolderIndex } from "core/entity-tree"
 import { useConfirmation } from "../components/common.js"
 
 class RequestIndex extends MappingIndex {

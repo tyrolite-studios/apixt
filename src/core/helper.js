@@ -1,3 +1,4 @@
+
 /**
  * Debug function which logs the given parameters on the console and returns the first param
  *

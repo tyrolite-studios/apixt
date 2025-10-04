@@ -5,6 +5,10 @@
 @layer base {
     :root {
         /* default paddings */
+        --spacing-small-x: 2px;
+        --spacing-small-y: 2px;
+        --spacing-medium-x: 4px;
+        --spacing-medium-y: 4px;
 
         /* application & window background */
         --app-bg: 157 180 204;
