@@ -1,9 +1,9 @@
 const FILTER = {
     RESULT: {
-        SUBTREES: 1,
-        WITH_ANCESTORS: 2,
-        FLAT_DIRECT: 3,
-        FLAT_SUBTREES: 4
+        FLAT_DIRECT: 1,
+        FLAT_SUBTREES: 2,
+        SUBTREES: 3,
+        WITH_ANCESTORS: 4
     },
     MODE: {
         EXACT: 'exact',
@@ -25,6 +25,18 @@ FILTER.DEFAULTS = {
     result: FILTER.RESULT.SUBTREES,
     isFilterRelevant: FILTER.MATCH.ALL,
     isFilterVisible: FILTER.MATCH.ALL
+}
+FILTER.SETS = {
+    ALL: {
+        id: 'all', name: 'All', exclusive: true
+    },
+    MARKED: {
+        id: 'marked',
+            name: 'Marked',
+            result: FILTER.RESULT.FLAT_DIRECT,
+            exclusive: true,
+            getHasId: ({ selection }) => id => selection && selection.includes(id)
+    }
 }
 
 const getWords = (value, toLowerCase = false) => {

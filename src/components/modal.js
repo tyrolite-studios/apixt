@@ -22,17 +22,17 @@ function ModalWindow({
     height,
     maxHeight,
     drag,
+    headless,
     className,
-    children
+    children,
+    ...props
 }) {
     const aContext = useContext(AppContext)
 
     const dimRef = useRef(null)
-    const [left, setLeft] = useState(null)
-    const [top, setTop] = useState(null)
-    const [dim, setDim] = useState(null)
-    const mounted = useMounted()
-
+    const [left, setLeft] = useState(props.left ?? null)
+    const [top, setTop] = useState(props.top ?? null)
+    const [dim, setDim] = useState(left && top ? {left, top} : null)
     useEffect(() => {
         if (!id) return
         return () => {
@@ -264,7 +264,7 @@ function ModalWindow({
                                 {...widthAttr.props}
                                 ref={dimRef}
                             >
-                                <Div className="stack-h bg-header-bg text-header-text w-full">
+                                {!headless && <Div className="stack-h bg-header-bg text-header-text w-full">
                                     <Div
                                         className="w-full px-2 text-ellipsis"
                                         {...nameAttr.props}
@@ -281,7 +281,7 @@ function ModalWindow({
                                     ) : (
                                         ""
                                     )}
-                                </Div>
+                                </Div>}
 
                                 <div
                                     className="grid auto overflow-hidden"
@@ -318,23 +318,6 @@ function ModalWindow({
 
 function Modal({ isolated, ...props }) {
     const trapRef = useRef(null)
-    const aContext = useContext(AppContext)
-    /*
-    if (wContext.isStyleLocked()) {
-        // const lockedStyles = wContext.getLockedStyles()
-        return (
-            <Portal id="modals-container">
-                <ThemeFreeze blockRef={trapRef} values={lockedStyles}>
-                    <ModalInner
-                        trapRef={trapRef}
-                        lockedStyles={lockedStyles}
-                        {...props}
-                    />
-                </ThemeFreeze>
-            </Portal>
-        )
-    }
-    */
     useEffect(() => {
         if (!isolated) return
 
@@ -413,6 +396,9 @@ function useModalWindow() {
                         transparent={transparent}
                         closeable={props.closeable}
                         isolated={props.isolated}
+                        headless={props.headless}
+                        top={propsRef.current.top}
+                        left={propsRef.current.left}
                         {...dimProps}
                     >
                         {props.children}

@@ -95,6 +95,11 @@ function getCols(name) {
     let color;
 
     switch (main) {
+        case 'transparent':
+            bg = 'transparent'
+            color = 'text-header-text'
+            break
+
         case 'input':
             color = 'text-input-text'
             switch (opacity) {
@@ -343,6 +348,118 @@ function useGetNewAttrWithDimProps({
     return attr.setStyles(style)
 }
 
+const HotKeySingleKeys = ["Escape", "Enter"]
+const HotKeySkipValues = ["Meta", "Control", "Alt", "Shift"]
+
+function useRegisterAppListeners() {
+    const aContext = useContext(AppContext)
+
+    const onFocus = (e) => {
+        aContext.register("lastTarget", e.target)
+        const zIndex = aContext.focusStack.zIndex
+        if (!zIndex) {
+            return
+        }
+        const focusElem = aContext.focusStack.elem[zIndex]
+        if (!focusElem || !focusElem.top) {
+            return
+        }
+        if (focusElem.top.contains(document.activeElement)) {
+            return
+        }
+        if (focusElem.auto) {
+            focusElem.auto.focus()
+        } else {
+            focusElem.start.focus()
+        }
+    }
+
+    useEffect(() => {
+        const hotkeyListener = (e) => {
+            if (aContext.isInExclusiveMode()) {
+                // TODO allow certain hotkeys?
+                return
+            }
+            let hotKey = ""
+            let actionKey = ""
+            const isTextArea =
+                document.activeElement &&
+                "TEXTAREA" === document.activeElement.tagName
+            const isInput =
+                document.activeElement &&
+                "INPUT" === document.activeElement.tagName
+
+            if (e.metaKey) {
+                hotKey += "m"
+            } else if (e.ctrlKey) {
+                hotKey += "c"
+            } else if (e.altKey) {
+                hotKey += "a"
+            } else if (
+                HotKeySingleKeys.includes(e.key) &&
+                !(e.key === "Enter" && isTextArea)
+            ) {
+                actionKey = e.key
+            } else if (
+                e.key >= "0" &&
+                e.key <= "9" &&
+                !(isTextArea || isInput)
+            ) {
+                if (aContext.focusHotKeyArea(e.key)) {
+                    e.stopPropagation()
+                    e.preventDefault()
+                    return
+                }
+            }
+            if (hotKey.length > 0 && e.shiftKey) {
+                hotKey += "i"
+            }
+            if (hotKey !== "") {
+                actionKey = hotKey
+                if (!HotKeySkipValues.includes(e.key)) {
+                    actionKey += " " + e.key
+                }
+            }
+            if (!actionKey) {
+                return
+            }
+            const elem =
+                document.activeElement === document.body
+                    ? aContext.getLastTarget()
+                    : document.activeElement
+            const handler = aContext.getHandlerForActionKey(actionKey, elem)
+            if (handler) {
+                if (!e.repeat) {
+                    if (typeof handler === "object") {
+                        if (!handler.can || handler.can()) {
+                            handler.exec()
+                        }
+                    } else {
+                        handler()
+                    }
+                }
+                e.stopPropagation()
+                e.preventDefault()
+            } else if (handler === null && actionKey === "Escape") {
+                e.stopPropagation()
+                e.preventDefault()
+                // TODO: confirm()
+            }
+        }
+        const clickListener = (e) => {
+            aContext.register("lastTarget", e.target)
+        }
+        window.addEventListener("mousedown", clickListener, {})
+        window.addEventListener("keydown", hotkeyListener, {})
+        return () => {
+            window.removeEventListener("mousedown", clickListener, {})
+            window.removeEventListener("keydown", hotkeyListener, {})
+        }
+    })
+
+    return onFocus
+}
+
 
 function useHotKeys(elemRef, hotKeys, area = null, link = null) {
     const aContext = useContext(AppContext)
@@ -409,8 +526,8 @@ function useItemContainer({
         attr,
         items,
         treeOrder,
-        getIndex: view && items ? x => viewIndices[x] : x => x,
-        getViewIndex: view && items ? x => viewIndices.indexOf(x) : x => x,
+        getItemIndexForViewIndex: view && items ? x => viewIndices[x] : x => x,
+        getViewIndexForItemIndex: view && items ? x => viewIndices.indexOf(x) : x => x,
         count,
         viewCount,
         item2value,
@@ -454,7 +571,7 @@ function usePickerOnItemContainer({ container, pick }) {
             if (!container.focused) return
 
             if (e.key === " ") {
-                pickIndex(container.getIndex(container.tabIndex))
+                pickIndex(container.getItemIndexForViewIndex(container.tabIndex))
                 e.preventDefault()
             }
         }
@@ -622,7 +739,7 @@ function useSelectionOnItemContainer({
                 if (!container.focused) return
 
                 if (e.key === " ") {
-                    toggle(container.getIndex(container.tabIndex))
+                    toggle(container.getItemIndexForViewIndex(container.tabIndex))
                     e.preventDefault()
                 }
             }
@@ -752,7 +869,7 @@ function useFocusGroupsOnItemContainer({ container }) {
                     while (
                         minSelected < container.viewCount &&
                         !container.selection.includes(
-                            container.item2value(container.items[container.getIndex(minSelected)])
+                            container.item2value(container.items[container.getItemIndexForViewIndex(minSelected)])
                         )) {
                         minSelected++
                     }
@@ -885,7 +1002,7 @@ function useFocusOnItemContainer({
             while (
                 minSelected < container.viewCount &&
                 !container.selection.includes(
-                    container.item2value(container.items[container.getIndex(minSelected)])
+                    container.item2value(container.items[container.getItemIndexForViewIndex(minSelected)])
                 )
             ) {
                 minSelected++
@@ -948,24 +1065,25 @@ function useFocusOnItemContainer({
     })
     const isTabRow = !frContext || frContext.row === rowIndex
 
-    container.addItemBuilder((index, item) => {
-        item.isFocused = tabIndex === index
+    container.addItemBuilder((itemIndex, item) => {
+        item.isFocused = container.getItemIndexForViewIndex(tabIndex) === itemIndex
         const refMin = frContext ? frContext.lastTabIndex : minSelectRef.current
+        const viewIndex = container.getViewIndexForItemIndex(itemIndex)
         const isCatcher =
             catchFocus &&
-            index ===
+            viewIndex ===
                 (!refMin ||
                 refMin >= container.viewCount
                     ? 0
                     : refMin)
         item.attr.add(
             "tab",
-            isTabRow && ((container.getIndex(tabIndex) === index && !catchFocus) || isCatcher)
+            isTabRow && ((item.isFocused && !catchFocus) || isCatcher)
         )
         item.attr.addListener("onMouseDown", (e) => {
             if (!container.isMounted()) return
 
-            setTabIndex(container.getViewIndex(index))
+            setTabIndex(viewIndex)
             setCatchFocus(false)
             if (frContext) {
                 frContext.setRow(rowIndex)
@@ -975,7 +1093,7 @@ function useFocusOnItemContainer({
             item.attr.addListener("onFocus", handleCatchedFocus)
         }
         if (cursor) {
-            if ((isBool(cursor) && cursor) || (isFunction(cursor) && cursor(index))) {
+            if ((isBool(cursor) && cursor) || (isFunction(cursor) && cursor(itemIndex))) {
                 item.attr.setStyle("cursor", "pointer")
             }
         }
@@ -1049,6 +1167,7 @@ function useLoadingSpinner() {
         },
         close: () => {
             if (!openRef.current) return
+
             SpinnerWindow.close()
             setOpen(false)
         },
@@ -2035,6 +2154,7 @@ function Filterbox({ filter, setFilter, toggleSortDir, caseSensitive, setCaseSen
 }
 
 export {
+    useRegisterAppListeners,
     useComponentUpdate,
     useMounted,
     useDebugMount,

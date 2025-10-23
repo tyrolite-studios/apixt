@@ -40,9 +40,9 @@ import {
     useMarkInvalid,
     useItemContainer,
     useFocusOnItemContainer,
-    usePickerOnItemContainer,
-    FocusRowContext
+    usePickerOnItemContainer, getCols
 } from "./common"
+import { useModalWindow } from "./modal.js"
 
 function useFocusKeyBindings({ keyHandlers = [], disabled = false, direct }) {
     const [hasFocus, setHasFocus] = useState(false)
@@ -1291,6 +1291,7 @@ function Button({
     keepFocus,
     autoFocus,
     submit,
+    title,
     refocus = null,
     sized = true,
     colored = true,
@@ -1317,6 +1318,7 @@ function Button({
     if (focused) {
         attr.style.zIndex = 19999
     }
+    if (title) attr.title = title
 
     const cls = new ClassNames(
         "focus:outline-none focus:ring focus:ring-focus-border",
@@ -1516,6 +1518,8 @@ function ButtonsAndDivGroup({
         wrap = true,
         reverse = false,
         buttonProps = {},
+        cols = 'transparent',
+        moreCols = cols,
         autoFocus,
         active,
         disabled,
@@ -1527,14 +1531,56 @@ function ButtonsAndDivGroup({
         action,
         ...props
     }) {
-    const container = useItemContainer({ count: buttons.length + 1 })
+    const aContext = useContext(AppContext)
+    const MoreButtonsModal = useModalWindow()
+    const maxShowedButtons = 2
+    const btnCount = Math.min(buttons.length, maxShowedButtons)
+    const compCol = getCols(cols)
+    const moreCol = getCols(moreCols)
 
+    const container = useItemContainer({ count: btnCount + 1 })
     useFocusOnItemContainer({
         container,
-        cursor: (index) => index !== (!reverse ? 0 : buttons.length - 1),
+        cursor: (index) => index !== (!reverse ? 0 : btnCount - 1),
         rowIndex,
-        markedTabIndex: reverse ? 0 : buttons.length
+        markedTabIndex: reverse ? 0 : btnCount
     })
+    const buttonGroupRefocus = () => {
+        container.refocus()
+    }
+    let showedButtons = buttons
+    const moreButtons = []
+    if (maxShowedButtons && buttons.length > maxShowedButtons) {
+        showedButtons = maxShowedButtons === 1 ? [] : buttons.slice(0, maxShowedButtons - 1)
+        showedButtons.push({
+            icon: "more_vert",
+            onPressed: (e) => {
+                let elem = e && e.target
+                while (elem && elem !== document.activeElement) {
+                    elem = elem.parentElement
+                }
+                const rect = elem.getBoundingClientRect();
+                MoreButtonsModal.open({top: rect.top, left: rect.left})
+            }
+        })
+        for (const { onPressed, refocus, ...btnProps } of buttons.slice(maxShowedButtons - 1)) {
+            const newOnPressed = (...args) => {
+                MoreButtonsModal.close()
+                setTimeout(() => {
+                    aContext.setButtonRefocus(buttonGroupRefocus)
+                    onPressed(...args)
+                    aContext.setButtonRefocus(null)
+                    setTimeout(
+                        () => (!document.activeElement || document.activeElement === document.body)
+                        && buttonGroupRefocus(),
+                        100
+                    )
+
+                }, 100)
+            }
+            moreButtons.push({ onPressed: newOnPressed, ...btnProps })
+        }
+    }
 
     const buttonCls = new ClassNames("stack-h", buttonsClassName)
     const cls = new ClassNames("stack-h w-full", className)
@@ -1546,11 +1592,7 @@ function ButtonsAndDivGroup({
     const elems = []
     const off = reverse ? 1 : 0
 
-    const buttonGroupRefocus = () => {
-        container.refocus()
-    }
-
-    for (const [i, button] of buttons.entries()) {
+    for (const [i, button] of showedButtons.entries()) {
         const curr = i + off
         const itemAttr = container.getItem(curr)
         const elemProps = {
@@ -1579,14 +1621,26 @@ function ButtonsAndDivGroup({
         onKeyDown(e)
     } : onKeyDown
 
-    return (
-        <Div {...divAttr} onKeyDown={keyDown} className={cls.value}>
-            {!reverse && <div className={buttonCls.value}>{elems}</div>}
-            <Div className="auto focus-fix focus:outline-none focus:ring focus:ring-focus-border" {...container.getItem(reverse ? 0 : buttons.length).attr.props}>{children}</Div>
-            {reverse && <div className={buttonCls.value}>{elems}</div>}
-        </Div>
-    )
+    const moreCls = new ClassNames("p-2")
+    if (moreButtons.length) {
+        moreCls.addIf(true, `${moreCol.bg} ${moreCol.color}`)
+    }
 
+    return (
+        <>
+            <Div {...divAttr} onKeyDown={keyDown} className={cls.value}>
+                {!reverse && <div className={buttonCls.value}>{elems}</div>}
+                <Div className="auto focus-fix focus:outline-none focus:ring focus:ring-focus-border" {...container.getItem(reverse ? 0 : showedButtons.length).attr.props}>{children}</Div>
+                {reverse && <div className={buttonCls.value}>{elems}</div>}
+            </Div>
+            {moreButtons.length > 0 &&
+                <MoreButtonsModal.content headless >
+                    <div>
+                        <ButtonGroup buttons={moreButtons} className={moreCls.value} />
+                    </div>
+                </MoreButtonsModal.content>}
+        </>
+    )
 }
 
 const emptyValue = "<Enter Value>"

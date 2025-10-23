@@ -537,6 +537,10 @@ const formatDate = (timestamp) =>
         timestamp
     ).toLocaleDateString()}`
 
+function getNewModelId() {
+    return crypto.randomUUID()
+}
+
 export {
     d,
     isNull,
@@ -564,5 +568,6 @@ export {
     sortDesc,
     formatDate,
     getParsedJson,
-    getSimpleType
+    getSimpleType,
+    getNewModelId
 }

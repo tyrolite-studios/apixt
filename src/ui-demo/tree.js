@@ -5,6 +5,7 @@ import { MappingIndex } from "../core/entity"
 import { FILTER, FolderIndex, TreeIndex } from "../core/entity-tree"
 import { cloneDeep, d } from "../core/helper"
 import { useConfirmation } from "../components/common.js"
+import { useSets } from "../entities/sets.js"
 
 const sampleFolderModel = {
     1: {name: "Want 2"},
@@ -40,10 +41,21 @@ function getBasicTreeStackSample(props = {}) {
 }
 
 function getBasicTreeStackSelectionSample(props = {}) {
+    const sets = useSets({
+        userSets: true,
+        actives: [],
+        fixSets: [
+            FILTER.SETS.ALL,
+            FILTER.SETS.MARKED
+        ]
+    })
     const [selection, setSelection] = useState([
     //    'folder 2', 'folder 3'
     ])
-    return <TreeIndexStack treeIndex={treeIndex()} selection={selection} setSelection={setSelection} {...props} />
+    const buttons = [
+        {name: 'Add to set', disabled: !selection.length, onPressed: () => sets.openAddToSetModal(selection)}
+    ]
+    return <TreeIndexStack buttons={buttons} sets={sets} treeIndex={treeIndex()} selection={selection} setSelection={setSelection} {...props} />
 }
 
 
@@ -67,10 +79,11 @@ function getFullTreeStackSample(id, props = {}, confirmation) {
         }
     }
     const itemActions = [
+        {icon: 'add', action: () => d('noop')},
         {icon: "edit", action: () => d('edit')},
         {
             icon: "delete",
-            // action: deleteIndex,
+//            action: deleteIndex,
             action:
                 (node) => confirmation && confirmation.open(
                     {
@@ -80,7 +93,6 @@ function getFullTreeStackSample(id, props = {}, confirmation) {
                         }
                     }
                 )
-
         }
     ]
     return <TreeIndexStack treeIndex={tree} header="buttons marking auto filter" footer="auto marking" selection={selection} setSelection={setSelection}
@@ -97,12 +109,12 @@ function TreeContent() {
                      {
                          name: "Temp Test TreeStack (with multi-selection)",
                          code: '<TreeStackIndex treeIndex={myTreeIndex} selection={selection} setSelection={setSelection} />',
-                         elem: getBasicTreeStackSelectionSample({header: "expand filter", filterOptions: {result: FILTER.RESULT.FLAT_SUBTREES, isFilterVisible: FILTER.MATCH.LEAFS}, controls: CONTROL.OR | CONTROL.CASE_SENSITIVE | CONTROL.MODE, footer: "marking", xselectable: x => x.startsWith('leaf')})
+                         elem: getBasicTreeStackSelectionSample({header: "buttons sets expand filter", filterOptions: {result: FILTER.RESULT.FLAT_SUBTREES, xisFilterVisible: FILTER.MATCH.LEAFS}, controls: CONTROL.OR | CONTROL.CASE_SENSITIVE | CONTROL.MODE, footer: "marking", xselectable: x => x.startsWith('leaf')})
                      },
                      {
                          name: "Temp Test Normal TreeStack (with treeSelection)",
                          code: '<TreeStackIndex treeIndex={myTreeIndex} selection={selection} setSelection={setSelection} treeSelection />',
-                         elem: getBasicTreeStackSelectionSample({header: "expand filter", treeSelection: true, filterOptions: {caseSensitive: true, not: true, result: FILTER.RESULT.FLAT_DIRECT}, footer: 'marking', boxed: true, height: "400px"})
+                         elem: getBasicTreeStackSelectionSample({header: "expand sets filter", treeSelection: true, filterOptions: {caseSensitive: true, not: true, result: FILTER.RESULT.FLAT_DIRECT}, footer: 'totals marking', boxed: true, height: "400px"})
                      },
 
                      {

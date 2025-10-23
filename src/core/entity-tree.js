@@ -74,11 +74,15 @@ const getMarkedAncestorHandler = (selection) => {
     }
 }
 
-const getIsMatch = (tree, filter, options = {}) => {
+const getIsMatch = (tree, filter, inSet, options = {}) => {
     const searchWords = getWords(filter, !options.caseSensitive)
     const { globals } = tree
 
-    return (node) => options.isFilterRelevant(node) && isSearchWordsMatch(
+    const isInSet = !inSet ? () => true : node => inSet(node.nodeType + ' ' + node.value)
+
+    if (!filter) return (node) => isInSet(node)
+
+    return (node) => isInSet(node) && options.isFilterRelevant(node) && isSearchWordsMatch(
         searchWords,
         [
             (node.nodeType === 'leaf' ? globals.leafIndex : globals.folderIndex).getEntityFilterString(node.index) ?? '',
@@ -88,9 +92,9 @@ const getIsMatch = (tree, filter, options = {}) => {
     )
 }
 
-const getAncestorFilterProcessor = (filter, options = {}) => {
+const getAncestorFilterProcessor = (filter, inSet, options = {}) => {
     return (tree) => {
-        const isMatch = getIsMatch(tree, filter, options)
+        const isMatch = getIsMatch(tree, filter, inSet, options)
         const { isFilterVisible } = options
         const nodes = tree.nodes
         let i = nodes.length - 1
@@ -124,13 +128,14 @@ const getAncestorFilterProcessor = (filter, options = {}) => {
     }
 }
 
-const getListFilterProcessor = (filter, options = {}) => {
+const getListFilterProcessor = (filter, inSet, options = {}) => {
     return (tree) => {
         const { isFilterVisible } = options
-        const isMatch = getIsMatch(tree, filter, options)
+        const isMatch = getIsMatch(tree, filter, inSet, options)
         const nodes = tree.nodes
+        const isVisible = filter ? isFilterVisible : () => true
         for (const node of nodes) {
-            if (!isMatch(node) || !isFilterVisible(node)) {
+            if (!isMatch(node) || !isVisible(node)) {
                 node.visible = false
                 node.inView = false
             } else {
@@ -140,14 +145,13 @@ const getListFilterProcessor = (filter, options = {}) => {
     }
 }
 
-
-const getSubtreeFilterProcessor = (filter, options = {}) => {
+const getSubtreeFilterProcessor = (filter, inSet, options = {}) => {
     return (tree) => {
         const nodes = tree.nodes
         let matchLevel = null
         let ignoreLevel = null
         const { isFilterVisible } = options
-        const isMatch = getIsMatch(tree, filter, options)
+        const isMatch = getIsMatch(tree, filter, inSet, options)
         const treeStack = [{level: 0, nodes: []}]
         const popTrees = (level = 0) => {
             let currTree = !treeStack.length ? undefined : treeStack[treeStack.length - 1]
@@ -516,7 +520,7 @@ class TreeIndex {
         return found
     }
 
-    getNodes({ alwaysExpanded = false, filter, filterOptions = {}, selection, skip, ...props } = {}) {
+    getNodes({ alwaysExpanded = false, filter, inSet, filterOptions = {}, selection, skip, ...props } = {}) {
 
         const options = { ...FILTER.DEFAULTS, ...filterOptions }
         const globals = {
@@ -598,7 +602,6 @@ class TreeIndex {
                 return compA < compB ? -1 : compA === compB ? 0 : 1
             }
         })
-
         const isFlat = [FILTER.RESULT.FLAT_DIRECT, FILTER.RESULT.FLAT_SUBTREES].includes(options.result)
         const preHandlers = []
         if (skip)
@@ -607,8 +610,10 @@ class TreeIndex {
             preHandlers.push(getAddPathNamesHandler())
         }
 
+        const isFiltered = filter || inSet;
+
         const postProcessors = []
-        if (filter) {
+        if (isFiltered) {
             let filterProcessor = null
             if (isFlat) {
                 filterProcessor = getListFilterProcessor
@@ -619,7 +624,8 @@ class TreeIndex {
             }
             postProcessors.push(
                 filterProcessor(
-                    filter,
+                    filter ?? '',
+                    inSet,
                     {
                         ...options,
                         pathMatch: [FILTER.RESULT.WITH_ANCESTORS, FILTER.RESULT.FLAT_SUBTREES].includes(options.result)
@@ -627,7 +633,7 @@ class TreeIndex {
                 )
             )
         }
-        if (!(filter && isFlat)) {
+        if (!(isFiltered && isFlat)) {
             postProcessors.push(getCollapseProcessor(alwaysExpanded))
         }
         if (selection) {

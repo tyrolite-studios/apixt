@@ -1,20 +1,14 @@
 import "./index.css"
-import { TempStorage } from "core/storage"
 import controller from "core/controller"
-window.controller.setStorages({
-    global: TempStorage(),
-    api: TempStorage(),
-    session: TempStorage(),
-    temp: TempStorage()
-})
 
 import { useState } from "react"
 import { AppCtx } from "components/context"
 import { createRoot } from "react-dom/client"
 import { FormContent } from "./ui-demo/form"
 import { TreeContent } from "./ui-demo/tree"
+import { useRegisterAppListeners } from "./components/common.js"
 
-function MainLayout() {
+function MainInner() {
     const [main, setMain] = useState(1)
 
     const buttonCls = index => {
@@ -27,23 +21,31 @@ function MainLayout() {
         return cls.join(" ")
     }
 
+    const onFocus = useRegisterAppListeners()
+
+        return (
+        <div onFocus={onFocus} className="stack-v full overflow-hidden">
+        <div className="p-2 text-sm stack-h gap-2 bg-header-bg">
+        <button className={buttonCls(0)} onClick={() => setMain(0)}>
+    Form
+    </button>
+    <button className={buttonCls(1)} onClick={() => setMain(1)}>
+        Tree
+    </button>
+</div>
+    <div className="auto overflow-auto bg-app-bg text-app-text">
+        {main === 0 && <FormContent />}
+        {main === 1 && <TreeContent />}
+    </div>
+</div>)
+
+}
+
+function MainLayout() {
     const config = {}
     return (
         <AppCtx config={config}>
-            <div className="stack-v full overflow-hidden">
-                <div className="p-2 text-sm stack-h gap-2 bg-header-bg">
-                    <button className={buttonCls(0)} onClick={() => setMain(0)}>
-                        Form
-                    </button>
-                    <button className={buttonCls(1)} onClick={() => setMain(1)}>
-                        Tree
-                    </button>
-                </div>
-                <div className="auto overflow-auto bg-app-bg text-app-text">
-                    {main === 0 && <FormContent />}
-                    {main === 1 && <TreeContent />}
-                </div>
-            </div>
+            <MainInner />
         </AppCtx>
     )
 }
@@ -63,4 +65,5 @@ controller.registerApp("ui", () => {
     root.render(<UiShowroomApp />)
 })
 
+controller.storePrefix = 'tls.ui.'
 controller.startApp("ui")

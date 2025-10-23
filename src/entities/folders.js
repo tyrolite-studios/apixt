@@ -1,4 +1,4 @@
-import { useState, useRef } from "react"
+import { useState, useRef, useMemo } from "react"
 import { Icon, Div } from "components/layout"
 import { d, ClassNames } from "core/helper"
 import { Filterbox, getCols } from "components/common"
@@ -17,6 +17,7 @@ import { ButtonsAndDivGroup, CustomCells } from "components/form"
 import { FocusRowCtx, useSelectionOnItemContainer, useGetNewAttrWithDimProps } from "components/common"
 import { isFunction, isString, without } from "core/helper"
 import { FILTER, ROOT_FOLDER_ID } from "core/entity-tree"
+import { useCallAfterwards } from "../components/common.js"
 
 function LevelSpacer({ level }) {
     const px = (level - 1) * 15
@@ -216,6 +217,7 @@ function ContainerNodeListInner({
    itemClassName,
     innerClassName,
    render = item => item.name,
+    update,
    full,
    selectable,
    selection,
@@ -223,7 +225,7 @@ function ContainerNodeListInner({
    maxSelection,
    itemAction,
    itemActions,
-    itemSpacing = 2,
+    itemSpacing = 1,
    compact,
    filter,
    alwaysExpanded,
@@ -241,6 +243,8 @@ function ContainerNodeListInner({
    styled = true,
    emptyMsg = "No items available",
 }) {
+    const callAfterwards = useCallAfterwards()
+
     const { nodes, treeOrder, markedOutside } = treeView
     const folderIndex = treeIndex.folderIndex
     const cls = new ClassNames("stack-v item-start", className)
@@ -281,12 +285,11 @@ function ContainerNodeListInner({
             return treeIndex[indexName].getEntityByPropValue('value', value)
         }
     })
-    if (containerRef) containerRef.current = container
     if (itemActions) {
         useFocusGroupsOnItemContainer({ container })
     } else {
         const moveFocus = (container, x, y, shift) => {
-            const { nodeType, index, closed } = nodes[container.getIndex(container.tabIndex)]
+            const { nodeType, index, closed } = nodes[container.getItemIndexForViewIndex(container.tabIndex)]
             if (!alwaysExpanded && nodeType === "folder") {
                 if ((closed && x > 0) || (!closed && x < 0)) {
                     treeIndex.toggleFolder(index)
@@ -333,6 +336,12 @@ function ContainerNodeListInner({
     }
     if (itemAction) {
         usePickerOnItemContainer({ container, pick: itemAction })
+    }
+    if (containerRef) {
+        if (!containerRef.current && update) {
+            callAfterwards(update)
+        }
+        containerRef.current = container
     }
     cls.addIf(full, "full")
     cls.addIf(!wrap, "text-nowrap")
@@ -413,6 +422,7 @@ function ContainerNodeListInner({
             <ButtonsAndDivGroup
                 reverse={reverse} key={filter + index} buttons={getItemActions(index)}
                 disabled={selection && selection.length > 0}
+                moreCols={colsItems}
                 action={() => selection && container.toggle(index)} rowIndex={elems.length} buttonsClassName={btnCls.value} className={'items-stretch ' + colItemsCls + ' ' + (divider ? divider : '') }>
                 <Div {...item.attr.props} className={itemCls.value}>
                     {nodeElem}
@@ -484,7 +494,8 @@ const CONTROL = {
     MODE: 4
 }
 
-function TreeIndexStack({ treeIndex, controls = 0, colsBar, alwaysExpanded, filterOptions = {}, compact, match, skip, isFilterVisible, header = "buttons", footer, className, buttons = [], ...props }) {
+function TreeIndexStack({ sets, treeIndex, controls = 0, colsBar, alwaysExpanded, filterOptions = {}, compact, match, skip, isFilterVisible, header = "buttons", footer, className, buttons = [], ...props }) {
+
     const containerRef = useRef(null)
     const [filterRaw, setFilter] = useState("")
     const [caseSensitive, setCaseSensitive] = useState(filterOptions.caseSensitive ?? FILTER.DEFAULTS.caseSensitive)
@@ -495,7 +506,21 @@ function TreeIndexStack({ treeIndex, controls = 0, colsBar, alwaysExpanded, filt
     const { styled = true, boxed, color = true, padded = true } = props
     if (!colsBar) colsBar = boxed ? 'header/50' : 'header/0'
 
-    useUpdateOnEntityIndexChanges(treeIndex)
+    const update = useUpdateOnEntityIndexChanges(treeIndex)
+
+    const optionOverwrites = {}
+    const inSet = sets && sets.getInSet({ selection: props.selection })
+
+    if (inSet && sets.result) optionOverwrites.result = sets.result
+    if (sets) {
+        sets.paramsRef.current = {
+            treeIndex,
+            filterOptions,
+            match,
+            skip,
+            isFilterVisible
+        }
+    }
 
     const treeView = treeIndex.getNodes({
         alwaysExpanded,
@@ -506,7 +531,9 @@ function TreeIndexStack({ treeIndex, controls = 0, colsBar, alwaysExpanded, filt
             mode,
             caseSensitive,
             or,
+            ...optionOverwrites
         },
+        inSet,
         match: props.match,
         skip,
     })
@@ -538,6 +565,14 @@ function TreeIndexStack({ treeIndex, controls = 0, colsBar, alwaysExpanded, filt
             }
             let elem
             switch (group) {
+
+                case "totals":
+                    elem = <div key="totals" className="stack-h gap-d2x text-xs">
+                        <div className="less">Items:</div>
+                        <div>{getContainer().viewCount}/{getContainer().count}</div>
+                    </div>
+                    break
+
                 case "filter":
                     elem = <Filterbox
                         key={index}
@@ -603,6 +638,34 @@ function TreeIndexStack({ treeIndex, controls = 0, colsBar, alwaysExpanded, filt
                     maxElem--
                     elem = <div key={index} className="auto" />
                     break
+
+                case "sets":
+                    if (!sets) break
+
+                    const setButtons = []
+                    for (const { id, name } of sets.items) {
+                        setButtons.push(
+                            {
+                                name,
+                                activated: true,
+                                value: sets.actives.includes(id),
+                                onPressed: () => sets.toggle(id)
+                            }
+                        )
+                    }
+                    if (sets.userSetsAllowed) {
+                        setButtons.push(
+                            {
+                                icon: "build",
+                                onPressed: () => sets.openSetManagerModal(),
+                                title: "Dies ist ein Test"
+                            }
+                        )
+                    }
+                    elem = <div key={index} className="flex gap-x-d2x">
+                        <ButtonGroup buttons={setButtons} />
+                    </div>
+                    break
             }
             if (elem) elems.push(elem)
         }
@@ -610,8 +673,8 @@ function TreeIndexStack({ treeIndex, controls = 0, colsBar, alwaysExpanded, filt
     }
 
     const isCompact = compact && !treeView.nodes.length
-    const headerElems = getBarGroups(isCompact ? "buttons" : header)
-    const footerElems = getBarGroups(footer)
+    const headerElems = containerRef.current ? getBarGroups(isCompact ? "buttons" : header) : ''
+    const footerElems = containerRef.current ? getBarGroups(footer) : ''
 
     const cls = ClassNames("stack-v px-d2x py-d2y", className)
     cls.addIf(!boxed, "gap-y-d1y")
@@ -638,21 +701,24 @@ function TreeIndexStack({ treeIndex, controls = 0, colsBar, alwaysExpanded, filt
         cls.addIf(!attr.hasStyle('height') && attr.hasStyle('minHeight'), 'full')
     }
     return (
-        <div className={cls.value} {...attr.props}>
-            {headerElems.length > 0 && <div className={headerCls.value}>
-                {headerElems}
+        <>
+            <div className={cls.value} {...attr.props}>
+                {headerElems.length > 0 && <div className={headerCls.value}>
+                    {headerElems}
+                    </div>
+                }
+
+                {!isCompact && <ContainerNodeList full containerRef={containerRef} treeView={treeView} treeIndex={treeIndex}
+                      alwaysExpanded={alwaysExpanded} filter={filterRaw} update={update} {...props}
+                />}
+
+                {footerElems.length > 0 && !isCompact && <div className={footerCls.value}>
+                    {footerElems}
                 </div>
-            }
-
-            {!isCompact && <ContainerNodeList full containerRef={containerRef} treeView={treeView} treeIndex={treeIndex}
-                  alwaysExpanded={alwaysExpanded} filter={filterRaw} {...props}
-            />}
-
-            {footerElems.length > 0 && !isCompact && <div className={footerCls.value}>
-                {footerElems}
+                }
             </div>
-            }
-        </div>
+            {sets && sets.Modals}
+        </>
     )
 }
 
