@@ -149,6 +149,7 @@ class AttriutesCls {
     constructor(props = {}) {
         this._props = {}
         this.listeners = {}
+        this._source2events = {}
 
         this.add(props)
     }
@@ -162,7 +163,13 @@ class AttriutesCls {
         return style
     }
 
-    addListener(onEvent, eventHandler) {
+    addListener(onEvent, eventHandler, source) {
+        let pos = -1
+        if (source) {
+            if (!this._source2events[source]) this._source2events[source] = []
+            const events = this._source2events[source].filter((item => item.event === onEvent))
+            if (events.length) pos = events[0].pos
+        }
         if (!this._props[onEvent]) {
             this.listeners[onEvent] = []
             this._props[onEvent] = (e) => {
@@ -171,13 +178,21 @@ class AttriutesCls {
                 }
             }
         }
-        this.listeners[onEvent].push(eventHandler)
+        if (pos === -1) {
+            if (source) {
+                if (!this._source2events[source]) this._source2events[source] = []
+                this._source2events[source].push({event: onEvent, pos: this.listeners[onEvent].length})
+            }
+            this.listeners[onEvent].push(eventHandler)
+        } else {
+            this.listeners[onEvent][pos] = eventHandler
+        }
         return this
     }
 
-    addListeners(onEvent2listeners) {
+    addListeners(onEvent2listeners, source) {
         for (const [onEvent, listener] of Object.entries(onEvent2listeners)) {
-            this.addListener(onEvent, listener)
+            this.addListener(onEvent, listener, source)
         }
         return this
     }
@@ -541,8 +556,18 @@ function getNewModelId() {
     return crypto.randomUUID()
 }
 
+const noop = () => {}
+
+function getChildrenWithClass(parent, name) {
+    return Array.from(parent.children)
+        .filter(child => child.classList.contains(name))
+}
+
+const ucFirst = s => s && s[0].toUpperCase() + s.slice(1)
+
 export {
     d,
+    noop,
     isNull,
     isBool,
     isString,
@@ -554,10 +579,12 @@ export {
     isInRange,
     isValidJson,
     isEventInRect,
+    ucFirst,
     without,
     clamp,
     round,
     extractFullClasses,
+    getChildrenWithClass,
     ClassNames,
     Attributes,
     cloneDeep,

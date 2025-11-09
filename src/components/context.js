@@ -275,7 +275,10 @@ function registerModalApi({ registry, register }) {
 /*
  * The hotkey API manages action triggered by key bindings
  */
-function registerHotkeyApi({ registry, register }) {
+function registerHotkeyApi({ registry, register, apiRef }) {
+    const HotKeySingleKeys = ["Escape", "Enter", "d", "h"]
+    const HotKeySkipValues = ["Meta", "Control", "Alt", "Shift"]
+
     const action2hotKey = defaultKeyBindings
     const hotKey2action = {}
     for (let [action, key] of Object.entries(action2hotKey)) {
@@ -346,6 +349,59 @@ function registerHotkeyApi({ registry, register }) {
     }
 
     return {
+        getHotkeyFromEvent: e => {
+            if (apiRef.current.isInExclusiveMode()) {
+                // TODO allow certain hotkeys?
+                return
+            }
+            let hotKey = ""
+            let actionKey = ""
+            const isTextArea =
+                document.activeElement &&
+                "TEXTAREA" === document.activeElement.tagName
+            const isInput =
+                document.activeElement &&
+                "INPUT" === document.activeElement.tagName
+
+            if (e.metaKey) {
+                hotKey += "m"
+            } else if (e.ctrlKey) {
+                hotKey += "c"
+            } else if (e.altKey) {
+                hotKey += "a"
+            } else if (
+                (HotKeySingleKeys.includes(e.key) && !(isInput || isTextArea)) &&
+                !(e.key === "Enter" && isTextArea)
+            ) {
+                actionKey = e.key
+            }
+                /*
+            else if (
+                e.key >= "0" &&
+                e.key <= "9" &&
+                !(isTextArea || isInput)
+            ) {
+                if (aContext.focusHotKeyArea(e.key)) {
+                    e.stopPropagation()
+                    e.preventDefault()
+                    return
+                }
+            }
+            */
+            if (hotKey.length > 0 && e.shiftKey) {
+                hotKey += "i"
+            }
+            if (hotKey !== "") {
+                actionKey = hotKey
+                if (!HotKeySkipValues.includes(e.key)) {
+                    actionKey += " " + e.key
+                }
+            }
+            if (!actionKey) {
+                return
+            }
+            return actionKey
+        },
         addElemKeyBinding: (
             elem,
             action2handlers = {},

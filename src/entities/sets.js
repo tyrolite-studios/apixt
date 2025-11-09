@@ -1,17 +1,14 @@
-import { useState, useRef, useMemo, useContext } from "react"
-import { d, ClassNames, cloneDeep, getNewModelId } from "core/helper"
+import { useState } from "react"
+import { d, getNewModelId } from "core/helper"
 import { MappingIndex } from "core/entity"
 import { ButtonGroup, FormGrid, InputCells } from "components/form"
-import { useModalWindow } from "components/modal"
 import { OkCancelLayout } from "components/layout"
-import { without } from "core/helper"
-import { FILTER } from "core/entity-tree"
-import { Select } from "components/form"
-import { CheckboxCells, CustomCells, SelectCells } from "components/form"
+import { FILTER } from "core/filter"
+import { Select, CheckboxCells, CustomCells, SelectCells } from "components/form"
 import { useUpdateOnEntityIndexChanges } from "components/common"
 import { Centered } from "components/layout"
-import { TreeIndexStack } from "./folders.js"
-import { AppContext } from "components/context"
+import { TreeComponentRenderer } from "./folders.js"
+import { useItemFilterExt, useItemSelectionExt, useUnrenderedTreeComponent } from "components/extensions"
 
 class SetsIndex extends MappingIndex {
     constructor(model) {
@@ -48,30 +45,45 @@ const resultOptions = [
     {id: FILTER.RESULT.WITH_ANCESTORS, name: 'Subtree (with ancestors)'},
 ]
 
-function UserSetForm({ model, setsIndex, paramsRef }) {
+function SetItemsSelector({ treeIndex, value, set, ...props }) {
+
+    const tree = useUnrenderedTreeComponent({
+        treeIndex,
+        extensions: [
+            useItemSelectionExt({ selection: value, setSelection: set }),
+            useItemFilterExt()
+        ]
+    })
+    return <TreeComponentRenderer
+        tree={tree}
+        header="filter"
+        footer="marking"
+        { ...props }
+    />
+}
+
+function UserSetForm({ treeIndex, model, setsIndex, paramsRef }) {
     const getSetter = (prop) => {
         return (value) => setsIndex.setEntityPropValue(model.index, prop, value)
     }
-
     return (
         <FormGrid>
             <InputCells name="Name" value={model.name} set={getSetter('name')} />
             <CheckboxCells name="Exclusive" value={model.exclusive === true} set={getSetter('exclusive')} />
             <SelectCells name="Show as" value={model.result ?? FILTER.RESULT.FLAT_DIRECT} set={getSetter('result')} options={resultOptions} />
             <CustomCells name="Elements">
-                <TreeIndexStack
-                    header="filter"
-                    footer="marking"
+                <SetItemsSelector
                     {...paramsRef.current}
-                    selection={model.ids}
-                    setSelection={getSetter('ids')}
+                    treeIndex={treeIndex}
+                    value={model.ids}
+                    set={getSetter('ids')}
                 />
             </CustomCells>
         </FormGrid>
     )
 }
 
-function UserSetManagerModal({ close, save, paramsRef, setsIndex }) {
+function UserSetManagerModal({ close, save, treeIndex, paramsRef, setsIndex }) {
 
     useUpdateOnEntityIndexChanges(setsIndex)
 
@@ -82,7 +94,7 @@ function UserSetManagerModal({ close, save, paramsRef, setsIndex }) {
         const value = getNewModelId()
         setsIndex.setEntityObject({
             value,
-            name: 'New Set ' + options.length,
+            name: 'User Set ' + (options.length + 1),
             exclusive: true,
             ids: []
         })
@@ -112,11 +124,11 @@ function UserSetManagerModal({ close, save, paramsRef, setsIndex }) {
                         <ButtonGroup buttons={buttons} />
                     </div>
                 </div>
-                <div className="p-2">
+                <div className="p-2 auto">
 
                     {options.length ?
-                        <UserSetForm model={currModel} setsIndex={setsIndex} paramsRef={paramsRef} /> :
-                        <Centered>No set selected!</Centered>
+                        <UserSetForm treeIndex={treeIndex} model={currModel} setsIndex={setsIndex} paramsRef={paramsRef} /> :
+                        <Centered className="text-xs">No set available!</Centered>
                     }
                 </div>
             </div>
@@ -124,150 +136,8 @@ function UserSetManagerModal({ close, save, paramsRef, setsIndex }) {
     )
 }
 
-function useSets({ fixSets = [], persistId, userSets = false, preventNoSetActive = false, ...props }) {
-    const aContext = useContext(AppContext)
-
-    const AddToSetModal = useModalWindow()
-    const ManageSetsModal = useModalWindow()
-
-    const paramsRef = useRef(null)
-    const [ userSetsData, setUserSetsDataRaw ] = useState(() => {
-        if (userSets && persistId) {
-            return aContext.globalStorage.getJson('sets.' + persistId, {})
-        }
-        return {}
-    })
-    const setUserSetsData = (value) => {
-        setUserSetsDataRaw(value)
-        if (userSets && persistId) {
-            aContext.globalStorage.setJson('sets.' + persistId, value)
-        }
-    }
-
-    const userSetItems = useMemo(() => {
-        if (!userSets) return []
-
-        const items = []
-        for (const [ id, { ids, ...itemProps } ] of Object.entries(userSetsData)) {
-            items.push({ id, userSet: true, getHasId: () => (id) => ids.includes(id), ...itemProps })
-        }
-        return items
-    }, [userSetsData])
-
-    const userSetOptions = userSetItems.map(({ id, name }) => ({id, name}))
-    const [ actives, setActives ]  = useState(props.actives ?? [])
-
-    const items = [
-        ...fixSets,
-        ...userSetItems
-    ]
-
-    const id2item = {}
-    const exclusives = new Set()
-    for (const item of items) {
-        const { id, exclusive } = item
-        if (exclusive) exclusives.add(id)
-
-        id2item[item.id] = item
-    }
-
-    const result = useMemo(() => {
-        if (!actives.length) return
-
-        let highest = FILTER.RESULT.FLAT_DIRECT
-        for (const id of actives) {
-            const set = id2item[id]
-            if (!set.result) continue
-
-            highest = Math.max(highest, set.result)
-        }
-        return highest
-    }, [actives, userSetsData])
-
-    if (!items.length) return
-
-    const getInSet = (params) => {
-        const checks = []
-        for (const { id, getHasId } of items) {
-            if (!actives.includes(id) || !getHasId) continue
-
-            checks.push(getHasId(params))
-        }
-        return !checks.length ? undefined : (id) => checks.some(check => check(id))
-    }
-
-    const toggle = (id) => {
-        if (actives.includes(id)) {
-            if (actives.length !== 1 || !preventNoSetActive) {
-                setActives(without(actives, id))
-            }
-            return
-        }
-        const base = actives.length === 1 && exclusives.has(actives[0]) ? [] : actives;
-        setActives(exclusives.has(id) ? [ id ] : [ ...base, id ])
-    }
-    const api = {
-        items,
-        toggle,
-        actives,
-        setActives,
-        getInSet,
-        result,
-        paramsRef,
-        userSetsAllowed: userSets,
-        createUserSet: (props) => {
-            const id = 'testing'
-            const newData = cloneDeep(userSetsData)
-            newData[id] = { ...props }
-            setUserSetsData(newData)
-        },
-        openSetManagerModal: () => {
-            const setsIndex = new SetsIndex(userSetsData)
-            ManageSetsModal.open({
-                setsIndex,
-                paramsRef,
-                save: (newUserSetsData) => {
-                    setUserSetsData(newUserSetsData)
-                    ManageSetsModal.close()
-                }
-            })
-        },
-        openAddToSetModal: (ids) => {
-            AddToSetModal.open({
-                options: userSetOptions,
-                save: (userSetId) => {
-                    api.addIdsToUserSet(userSetId, ids)
-                    AddToSetModal.close()
-                }
-            })
-        },
-        addIdsToUserSet: (userSetId, ids) => {
-            const set = id2item[userSetId]
-            if (!set.userSet) return
-
-            const newData = cloneDeep(userSetsData)
-            const dataIds = newData[userSetId].ids
-            for (const id of ids) {
-                if (dataIds.includes(id)) continue
-
-                dataIds.push(id)
-            }
-            setUserSetsData(newData)
-        },
-        Modals: <>
-            <AddToSetModal.content>
-                <UserSetSelectorModal {...AddToSetModal.props} />
-            </AddToSetModal.content>
-
-            <ManageSetsModal.content>
-                <UserSetManagerModal {...ManageSetsModal.props} />
-            </ManageSetsModal.content>
-        </>
-    }
-    return api
-}
-
 export {
-    useSets,
-    SetsIndex
+    SetsIndex,
+    UserSetSelectorModal,
+    UserSetManagerModal
 }

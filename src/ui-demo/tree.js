@@ -1,24 +1,34 @@
 import { useState, useMemo } from "react"
 import { Section, DashedRect } from "./common.js"
-import { TreeIndexStack, CONTROL } from "../entities/folders"
+import { TreeComponentRenderer } from "../entities/folders"
 import { MappingIndex } from "../core/entity"
-import { FILTER, FolderIndex, TreeIndex } from "../core/entity-tree"
+import { FILTER } from "../core/filter.js"
+import { FolderIndex, TreeIndex } from "../core/entity-tree"
 import { cloneDeep, d } from "../core/helper"
 import { useConfirmation } from "../components/common.js"
-import { useSets } from "../entities/sets.js"
+import {
+    useTreeComponent,
+    useButtonsExt, useCompactModeExt, useTreeRendererExt,
+    useItemCountExt, useCustomizationExt,
+    useItemFilterExt, useItemFocusExt, useItemButtonsExt, useUnrenderedTreeComponent,
+    useItemSelectionExt, useItemExportExt,
+    useItemSetsExt, useItemSortingExt, useUiBlockingExt,
+    useTreeTogglerExt, useItemActionExt, useUndoRedoExt, useHotkeysExt, useModelSnapshotExt
+} from "../components/extensions.js"
+import { Centered } from "../components/layout.js"
 
 const sampleFolderModel = {
-    1: {name: "Want 2"},
-    2: {name: "Deeper And Deeper"},
-    3: {name: "Whatever", parent: "2"},
+    1: {name: "Test folder"},
+    2: {name: "Parent"},
+    3: {name: "Deeper folder", parent: "2"},
 }
 const sampleFolderIndex = () => new FolderIndex(cloneDeep(sampleFolderModel))
 
 const entityIndexModel = {
-    test: {folder: 0, name: "Hey man!"},
-    test2: {folder: 0, name: "More and more"},
-    deep1: {folder: 2, name: "Recall!"},
-    deep2: {folder: 3, name: "Deepest"}
+    test: {folder: 0, name: "Another file"},
+    test2: {folder: 0, name: "Dummy"},
+    deep1: {folder: 2, name: "Test file"},
+    deep2: {folder: 3, name: "Other file"}
 }
 const entityIndex = () => {
     const index = new MappingIndex(entityIndexModel, ['name', 'folder'])
@@ -26,6 +36,8 @@ const entityIndex = () => {
     return index
 }
 const treeIndex = () => new TreeIndex(sampleFolderIndex(), entityIndex())
+
+const getNewTreeIndex = (folders, files) => new TreeIndex(new FolderIndex(folders), new MappingIndex(files, ['name', 'folder']))
 
 const emptyFolderIndex = new FolderIndex({})
 const emptyMappingIndex = new MappingIndex({}, ['name', 'folder'])
@@ -37,30 +49,21 @@ const basicItemActions = [
 ]
 
 function getBasicTreeStackSample(props = {}) {
-    return <TreeIndexStack treeIndex={treeIndex()} {...props} />
+    return <TreeComponentRenderer treeIndex={treeIndex()} {...props} />
 }
 
 function getBasicTreeStackSelectionSample(props = {}) {
-    const sets = useSets({
-        userSets: true,
-        actives: [],
-        fixSets: [
-            FILTER.SETS.ALL,
-            FILTER.SETS.MARKED
-        ]
-    })
     const [selection, setSelection] = useState([
     //    'folder 2', 'folder 3'
     ])
     const buttons = [
         {name: 'Add to set', disabled: !selection.length, onPressed: () => sets.openAddToSetModal(selection)}
     ]
-    return <TreeIndexStack buttons={buttons} sets={sets} treeIndex={treeIndex()} selection={selection} setSelection={setSelection} {...props} />
+    return <TreeComponentRenderer buttons={buttons} treeIndex={treeIndex()} selection={selection} setSelection={setSelection} {...props} />
 }
 
-
 function getEmptyTreeStackSample(props = {}) {
-    return <TreeIndexStack treeIndex={emptyTreeIndex} {...props} />
+    return <TreeComponentRenderer treeIndex={emptyTreeIndex} {...props} />
 }
 
 function getFullTreeStackSample(id, props = {}, confirmation) {
@@ -95,7 +98,7 @@ function getFullTreeStackSample(id, props = {}, confirmation) {
                 )
         }
     ]
-    return <TreeIndexStack treeIndex={tree} header="buttons marking auto filter" footer="auto marking" selection={selection} setSelection={setSelection}
+    return <TreeComponentRenderer treeIndex={tree} header="buttons marking auto filter" footer="auto marking" selection={selection} setSelection={setSelection}
     itemActions={itemActions} buttons={buttons} {...props} />
 
 }
@@ -105,7 +108,28 @@ function TreeContent() {
     return <>
         <Section name="Tree Stack"
                  samples={[
-
+                     {
+                         name: 'Test component',
+                         code: '<TestComponent />',
+                         elem: <TestComponent />,
+                     },
+                     /*
+                     {
+                         name: "Testing...",
+                         code: '<TreeStackIndex treeIndex={myTreeIndex} selection={selection} setSelection={setSelection} />',
+                         elem: TestStack({
+                             header: "buttons sets expand filter",
+                             buttons: [{icon: 'add'}],
+                             filterOptions: {
+                                 result: FILTER.RESULT.FLAT_SUBTREES,
+                                 xisFilterVisible: FILTER.MATCH.LEAFS
+                             },
+                             controls: FILTER.CONTROL.OR | FILTER.CONTROL.CASE_SENSITIVE | FILTER.CONTROL.MODE,
+                             footer: "count sorting marking",
+                             xselectable: x => x.startsWith('leaf')
+                         })
+                     }
+                     ,
                      {
                          name: "Temp Test TreeStack (with multi-selection)",
                          code: '<TreeStackIndex treeIndex={myTreeIndex} selection={selection} setSelection={setSelection} />',
@@ -178,50 +202,185 @@ function TreeContent() {
                          elem: getBasicTreeStackSelectionSample({itemAction: node => console.log(node)})
                      },
                      {
-                         name: "Basic TreeIndexStack with item actions",
+                         name: "Basic TreeComponentRenderer with item actions",
                          code: '<MyModal.content name="Test Modal">Hello here is long text!</MyModal.content>',
                          elem: getBasicTreeStackSample({itemActions: basicItemActions})
                      },
                      {
-                         name: "Basic TreeIndexStack with reverse item actions",
+                         name: "Basic TreeComponentRenderer with reverse item actions",
                          code: '<MyModal.content name="Test Modal">Hello here is long text!</MyModal.content>',
                          elem: getBasicTreeStackSample({itemActions: basicItemActions, reverse: true})
                      },
                      {
-                         name: "Full TreeIndexStack with item actions",
+                         name: "Full TreeComponentRenderer with item actions",
                          code: '<MyModal.content name="Test Modal">Hello here is long text!</MyModal.content>',
                          elem: getFullTreeStackSample(1,{}, ConfirmModal)
                      },
                      {
-                         name: "Boxed full TreeIndexStack with item actions",
+                         name: "Boxed full TreeComponentRenderer with item actions",
                          code: '<MyModal.content name="Test Modal">Hello here is long text!</MyModal.content>',
                          elem: getFullTreeStackSample(2,{boxed: true}, ConfirmModal)
                      },
                      {
-                         name: "Boxed full TreeIndexStack with item actions (reverse)",
+                         name: "Boxed full TreeComponentRenderer with item actions (reverse)",
                          code: '<MyModal.content name="Test Modal">Hello here is long text!</MyModal.content>',
                          elem: getFullTreeStackSample(2,{boxed: true, reverse: true}, ConfirmModal)
                      },
                      {
-                         name: "Empty compact TreeIndexStack",
+                         name: "Empty compact TreeComponentRenderer",
                          code: '<MyModal.content name="Test Modal">Hello here is long text!</MyModal.content>',
                          elem: getFullTreeStackSample(3,{boxed: true, compact: true, treeIndex: emptyTreeIndex}, ConfirmModal)
                      },
                      {
-                         name: "Empty TreeIndexStack",
+                         name: "Empty TreeComponentRenderer",
                          code: '<MyModal.content name="Test Modal">Hello here is long text!</MyModal.content>',
                          elem: getEmptyTreeStackSample()
                      },
                      {
-                         name: "Empty TreeIndexStack with custom empty message",
+                         name: "Empty TreeComponentRenderer with custom empty message",
                          code: '<MyModal.content name="Test Modal">Hello here is long text!</MyModal.content>',
                          elem: getEmptyTreeStackSample({emptyMsg: "This is a custom empty message!", minHeight: "150px"})
-                     },
+                     }
+                     */
 
                  ]} />
         {ConfirmModal.Modals}
     </>
 }
+
+function TestStack(props = {}) {
+    const index = useMemo(() =>
+            // emptyTreeIndex,
+            treeIndex(),
+        [])
+
+    return useTreeComponent({
+        ...props,
+        treeIndex: index,
+        spacing: 2,
+        header: 'toggler buttons filter',
+        footer: 'count sets selection undo export',
+        height: "450px",
+        extensions: [
+            useTreeRendererExt(),
+            useItemCountExt(),
+            useItemFilterExt({
+                filterInfoTop: false,
+                controls: FILTER.CONTROL.CASE_SENSITIVE | FILTER.CONTROL.OR | FILTER.CONTROL.MODE
+            }),
+            useTreeTogglerExt(),
+            useItemFocusExt(),
+            useItemSetsExt({
+                userSets: true,
+                autoSets: [
+                    FILTER.SETS.MARKED
+                ]
+            }),
+            useItemSelectionExt(
+                {
+                    treeSelection: true
+                }),
+            useItemButtonsExt({
+                reverse: true,
+                maxButtons: 2,
+                getButtons: ({ container, treeIndex, exts }) => [
+                    {
+                        icon: 'delete',
+                        action: {
+                            hotkey: 'delete',
+                            confirm: "Do you really want to delete?",
+                            can: (node) => (!container.selection || !container.selection.length) && node.nodeType === 'leaf',
+                            exec: (node) => {
+                                const index = node.index
+                                const entity = treeIndex.leafIndex.getEntityObject(index)
+                                const exec = async () => treeIndex.leafIndex.deleteEntity(index)
+                                exts.process({
+                                    exec,
+                                    undo: async () => treeIndex.leafIndex.setEntityObject(entity, false),
+                                    redo: exec
+                                })
+                            }
+                        }
+                    },
+                    {icon: 'edit', onPressed: node => d('DO IT!', node)},
+                    {icon: 'more', onPressed: node => d('DO IT!', node)}
+                ]
+            }),
+            useItemExportExt(),
+            useUndoRedoExt(),
+            useHotkeysExt(),
+            useModelSnapshotExt({ always: true}),
+            useUiBlockingExt(),
+            useButtonsExt({
+                getButtons: ({ container, treeIndex, exts }) => [
+                    {
+                        icon: 'add',
+                        name: 'New',
+                        compact: true,
+                        onPressed: () => exts.api.focus.focusItemByViewIndex(3)
+                    },
+                    {
+                        icon: 'delete',
+                        action: {
+                            hotkey: 'delete',
+                            confirm: `Do you really want to delete these ${container.selection.length} entries?`,
+                            can: () => container.selection && container.selection.length && !container.selection.some(x => x.startsWith('folder')),
+                            exec: () => {
+                                const deletes = []
+                                for (const id of container.selection) {
+                                    const [,value] = id.split(' ')
+                                    const idx = treeIndex.leafIndex.getEntityByPropValue('value', value)
+                                    deletes.push(idx)
+                                }
+                                const deletedEntities = treeIndex.leafIndex.getEntityObjects(deletes)
+                                const exec = async () => {
+                                    await new Promise(resolve => setTimeout(resolve, 2500))
+                                    treeIndex.leafIndex.deleteEntities(deletes)
+                                }
+                                exts.process({
+                                    exec,
+                                    abort: () => d('ABORTING...'),
+                                    undo:
+                                        async () => {
+                                            await new Promise(resolve => setTimeout(resolve, 2500))
+                                            treeIndex.leafIndex.setEntityObjects(deletedEntities)
+                                        },
+                                    redo: exec
+
+                                })
+                            }
+                        }
+                    }
+                ]
+            })
+        ],
+    })
+}
+
+function TestComponent() {
+    const treeIndex = useMemo(() =>
+            getNewTreeIndex(
+                {
+                    1: {name: "Empty folder"},
+                    2: {name: "Parent"},
+                    3: {name: "Deeper folder", parent: "2"},
+                },
+            {
+                    file: {name: "Another file"},
+                    file2: {name: "Dummy"},
+                    file3: {folder: 2, name: "Test file"},
+                    file4: {folder: 3, name: "Other file"}
+            }),
+        []
+    )
+    return <MyTreeComponent treeIndex={treeIndex} />
+}
+
+
+function MyTreeComponent({ treeIndex }) {
+    return 'TEST'
+}
+
 
 export {
     TreeContent

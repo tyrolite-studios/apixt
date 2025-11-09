@@ -1,28 +1,19 @@
 import { useState, useRef, useMemo } from "react"
 import { Icon, Div } from "components/layout"
-import { d, ClassNames } from "core/helper"
-import { Filterbox, getCols } from "components/common"
+import { d, ClassNames, isFunction, isString } from "core/helper"
 import { ButtonGroup, FormGrid, InputCells } from "components/form"
 import {
-    arrowMove,
-    useItemContainer,
+    getCols,
     useFocusOnItemContainer,
-    usePickerOnItemContainer,
     useFocusGroupsOnItemContainer,
-    useUpdateOnEntityIndexChanges
+    FocusRowCtx,
+    useGetNewAttrWithDimProps
 } from "components/common"
 import { useModalWindow } from "components/modal"
-import { OkCancelLayout, Centered } from "components/layout"
+import { OkCancelLayout, Centered, getSpacingCls } from "components/layout"
 import { ButtonsAndDivGroup, CustomCells } from "components/form"
-import { FocusRowCtx, useSelectionOnItemContainer, useGetNewAttrWithDimProps } from "components/common"
-import { isFunction, isString, without } from "core/helper"
-import { FILTER, ROOT_FOLDER_ID } from "core/entity-tree"
-import { useCallAfterwards } from "../components/common.js"
-
-function LevelSpacer({ level }) {
-    const px = (level - 1) * 15
-    return <Div width={px + "px"} />
-}
+import { ROOT_FOLDER_ID } from "core/entity-tree"
+import { getActionResolvedButtons } from "../components/form.js"
 
 function FolderSelector({ folder, close, match, skipFolder, treeIndex, save }) {
     const [selection, setSelection] = useState(() => {
@@ -42,7 +33,7 @@ function FolderSelector({ folder, close, match, skipFolder, treeIndex, save }) {
                 save(value)
             }}
         >
-            <TreeIndexStack
+            <TreeComponentRenderer
                 treeIndex={treeIndex}
                 selection={selection}
                 setSelection={setSelection}
@@ -168,85 +159,50 @@ function FileForm({ model, save, close, treeIndex, match }) {
     )
 }
 
-function NumberChip({ value, maxValue, icon, color = true, className = "" }) {
-    const cls = ClassNames("stack-h px-d2x gap-x-d1x items-center rounded-full text-xs", className)
-    cls.addIf(color, "bg-active-bg text-active-text")
-    const elem = maxValue !== undefined ? <MaxNumber value={value} maxValue={maxValue} /> : <div>{value}</div>
-    return <div className={cls.value}>{icon && <Icon name="add_circle" />}{elem}</div>
-}
+function InfoElems({ elems, className }) {
+    const cls = ClassNames("stack-h w-full px-d2x py-d2y gap-x-d2x text-xs", className)
+    const stack = []
+    const dir2justify = {
+        'l': '',
+        'c': 'justify-center',
+        'r': 'justify-end'
 
-const defaultIconRender = ({ nodeType, closed, index }, alwaysExpanded = false, treeIndex) => {
-    if (nodeType === 'leaf') {
-        return ''
     }
-    return (
-        <div
-            className="pr-d2x"
-            onClick={
-                alwaysExpanded ?
-                    undefined :
-                    (e) => {treeIndex.toggleFolder(index); e.stopPropagation()}
-            }><Icon
-            name={
-                nodeType === "leaf"
-                    ? "arrow_right"
-                    : "folder" + (closed && !alwaysExpanded ? "" : "_open")
-            }
-            className={nodeType === "leaf" ? "opacity-50" : ""}
-        /></div>
-    )
-}
+    for (const [dir, ...subElems ] of elems) {
+        const cls = "flex auto " + dir2justify[dir]
+        stack.push(<div key={dir} className={cls}>{subElems}</div>)
+    }
 
-function getSpacingCls(value) {
-    if (!value) return ''
-    switch(value) {
-        case 1: return '[&:not(:first-child)]:mt-[1px]'
-        case 2: return '[&:not(:first-child)]:mt-[2px]'
-        case 3: return '[&:not(:first-child)]:mt-[3px]'
-        case 4: return '[&:not(:first-child)]:mt-[4px]'
-        case 5: return '[&:not(:first-child)]:mt-[5px]'
-    }
-    throw Error(`Unsupported value "${value}" for spacing`)
+    return <div key={1} className={cls.value}>
+        {stack}
+    </div>
 }
 
 function ContainerNodeListInner({
-   treeView,
-   containerRef,
-   treeIndex,
-   className,
-   itemClassName,
-    innerClassName,
-   render = item => item.name,
-    update,
-   full,
-   selectable,
-   selection,
-   setSelection,
-   maxSelection,
-   itemAction,
-   itemActions,
-    itemSpacing = 1,
-   compact,
-   filter,
-   alwaysExpanded,
-   reverse,
-   treeSelection,
-    iconRender = defaultIconRender,
-    cols = 'header/25',
-    colsItems = 'input',
-    colsInner = colsItems,
-    wrap = true,
-   bordered = true,
-   padded = true,
-   sized = true,
-   colored = true,
-   styled = true,
-   emptyMsg = "No items available",
-}) {
-    const callAfterwards = useCallAfterwards()
-
-    const { nodes, treeOrder, markedOutside } = treeView
-    const folderIndex = treeIndex.folderIndex
+     exts,
+     treeView,
+     viewParams,
+     container,
+     className,
+     itemClassName,
+     innerClassName,
+     render = item => item.name,
+     full,
+     itemActions,
+     spacing = 1,
+     cols = 'header/25',
+     colsItems = 'input',
+     colsInner = colsItems,
+     wrap = true,
+     bordered = true,
+     padded = true,
+     sized = true,
+     colored = true,
+     styled = true,
+     getEmptyMsg
+                                 }) {
+    const { nodes } = treeView
+    const { filter = '' } = viewParams
     const cls = new ClassNames("stack-v item-start", className)
     const innerCls = new ClassNames("full", innerClassName)
     innerCls.addIf(styled && padded, 'px-d2x py-d2y')
@@ -271,105 +227,49 @@ function ContainerNodeListInner({
     outerCls.addIf(styled && bordered, "border")
     outerCls.addIf(styled && bordered && colored, "border-input-border")
 
-    const container = useItemContainer({
-        view: true,
-        treeOrder,
-        items: nodes,
-        item2value: (x) => {
-            return `${x.nodeType} ${x.value}`
-        },
-        value2item: (x) => {
-            const [ type, value ] = x.split(" ", 2)
-            const indexName = type === "folder" ? "folderIndex" : "leafIndex"
-
-            return treeIndex[indexName].getEntityByPropValue('value', value)
-        }
-    })
     if (itemActions) {
         useFocusGroupsOnItemContainer({ container })
-    } else {
-        const moveFocus = (container, x, y, shift) => {
-            const { nodeType, index, closed } = nodes[container.getItemIndexForViewIndex(container.tabIndex)]
-            if (!alwaysExpanded && nodeType === "folder") {
-                if ((closed && x > 0) || (!closed && x < 0)) {
-                    treeIndex.toggleFolder(index)
-                    return container.tabIndex
-                }
-            }
-            return arrowMove.prevNext(container, x, y, shift)
-        }
-        useFocusOnItemContainer({ container, moveFocus })
+    } else if (exts.has('focus')) {
+        useFocusOnItemContainer({ container, moveFocus: exts.api.focus.moveFocus })
     }
-    if (selection) {
-        if (!itemAction) {
-            itemAction = (node, index) => {
-                const [nodeType] = node.split(" ", 2)
-                if (nodeType !== "folder" || !selectable || (selectable && selectable(node))) {
-                    container.toggle(index)
-                } else if (!maxSelection) {
-                    container.toggleSubtree(index)
-                } else if (nodeType === "folder" && !alwaysExpanded) {
-                    treeIndex.toggleFolder(nodes[index].index)
-                }
-            }
-        }
-        useSelectionOnItemContainer({
-            container,
-            max: maxSelection,
-            events: false, // itemActions === undefined,
-            selectable,
-            selection,
-            setSelection,
-            treeSelection
-        })
-    } else if (!itemAction && !alwaysExpanded) {
-        itemAction = (typeAndValue) => {
-            const [nodeType, value] = typeAndValue.split(" ", 2)
-            if (nodeType !== "folder") return
 
-            const index = folderIndex.getEntityByPropValue(
-                "value",
-                value
-            )
-            treeIndex.toggleFolder(index)
-        }
-    }
-    if (itemAction) {
-        usePickerOnItemContainer({ container, pick: itemAction })
-    }
-    if (containerRef) {
-        if (!containerRef.current && update) {
-            callAfterwards(update)
-        }
-        containerRef.current = container
-    }
     cls.addIf(full, "full")
     cls.addIf(!wrap, "text-nowrap")
 
     let getItemActions = () => []
     if (itemActions) {
-        getItemActions = (index) => {
-            const buttons = []
-            for (const { action, ...button } of itemActions) {
-                buttons.push({
-                    onPressed: () =>
-                        action(nodes[index], selection, setSelection),
-                    keepFocus: true,
-                    ...button
-                })
-            }
-            return buttons
+        getItemActions = index => {
+            const node = nodes[index]
+            return getActionResolvedButtons(
+                itemActions,
+                {
+                    params: [node],
+                    hotkeySetter: (...params) => exts.setHotkeyItemAction(...params),
+                    props: {keepFocus: true},
+                    doConfirmed: exts.doConfirmed
+                }
+            )
         }
     }
 
     let elems = []
 
-    const divider = getSpacingCls(itemSpacing)
+    const divider = getSpacingCls(spacing)
+    let isInteractive = null
+    const getItemColor = exts.getItemColor
+
     for (const [index, node] of nodes.entries()) {
         if (!node.visible) continue
 
         const item = container.getItem(index)
-        const itemCls = new ClassNames("hover:brightness-110", itemClassName)
+        const itemCls = new ClassNames('item-node', itemClassName)
+        if (isInteractive === null) {
+            isInteractive = item.attr.has('onClick') || item.attr.has('onMouseDown')
+        }
+        itemCls.addIf(isInteractive, "hover:brightness-110")
+        if (isInteractive) {
+            item.attr.setStyle('cursor', 'pointer')
+        }
         const btnCls = new ClassNames('items-start')
         itemCls.addIf(!itemActions, divider)
         itemCls.addIf(
@@ -382,77 +282,77 @@ function ContainerNodeListInner({
             btnCls.add("px-d2x py-d2y")
         }
         itemCls.addIf(!wrap, "truncate")
+
         if (styled && colored) {
-            const subMarked = treeSelection && node.markedAncestor
+            const color = getItemColor ? getItemColor({ node }) : undefined
             itemCls.addIf(
-                item.marked || subMarked,
-                subMarked ? "bg-active-bg/70 text-active-text" : "bg-active-bg text-active-text",
-                colItemsCls
+                color, color, colItemsCls
             )
         }
         if (itemActions) itemCls.add("auto full")
 
-        const { nodeType, viewLevel, level, closed, pathNames, markedHidden = 0 } = node
-
-        const showPathNames = viewLevel === 1 && level > 1 && !!pathNames
-        // TODO wrap-break-word should be injected or dependant on setting
         const nodeElem = (
             <div className="stack-h full py-d1y">
-                <Div className="stack-h pl-d2x">
-                    <LevelSpacer level={viewLevel} />
-                    {iconRender(node, alwaysExpanded, treeIndex)}
-                </Div>
-                <div className="stack-v auto text-xs pr-d2x">
-                    {showPathNames && (
-                        <div className="opacity-50">{pathNames.join(" > ")}</div>
-                    )}
-                    <div
-                        className={
-                            "auto text-xs wrap-break-word" +
-                            (nodeType !== "leaf" && !showPathNames ? " opacity-50" : "")
-                        }
-                    >
-                        {render(node)}
-                    </div>
-                </div>
-                {markedHidden > 0 && <NumberChip value={markedHidden} icon="add_circle" />}
+                {exts.getContentElem(render, node)}
             </div>
         )
+        const clickAction = exts.itemAction
         let elem = itemActions ? (
             <ButtonsAndDivGroup
-                reverse={reverse} key={filter + index} buttons={getItemActions(index)}
-                disabled={selection && selection.length > 0}
+                key={filter + index}
+                buttons={getItemActions(index)}
                 moreCols={colsItems}
-                action={() => selection && container.toggle(index)} rowIndex={elems.length} buttonsClassName={btnCls.value} className={'items-stretch ' + colItemsCls + ' ' + (divider ? divider : '') }>
+                action={
+                    !clickAction ? undefined : () => {
+                        const id = node.nodeType + ' ' + node.value
+                        clickAction({ id, index, node, ...exts.plugProps })
+                    }
+                }
+                rowIndex={elems.length}
+                buttonsClassName={btnCls.value}
+                className={'item items-stretch ' + colItemsCls + ' ' + (divider ? divider : '') }
+                { ...exts.buttonsAndDivGroupProps }
+            >
                 <Div {...item.attr.props} className={itemCls.value}>
                     {nodeElem}
                 </Div>
             </ButtonsAndDivGroup>
         ) : (
-            <Div key={filter + index} {...item.attr.props} className={itemCls.value}>
+            <Div key={filter + index} {...item.attr.props} className={itemCls.value + ' item'}>
                 {nodeElem}
             </Div>
         )
         elems.push(elem)
     }
-    const isFiltered = !!filter
-    const bgCls = new ClassNames("auto w-full stack-v")
+    const bgCls = new ClassNames("w-full stack-v")
     bgCls.addIf(elems.length, 'shadow-inner shadow-2xl')
-    elems.push(
-        <div key={-1} className={bgCls.value}>
-            {elems.length === 0 && (
-                <div className="full text-xs px-d2x py-d2y auto">
-                    <Centered>{isFiltered ? `No matches for "${filter}"` : emptyMsg}</Centered>
-                </div>
-            )}
-            {markedOutside > 0 && <div className="stack-h w-full px-d2x py-d2y gap-x-d2x text-xs">
-                <div className="text-right auto">Hidden:</div>
-                <NumberChip value={markedOutside} icon="add_circle" />
-            </div>}
-        </div>
-    )
-    if (compact && !nodes.length) return
 
+    const bgBottomElems = []
+    if (!elems.length) {
+        bgCls.add('auto')
+        bgBottomElems.push(
+            <div key="e" className="full text-xs px-d2x py-d2y auto">
+                {getEmptyMsg ? getEmptyMsg(exts.plugProps) : <Centered>No items available</Centered>}
+            </div>
+        )
+    }
+    const bottomInfoElems = exts.bgBottomElems
+    if (bottomInfoElems.length) {
+        bgBottomElems.push(
+            <InfoElems key="b" elems={bottomInfoElems} />
+        )
+    }
+    if (bgBottomElems.length) {
+        elems.push(
+            <div key={-2} className={bgCls.value}>{bgBottomElems}</div>
+        )
+    }
+    const topInfoElems = exts.bgTopElems
+    if (topInfoElems.length) {
+        elems.unshift(
+            <div key={-1} className={bgCls.value}><InfoElems key="t" elems={topInfoElems} /></div>
+        )
+    }
     return (
         <div className={outerCls.value} tabIndex={-1}>
             <div className={innerCls.value}>
@@ -467,214 +367,76 @@ function ContainerNodeListInner({
     )
 }
 
-function ContainerNodeList({ itemActions, ...props }) {
+
+function ContainerNodeList({ exts, ...props }) {
+    const itemActions = exts.has('itemActions') ? exts.api.itemActions.getButtons(exts.plugProps) : null
     if (itemActions) {
+        /*
+        if (!exts.has('focus')) {
+            return <ContainerNodeListInner exts={exts} {...props} itemActions={itemActions} />
+        }
+         */
         return (
             <FocusRowCtx>
-                <ContainerNodeListInner {...props} itemActions={itemActions} />
+                <ContainerNodeListInner exts={exts} {...props} itemActions={itemActions} />
             </FocusRowCtx>
         )
     }
-    return <ContainerNodeListInner {...props} />
+    return <ContainerNodeListInner exts={exts} {...props} itemActions={undefined} />
 }
 
-function MaxNumber({ className, value, maxValue = value }) {
-    const cls = ClassNames("whitespace-pre font-mono", className)
-    let pre = `${value}`
-    const preMax = `${maxValue}`
-    while (pre.length < preMax.length) {
-        pre = " " + pre
+function getToolBarElems({ value, exts }) {
+    if (!value) return []
+
+    if (isString(value)) value = value.split(" ")
+
+    const elems = []
+    let maxElem = value.length
+    for (const [index, group] of value.entries()) {
+        let elem
+        switch (group) {
+            case "auto":
+                maxElem--
+                elem = <div key={index} className="auto" />
+                break
+
+            default:
+                elem = exts.getToolElem(group, { key: group + index })
+                break
+        }
+        if (elem) {
+            if (elems.length && index < maxElem && group !== 'auto') {
+                const sepCls = true ?
+                    "w-[2px] h-6 bg-header-bg/75" :
+                    "stack-h px-d1x divide-x divide-input-border divide-opacity-40";
+                elems.push(<div key={"g" + index} className="px-d2x"><div
+                    key={'d' + index}
+                    className={sepCls}
+                ></div></div>)
+            }
+            elems.push(elem)
+        }
     }
-    return <div className={cls.value}>{pre}</div>
+    return elems
 }
 
-const CONTROL = {
-    CASE_SENSITIVE: 1,
-    OR: 2,
-    MODE: 4
-}
+function TreeComponentRenderer({ tree, colsBar, isFilterVisible, className, ...props }) {
 
-function TreeIndexStack({ sets, treeIndex, controls = 0, colsBar, alwaysExpanded, filterOptions = {}, compact, match, skip, isFilterVisible, header = "buttons", footer, className, buttons = [], ...props }) {
-
-    const containerRef = useRef(null)
-    const [filterRaw, setFilter] = useState("")
-    const [caseSensitive, setCaseSensitive] = useState(filterOptions.caseSensitive ?? FILTER.DEFAULTS.caseSensitive)
-    const [or, setOr] = useState(filterOptions.or ?? FILTER.DEFAULTS.or)
-    const [mode, setMode] = useState(filterOptions.mode ?? FILTER.DEFAULTS.mode)
+    const { exts, areaRef, header, footer, treeIndex, treeView, container, viewParams } = tree
 
     // TODO: check this...
     const { styled = true, boxed, color = true, padded = true } = props
     if (!colsBar) colsBar = boxed ? 'header/50' : 'header/0'
 
-    const update = useUpdateOnEntityIndexChanges(treeIndex)
-
-    const optionOverwrites = {}
-    const inSet = sets && sets.getInSet({ selection: props.selection })
-
-    if (inSet && sets.result) optionOverwrites.result = sets.result
-    if (sets) {
-        sets.paramsRef.current = {
-            treeIndex,
-            filterOptions,
-            match,
-            skip,
-            isFilterVisible
-        }
-    }
-
-    const treeView = treeIndex.getNodes({
-        alwaysExpanded,
-        selection: props.selection,
-        filter: filterRaw,
-        filterOptions: {
-            ...filterOptions,
-            mode,
-            caseSensitive,
-            or,
-            ...optionOverwrites
-        },
-        inSet,
-        match: props.match,
-        skip,
-    })
-    const getContainer = () => {
-        if (!containerRef.current) throw Error(`Container referenced before initialization`)
-
-        return containerRef.current
-    }
-
-    const getBarGroups = (value) => {
-        if (!value) return []
-
-        if (isString(value)) value = value.split(" ")
-
-        const elems = []
-        let maxElem = value.length
-        for (const [index, group] of value.entries()) {
-            if (isFunction(group)) {
-                elems.push(group({getContainer, index}))
-                continue
-            }
-            if (index > 0 && index < maxElem && group !== 'auto') {
-                const sepCls = true ?
-                    "w-[2px] h-6 bg-header-bg/75" :
-                    "stack-h px-d1x divide-x divide-input-border divide-opacity-40";
-                elems.push(<div key={"g" + index} className="px-d2x"><div key={'d' + index}
-                                className={sepCls}
-                ></div></div>)
-            }
-            let elem
-            switch (group) {
-
-                case "totals":
-                    elem = <div key="totals" className="stack-h gap-d2x text-xs">
-                        <div className="less">Items:</div>
-                        <div>{getContainer().viewCount}/{getContainer().count}</div>
-                    </div>
-                    break
-
-                case "filter":
-                    elem = <Filterbox
-                        key={index}
-                        filter={filterRaw}
-                        setFilter={setFilter}
-                        toggleSortDir={() => treeIndex.toggleSortDir()}
-                        caseSensitive={caseSensitive}
-                        setCaseSensitive={controls & CONTROL.CASE_SENSITIVE ? setCaseSensitive : undefined}
-                        or={or}
-                        setOr={controls & CONTROL.OR ? setOr : undefined}
-                        mode={mode}
-                        setMode={controls & CONTROL.MODE ? setMode : undefined}
-                    />
-                    break
-
-                case "buttons":
-                    if (buttons.length) {
-                        elem = <ButtonGroup key={index} buttons={buttons} />
-                    }
-                    break
-
-                case "expand":
-                    if (!alwaysExpanded) {
-
-                        elem = <ButtonGroup key={index} buttons={
-                            [
-                                {icon: "expand_more", onPressed: () => treeIndex.expandAll(match)},
-                                {icon: "expand_less", onPressed: () => treeIndex.collapseAll(match)}
-                            ]
-                        } />
-                    }
-                    break
-
-                case "marking":
-                    if (!props.selection) break
-
-                    const markedCls = new ClassNames("auto text-xs")
-                    markedCls.addIf(props.selection.length, "rounded-full bg-active-bg text-active-text px-d2x", "px-d2x")
-                    const markButtons = [{icon: 'done_all', onPressed: () => getContainer().selectAll()}]
-                    if (!props.treeSelection) {
-                        markButtons.push({icon: 'star_half', onPressed: () => getContainer().selectInverse()})
-                    }
-                    markButtons.push({icon: 'visibility', disabled: treeView.markedOutside === 0, onPressed: () => {
-                        const inView = []
-                        for (const node of treeView.nodes) {
-                            const id = node.nodeType + ' ' + node.value
-                            if (!node.inView || !props.selection.includes(id)) continue
-                            inView.push(id)
-                        }
-                        props.setSelection(inView)
-                    }})
-                    markButtons.push({icon: 'clear', disabled: props.selection.length === 0, onPressed: () => props.setSelection([])})
-                    elem = <div key={index} className="stack-h gap-x-d2x items-center">
-                        <div className="stack-h gap-x-d1x text-xs">
-                            <div className="">Marked:</div>
-                            <NumberChip value={props.selection.length} maxValue={treeView.nodes.length} xclassName={markedCls.value} color={props.selection.length} />
-                        </div>
-                        <ButtonGroup buttons={markButtons} />
-                    </div>
-                    break
-
-                case "auto":
-                    maxElem--
-                    elem = <div key={index} className="auto" />
-                    break
-
-                case "sets":
-                    if (!sets) break
-
-                    const setButtons = []
-                    for (const { id, name } of sets.items) {
-                        setButtons.push(
-                            {
-                                name,
-                                activated: true,
-                                value: sets.actives.includes(id),
-                                onPressed: () => sets.toggle(id)
-                            }
-                        )
-                    }
-                    if (sets.userSetsAllowed) {
-                        setButtons.push(
-                            {
-                                icon: "build",
-                                onPressed: () => sets.openSetManagerModal(),
-                                title: "Dies ist ein Test"
-                            }
-                        )
-                    }
-                    elem = <div key={index} className="flex gap-x-d2x">
-                        <ButtonGroup buttons={setButtons} />
-                    </div>
-                    break
-            }
-            if (elem) elems.push(elem)
-        }
-        return elems
-    }
-
-    const isCompact = compact && !treeView.nodes.length
-    const headerElems = containerRef.current ? getBarGroups(isCompact ? "buttons" : header) : ''
-    const footerElems = containerRef.current ? getBarGroups(footer) : ''
+    const isCompact = exts.has('compact') && exts.api.compact.isActive
+    const headerElems = container ? getToolBarElems({
+        value: isCompact ? exts.api.compact.toolbar : header,
+        exts
+    }) : ''
+    const footerElems = container ? getToolBarElems({
+        value: isCompact ? "" : footer,
+        exts
+    }) : ''
 
     const cls = ClassNames("stack-v px-d2x py-d2y", className)
     cls.addIf(!boxed, "gap-y-d1y")
@@ -702,24 +464,31 @@ function TreeIndexStack({ sets, treeIndex, controls = 0, colsBar, alwaysExpanded
     }
     return (
         <>
-            <div className={cls.value} {...attr.props}>
+            <Div ref={areaRef} className={cls.value} {...attr.props}>
                 {headerElems.length > 0 && <div className={headerCls.value}>
                     {headerElems}
-                    </div>
+                </div>
                 }
 
-                {!isCompact && <ContainerNodeList full containerRef={containerRef} treeView={treeView} treeIndex={treeIndex}
-                      alwaysExpanded={alwaysExpanded} filter={filterRaw} update={update} {...props}
+                {!isCompact && <ContainerNodeList
+                    full
+                    container={container}
+                    treeView={treeView}
+                    treeIndex={treeIndex}
+                    viewParams={viewParams}
+                    exts={exts}
+                    getEmptyMsg={exts.getEmptyMsg}
+                    { ...props }
                 />}
 
                 {footerElems.length > 0 && !isCompact && <div className={footerCls.value}>
                     {footerElems}
                 </div>
                 }
-            </div>
-            {sets && sets.Modals}
+            </Div>
+            {exts && exts.modals}
         </>
     )
 }
 
-export { FolderInput, FileForm, FolderForm, TreeIndexStack, CONTROL }
+export { FolderInput, FileForm, FolderForm, TreeComponentRenderer }

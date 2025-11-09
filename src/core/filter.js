@@ -1,3 +1,5 @@
+import { d } from "./helper.js"
+
 const FILTER = {
     RESULT: {
         FLAT_DIRECT: 1,
@@ -10,6 +12,11 @@ const FILTER = {
         INCLUDES: 'includes',
         PREFIX: 'startsWith',
         SUFFIX: 'endsWith'
+    },
+    CONTROL: {
+        CASE_SENSITIVE: 1,
+        OR: 2,
+        MODE: 4
     },
     MATCH: {
         LEAFS: node => node.nodeType === 'leaf',

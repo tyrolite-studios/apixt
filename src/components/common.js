@@ -33,7 +33,7 @@ import { Centered, Div, Stack, Icon, OkCancelLayout } from "./layout"
 import { AppContext } from "./context"
 import { getExtractPathForString } from "entities/assignments"
 import { PreBlockContent } from "./content"
-import { Attributes, isBool, isFunction, without } from "../core/helper"
+import { Attributes, isBool, isFunction, getChildrenWithClass } from "../core/helper"
 
 function useComponentUpdate() {
     const mounted = useMounted()
@@ -348,8 +348,6 @@ function useGetNewAttrWithDimProps({
     return attr.setStyles(style)
 }
 
-const HotKeySingleKeys = ["Escape", "Enter"]
-const HotKeySkipValues = ["Meta", "Control", "Alt", "Shift"]
 
 function useRegisterAppListeners() {
     const aContext = useContext(AppContext)
@@ -376,6 +374,8 @@ function useRegisterAppListeners() {
 
     useEffect(() => {
         const hotkeyListener = (e) => {
+            const actionKey = aContext.getHotkeyFromEvent(e)
+            /*
             if (aContext.isInExclusiveMode()) {
                 // TODO allow certain hotkeys?
                 return
@@ -420,6 +420,8 @@ function useRegisterAppListeners() {
                     actionKey += " " + e.key
                 }
             }
+
+             */
             if (!actionKey) {
                 return
             }
@@ -584,213 +586,11 @@ function usePickerOnItemContainer({ container, pick }) {
     })
 }
 
-function useSelectionOnItemContainer({
-    container,
-    events = true,
-    min = 0,
-    max,
-    selectable,
-    selection,
-    setSelection,
-    treeSelection
-}) {
-    useEffect(() => {
-        syncSelection()
-    }, [])
-
-    const lastSelectionRef = useRef(selection)
-    const { item2value, value2item } = container
-
-    const isSelectableValue = (value) => {
-        const index = value2item(value)
-        if (index === null) return false
-
-        return !selectable || selectable(value)
-    }
-
-    const getMinimized = (values) => {
-        if (!treeSelection) return values
-
-
-        const minimized = []
-        let lastMarkedLevel = null
-        for (const { level, nodeType, value } of container.treeOrder) {
-            if (lastMarkedLevel !== null) {
-                if (level > lastMarkedLevel) continue
-                lastMarkedLevel = null
-            }
-            const checkValue = nodeType + ' ' + value
-            if (values.includes(checkValue)) {
-                lastMarkedLevel = level
-                minimized.push(checkValue)
-            }
-        }
-        return minimized
-    }
-
-    const getMinSelectables = values => {
-        return getMinimized(values.filter(isSelectableValue))
-    }
-    container.getMinSelectables = getMinSelectables
-
-    const syncSelection = () => {
-        requestAnimationFrame(() => {
-            const newSelection = getMinSelectables(selection)
-            if (newSelection.length === selection.length) return
-
-            setSelection(newSelection)
-            container.refocus()
-        })
-    }
-
-    const getAncestorIds = index => {
-        let parents = []
-        let parent = container.treeOrder[index].folder
-        let i = index
-        while (i >= 0) {
-            const item = container.treeOrder[i]
-            i--
-            // TODO use exact match here
-            if (item.value != parent) continue
-
-            parents.push("folder " + item.value)
-            parent = item.folder
-        }
-        return parents
-    }
-
-    const getSubtreeIdsForNode = index => {
-        const { treeOrder } = container
-        let i = index
-        let subtreeNodes = []
-        let currNode = treeOrder[i]
-        const level = currNode.level
-        while (true) {
-            const id = currNode.nodeType + ' ' + currNode.value
-            subtreeNodes.push(id)
-            i++
-            if (i === treeOrder.length) break
-
-            currNode = treeOrder[i]
-            if (currNode.level <= level) break
-        }
-        return subtreeNodes
-    }
-
-    const toggleSubtree = (index) => {
-        const elem = container.items[index]
-        const { treeOrder } = container
-
-        let i = 0
-        while (i < treeOrder.length && treeOrder[i] !== elem) i++
-
-        if (i === treeOrder.length) return
-
-        const entityNodes = container.getMinSelectables(getSubtreeIdsForNode(i))
-
-        if (!entityNodes.length) return
-
-        let remaining = without(selection, entityNodes)
-        if (treeSelection) {
-            const parents = getAncestorIds(i)
-            remaining = without(remaining, parents)
-        }
-        let newSelection =
-            without(entityNodes, selection).length === 0 ?
-                [ ...remaining ] : [ ...remaining, ...entityNodes ]
-        setSelection(newSelection)
-    }
-
-    const toggle = (index) => {
-        const node = container.items[index]
-        const value = item2value(node)
-        if (selectable && !selectable(value)) return
-
-        if (selection.includes(value)) {
-            if (selection.length > min) {
-                setSelection(without(selection, value))
-            }
-            return
-        }
-        if (max === 1) {
-            setSelection([value])
-        } else if (max === undefined || selection.length < max) {
-            if (treeSelection) {
-
-                const { treeOrder } = container
-                let x = 0
-                while (x < treeOrder.length && treeOrder[x] !== node) x++
-
-                if (x === treeOrder.length) return
-
-                const subtreeIds = getSubtreeIdsForNode(x)
-                const root = subtreeIds.shift()
-                const ancestorIds = getAncestorIds(x)
-                setSelection([...without(selection, [...subtreeIds, ...ancestorIds]), root])
-                return
-            }
-            setSelection([...selection, value])
-        }
-    }
-
-    if (events) {
-        container.attr.addListeners({
-            onKeyDown: (e) => {
-                if (!container.focused) return
-
-                if (e.key === " ") {
-                    toggle(container.getItemIndexForViewIndex(container.tabIndex))
-                    e.preventDefault()
-                }
-            }
-        })
-    }
-
-    container.addItemBuilder((index, item) => {
-        if (events) {
-            item.attr.addListener("onClick", (e) => {
-                toggle(index)
-            })
-        }
-        const value = item2value(container.items[index])
-        item.marked = selection.includes(value)
-    })
-    container.selection = selection
-    container.syncSelection = syncSelection
-    if (min > 0 && selection.length < min) {
-        container.invalid = true
-    }
-
-    if (lastSelectionRef.current !== selection) {
-        syncSelection()
-    }
-    container.toggle = toggle
-    container.toggleSubtree = toggleSubtree
-    if (max !== undefined) return
-
-    container.selectAll = () => {
-        let allSelectables = getMinSelectables(container.items.map((x) => item2value(x)))
-        setSelection(without(allSelectables, selection).length ? allSelectables : [])
-    }
-    container.selectInverse = () => {
-        let allSelectables = container.items.map((x) => item2value(x))
-        if (selectable) {
-            allSelectables = allSelectables.filter(x => selectable(x))
-        }
-        const invValues = []
-        for (const value of allSelectables) {
-            if (!selection.includes(value)) {
-                invValues.push(value)
-            }
-        }
-        setSelection(invValues)
-    }
-}
-
 const FocusRowContext = createContext(null)
 
 function FocusRowCtx({ children }) {
-    const [row, setRow] = useState(0)
+    const [row, setRowRaw] = useState(0)
+    const setRow = (value) => setRowRaw(value)
     const [lastTabIndex, setLastTabIndex] = useState(0)
     const rowTabIndexSetter = useRef(null)
     const containerRef = useRef(null)
@@ -804,8 +604,6 @@ function FocusRowCtx({ children }) {
             }
         })
     }
-    // TODO should be a param
-    const off = 1
     const api = {
         row,
         lastTabIndex,
@@ -821,13 +619,13 @@ function FocusRowCtx({ children }) {
         },
         getMarkedTabIndex: () => markedTabRef.current,
         nextRow: () => {
-            const max = containerRef.current.children.length - off
+            const max = getChildrenWithClass(containerRef.current, 'item').length
             setRow(row + 1 >= max ? 0 : row + 1)
             refocus()
         },
         prevRow: () => {
             setRow(
-                row === 0 ? containerRef.current.children.length - 1 - off : row - 1
+                row === 0 ? getChildrenWithClass(containerRef.current, 'item').length - 1 : row - 1
             )
             refocus()
         },
@@ -863,6 +661,7 @@ function useFocusGroupsOnItemContainer({ container }) {
             }
             if (initFocusMinRef.current) {
                 let minSelected = 0
+
                 // if we have a selection then set the focus on the first item which is
                 // included in the selection
                 if (container.selection && container.selection.length) {
@@ -904,11 +703,12 @@ function useFocusGroupsOnItemContainer({ container }) {
                 frContext.setLastTabIndex(0)
             })
         }
-    })
+    }, 'focus')
     useEffect(() => {
         frContext.setContainer(container.ref.current)
     }, [])
     container.refocus = frContext.refocus
+    container.row = frContext.row
 }
 
 function useFocusOnItemContainer({
@@ -1062,7 +862,7 @@ function useFocusOnItemContainer({
             const newTabIndex = moveFocus(container, x, y, e.shiftKey)
             if (newTabIndex !== tabIndex) setTabIndex(newTabIndex)
         }
-    })
+    }, 'focus')
     const isTabRow = !frContext || frContext.row === rowIndex
 
     container.addItemBuilder((itemIndex, item) => {
@@ -1181,7 +981,7 @@ function useLoadingSpinner() {
 
 function ConfirmDialog({ close, ok, msg }) {
     return (
-        <OkCancelLayout cancel={close} ok={() => ok()}>
+        <OkCancelLayout submit cancel={close} ok={() => ok()}>
             <Div className="p-4 full text-center">
                 <div className="stack-h gap-2 justify-center h-full">
                     <div className="place-self-center">
@@ -2097,7 +1897,7 @@ const modeOptions = [
     {id: 'exact', name: "Exact"}
 ]
 
-function Filterbox({ filter, setFilter, toggleSortDir, caseSensitive, setCaseSensitive, or, setOr, mode, setMode }) {
+function Filterbox({ filter, icon, setFilter, toggleSortDir, caseSensitive, setCaseSensitive, or, setOr, mode, setMode }) {
     const buttons = [
         {
             icon: "close",
@@ -2129,17 +1929,18 @@ function Filterbox({ filter, setFilter, toggleSortDir, caseSensitive, setCaseSen
     }
     return (
         <div key="filter" className="stack-h items-center gap-1">
+            {icon && <div
+                    className={
+                        "px-1" +
+                        (filter === ""
+                            ? ""
+                            : " bg-active-bg text-active-text border border-active-text")
+                    }
+                >
+                    <Icon className="text-sm" name="search" />
+                </div>
+            }
             {!!setMode && <Select options={modeOptions} value={mode} set={setMode} /> }
-            <div
-                className={
-                    "px-1" +
-                    (filter === ""
-                        ? ""
-                        : " bg-active-bg text-active-text border border-active-text")
-                }
-            >
-                <Icon className="text-sm" name="search" />
-            </div>
             <Input
                 padded={false}
                 sized={false}
@@ -2153,13 +1954,29 @@ function Filterbox({ filter, setFilter, toggleSortDir, caseSensitive, setCaseSen
     )
 }
 
+function MaxNumber({ className, value, maxValue = value }) {
+    const cls = ClassNames("whitespace-pre font-mono", className)
+    let pre = `${value}`
+    const preMax = `${maxValue}`
+    while (pre.length < preMax.length) {
+        pre = " " + pre
+    }
+    return <div className={cls.value}>{pre}</div>
+}
+
+function NumberChip({ value, maxValue, icon, color = true, className = "" }) {
+    const cls = ClassNames("stack-h px-d2x gap-x-d1x items-center rounded-full text-xs", className)
+    cls.addIf(color, "bg-active-bg text-active-text")
+    const elem = maxValue !== undefined ? <MaxNumber value={value} maxValue={maxValue} /> : <div>{value}</div>
+    return <div className={cls.value}>{icon && <Icon name="add_circle" />}{elem}</div>
+}
+
 export {
     useRegisterAppListeners,
     useComponentUpdate,
     useMounted,
     useDebugMount,
     useItemContainer,
-    useSelectionOnItemContainer,
     useFocusGroupsOnItemContainer,
     useFocusOnItemContainer,
     usePickerOnItemContainer,
@@ -2190,5 +2007,6 @@ export {
     Filterbox,
     arrowMove,
     FocusRowContext,
-    FocusRowCtx
+    FocusRowCtx,
+    NumberChip
 }

@@ -9,7 +9,7 @@ import { FormGrid, InputCells } from "components/form"
 import { FolderInput } from "entities/folders"
 import { AppContext } from "components/context"
 import { CustomCells } from "components/form"
-import { FileForm, FolderForm, TreeIndexStack } from "entities/folders"
+import { FileForm, FolderForm, TreeComponentRenderer } from "entities/folders"
 import { FolderIndex } from "core/entity-tree"
 import { useConfirmation } from "../components/common.js"
 
@@ -268,7 +268,7 @@ function RequestTreeManager({ treeIndex, api, match, close, ...props }) {
     ]
     return <>
         <OkCancelLayout cancel={() => close()} ok={() => close()}>
-            <TreeIndexStack
+            <TreeComponentRenderer
                 treeIndex={treeIndex}
                 buttons={buttons}
                 selection={selection}
@@ -313,7 +313,7 @@ function RequestTree({ api, pick, match, filter, ...props }) {
     }
     return (
         <>
-            <TreeIndexStack
+            <TreeComponentRenderer
                 className="h-full"
                 treeIndex={treeIndex}
                 match={match}

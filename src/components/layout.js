@@ -94,6 +94,18 @@ function Centered({ className, children }) {
     )
 }
 
+function getSpacingCls(value) {
+    if (!value) return ''
+    switch(value) {
+        case 1: return '[&:not(:first-child)]:mt-[1px]'
+        case 2: return '[&:not(:first-child)]:mt-[2px]'
+        case 3: return '[&:not(:first-child)]:mt-[3px]'
+        case 4: return '[&:not(:first-child)]:mt-[4px]'
+        case 5: return '[&:not(:first-child)]:mt-[5px]'
+    }
+    throw Error(`Unsupported value "${value}" for spacing`)
+}
+
 const TabContext = createContext(null)
 
 function Tabs({
@@ -431,5 +443,6 @@ export {
     useGetTabIndex,
     AvailContextProvider,
     AvailContext,
-    OkCancelLayout
+    OkCancelLayout,
+    getSpacingCls
 }

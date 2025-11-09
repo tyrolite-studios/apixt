@@ -258,4 +258,4 @@ function KeyBindingsStack({ keyBindingsIndex }) {
     )
 }
 
-export { KeyBindingsStack }
+export { KeyBindingsStack, Keys }

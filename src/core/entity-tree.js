@@ -743,7 +743,6 @@ class TreeIndex {
 }
 
 export {
-    FILTER,
     ROOT_FOLDER_ID,
     TreeIndex,
     FolderIndex,

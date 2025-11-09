@@ -43,6 +43,7 @@ import {
     usePickerOnItemContainer, getCols
 } from "./common"
 import { useModalWindow } from "./modal.js"
+import { isFunction } from "../core/helper.js"
 
 function useFocusKeyBindings({ keyHandlers = [], disabled = false, direct }) {
     const [hasFocus, setHasFocus] = useState(false)
@@ -1292,6 +1293,7 @@ function Button({
     autoFocus,
     submit,
     title,
+    compact,
     refocus = null,
     sized = true,
     colored = true,
@@ -1461,12 +1463,12 @@ function ButtonGroup({
     gapped = true,
     wrap = true,
     buttonProps = {},
-    autoFocus,
     active,
     rowChange,
     lastTabIndex,
     setLastTabIndex,
     rowIndex,
+    autoFocus,
     ...props
 }) {
     const containerProps =
@@ -1484,6 +1486,9 @@ function ButtonGroup({
     cls.addIf(gapped, "gap-x-d2x")
     cls.addIf(wrap, "flex-wrap", "flex-nowrap overflow-auto")
 
+    const overwrites = {}
+    if (autoFocus !== undefined) overwrites.autoFocus = autoFocus
+
     const elems = []
     for (const [i, button] of buttons.entries()) {
         const curr = i
@@ -1492,7 +1497,7 @@ function ButtonGroup({
             ...itemAttr.attr.props,
             ...buttonProps,
             ...button,
-            autoFocus
+            ...overwrites
         }
         elems.push(
             <Button
@@ -1520,7 +1525,7 @@ function ButtonsAndDivGroup({
         buttonProps = {},
         cols = 'transparent',
         moreCols = cols,
-        autoFocus,
+        focus = true,
         active,
         disabled,
         rowChange,
@@ -1529,16 +1534,19 @@ function ButtonsAndDivGroup({
         rowIndex,
         children,
         action,
+        maxButtons = 2,
+        autoFocus,
         ...props
     }) {
     const aContext = useContext(AppContext)
     const MoreButtonsModal = useModalWindow()
-    const maxShowedButtons = 2
-    const btnCount = Math.min(buttons.length, maxShowedButtons)
+    const btnCount = Math.min(buttons.length, maxButtons)
     const compCol = getCols(cols)
     const moreCol = getCols(moreCols)
 
-    const container = useItemContainer({ count: btnCount + 1 })
+    const container = useItemContainer({
+        count: btnCount + (focus ? 1 : 0 )
+    })
     useFocusOnItemContainer({
         container,
         cursor: (index) => index !== (!reverse ? 0 : btnCount - 1),
@@ -1550,8 +1558,8 @@ function ButtonsAndDivGroup({
     }
     let showedButtons = buttons
     const moreButtons = []
-    if (maxShowedButtons && buttons.length > maxShowedButtons) {
-        showedButtons = maxShowedButtons === 1 ? [] : buttons.slice(0, maxShowedButtons - 1)
+    if (maxButtons && buttons.length > maxButtons) {
+        showedButtons = maxButtons === 1 ? [] : buttons.slice(0, maxButtons - 1)
         showedButtons.push({
             icon: "more_vert",
             onPressed: (e) => {
@@ -1563,7 +1571,7 @@ function ButtonsAndDivGroup({
                 MoreButtonsModal.open({top: rect.top, left: rect.left})
             }
         })
-        for (const { onPressed, refocus, ...btnProps } of buttons.slice(maxShowedButtons - 1)) {
+        for (const { onPressed, refocus, ...btnProps } of buttons.slice(maxButtons - 1)) {
             const newOnPressed = (...args) => {
                 MoreButtonsModal.close()
                 setTimeout(() => {
@@ -1590,7 +1598,7 @@ function ButtonsAndDivGroup({
     buttonCls.addIf(wrap, "flex-wrap", "flex-nowrap overflow-auto")
 
     const elems = []
-    const off = reverse ? 1 : 0
+    const off = reverse && focus ? 1 : 0
 
     for (const [i, button] of showedButtons.entries()) {
         const curr = i + off
@@ -1621,16 +1629,20 @@ function ButtonsAndDivGroup({
         onKeyDown(e)
     } : onKeyDown
 
+    const elemCls = new ClassNames("auto", className)
+    elemCls.addIf(focus, "focus-fix focus:outline-none focus:ring focus:ring-focus-border")
+
     const moreCls = new ClassNames("p-2")
     if (moreButtons.length) {
         moreCls.addIf(true, `${moreCol.bg} ${moreCol.color}`)
     }
+    const elemAttr = !focus ? {} : container.getItem(reverse ? 0 : showedButtons.length).attr.props
 
     return (
         <>
             <Div {...divAttr} onKeyDown={keyDown} className={cls.value}>
                 {!reverse && <div className={buttonCls.value}>{elems}</div>}
-                <Div className="auto focus-fix focus:outline-none focus:ring focus:ring-focus-border" {...container.getItem(reverse ? 0 : showedButtons.length).attr.props}>{children}</Div>
+                <Div className={elemCls.value} {...elemAttr}>{children}</Div>
                 {reverse && <div className={buttonCls.value}>{elems}</div>}
             </Div>
             {moreButtons.length > 0 &&
@@ -2056,6 +2068,34 @@ function SliderCells({ name, ...props }) {
     )
 }
 
+function getActionResolvedButtons(buttons, options = {}) {
+    const { params = [], hotkeySetter, props = {}, doConfirmed } = options
+    const resolvedButtons = []
+    for (const { action, ...button } of buttons) {
+        const overwrites = {}
+        if (action) {
+            const { hotkey, exec, confirm, can } = action
+            if (hotkey && hotkeySetter) {
+                hotkeySetter(hotkey, action)
+            }
+            if (can) overwrites.disabled = !can(...params)
+
+            const onPressed = confirm && doConfirmed ?
+                () => doConfirmed(isFunction(confirm) ? confirm(...params) : confirm, () => exec(...params)) :
+                () => exec(...params)
+
+
+            overwrites.onPressed = onPressed
+        }
+        resolvedButtons.push({
+            ...button,
+            ...overwrites,
+            ...props
+        })
+    }
+    return resolvedButtons
+}
+
 export {
     FormContext,
     Button,
@@ -2085,5 +2125,6 @@ export {
     RadioCells,
     ColorCells,
     SliderCells,
-    useMarkInvalid
+    useMarkInvalid,
+    getActionResolvedButtons
 }
