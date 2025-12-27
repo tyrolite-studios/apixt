@@ -3,7 +3,6 @@ import { useState } from "react"
 import { FormGrid, InputCells, CheckboxCells } from "components/form"
 import { EntityStack } from "components/common"
 import { Stack, OkCancelLayout } from "components/layout"
-import { d } from "core/helper"
 import { useModalWindow } from "components/modal"
 
 class ApiEnvIndex extends MappingIndex {

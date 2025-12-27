@@ -1,6 +1,5 @@
 import { AbstractPlugin, PluginRegistry } from "core/plugin"
 import { RoutesModal } from "./components"
-import { d } from "core/helper"
 
 class Plugin extends AbstractPlugin {
     get id() {

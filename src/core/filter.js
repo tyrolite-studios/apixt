@@ -1,4 +1,3 @@
-import { d } from "./helper.js"
 
 const FILTER = {
     RESULT: {
@@ -68,6 +67,7 @@ const isSearchWordsMatch = (searchWords, parts, options) => {
     if (!itemWords.length) return false
 
     let hasOneMatch = false
+
     for (const word of searchWords) {
         if (not && word[0] === '!') {
             if (word.length > 1 && hasMatch(word.substring(1), itemWords, mode)) {

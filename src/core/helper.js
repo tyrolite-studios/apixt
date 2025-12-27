@@ -1,42 +1,4 @@
 
-/**
- * Debug function which logs the given parameters on the console and returns the first param
- *
- * @param {mixed} main
- * @param {mixed} params
- *
- * @returns {mixed}
- */
-function d(main, ...params) {
-    let stack = []
-    try {
-        throw Error("foo")
-    } catch (e) {
-        stack = e.stack.split("\n")
-    }
-    const func = []
-    let no = 0
-    for (const line of stack) {
-        const pos = no
-        no++
-        if (pos <= 1) continue
-
-        if (pos === 2) {
-            func.push(line.trim())
-            continue
-        }
-        if (pos > 6) break
-
-        const [first] = line.split("(")
-        func.push(first.substring(6).trim())
-    }
-    console.group("Debug " + func.join(" <- "))
-    console.log(main, ...params)
-    console.groupEnd()
-
-    return main
-}
-
 const getParsedJson = (value) => {
     try {
         return JSON.parse(value)
@@ -545,7 +507,10 @@ function md5(inputString) {
 }
 
 const sortAsc = (a, b) => (a === b ? 0 : a > b ? 1 : -1)
+const sortNatAsc = (a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" })
+
 const sortDesc = (a, b) => (a === b ? 0 : a < b ? 1 : -1)
+const sortNatDesc = (a, b) => b.localeCompare(a, undefined, { numeric: true, sensitivity: "base" })
 
 const formatDate = (timestamp) =>
     `${new Date(timestamp).toLocaleTimeString()} ${new Date(
@@ -565,8 +530,75 @@ function getChildrenWithClass(parent, name) {
 
 const ucFirst = s => s && s[0].toUpperCase() + s.slice(1)
 
+const unique = (...args) => {
+    const result = new Set()
+    for (const arg of args) {
+        if (Array.isArray(arg)) {
+            for (const item of arg) result.add(item)
+        } else {
+            arg.add(arg)
+        }
+    }
+    return [...result.values()]
+}
+
+const OVERFLOW = {
+    CLAMP: 1,
+    WRAP: 2,
+    MODULO: 3
+}
+
+const AxisHandler = (getProps) => {
+
+    const setValue = (viewIndex) => {
+        const { focusIndex, setFocusIndex, pageIndexStart, pageIndexEnd, viewCount, viewToFocusIndex = x => x, overflow = OVERFLOW.CLAMP } = getProps()
+
+        // overflow-handling
+        if (viewIndex < 0) {
+            switch (overflow) {
+                case OVERFLOW.CLAMP:
+                    viewIndex = 0
+                    break
+
+                case OVERFLOW.WRAP:
+                    viewIndex = viewCount - 1
+                    break
+
+                case OVERFLOW.MODULO:
+                    viewIndex = Math.abs(viewIndex) % viewCount
+                    break
+            }
+        } else if (viewIndex > (viewCount - 1)) {
+            switch (overflow) {
+                case OVERFLOW.CLAMP:
+                    viewIndex = viewCount - 1
+                    break
+
+                case OVERFLOW.WRAP:
+                    viewIndex = 0
+                    break
+
+                case OVERFLOW.MODULO:
+                    viewIndex = Math.abs(viewIndex) % viewCount
+                    break
+            }
+        }
+        if (viewIndex === focusIndex) return
+
+        setFocusIndex(viewToFocusIndex(viewIndex))
+    }
+    const moveBy = (moveOffset) => {
+        const { focusIndex, pageIndexStart = 0 } = getProps()
+
+        setValue(focusIndex + pageIndexStart + moveOffset)
+    }
+    return {
+        setValue,
+        moveBy
+    }
+}
+
 export {
-    d,
     noop,
     isNull,
     isBool,
@@ -583,6 +615,7 @@ export {
     without,
     clamp,
     round,
+    unique,
     extractFullClasses,
     getChildrenWithClass,
     ClassNames,
@@ -592,9 +625,13 @@ export {
     rgb2hex,
     md5,
     sortAsc,
+    sortNatAsc,
     sortDesc,
+    sortNatDesc,
     formatDate,
     getParsedJson,
     getSimpleType,
-    getNewModelId
+    getNewModelId,
+    AxisHandler,
+    OVERFLOW
 }

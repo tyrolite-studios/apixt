@@ -1,5 +1,4 @@
 import { AbstractPlugin, PluginRegistry, HOOKS } from "core/plugin"
-import { d } from "core/helper"
 import { JsonDiffWindow } from "./components"
 
 class Plugin extends AbstractPlugin {

@@ -1,6 +1,5 @@
 import { AbstractPlugin, PluginRegistry, HOOKS } from "core/plugin"
 import { HistoryWindow, HistoryWidget } from "./components"
-import { d } from "core/helper"
 
 class Plugin extends AbstractPlugin {
     get id() {

@@ -20,7 +20,6 @@ import {
     ClassNames,
     isEventInRect,
     isInt,
-    d,
     clamp,
     round,
     isString,
@@ -1301,6 +1300,7 @@ function Button({
     styled = true,
     bordered = true,
     tab = true,
+    flipY = false,
     tabControlled,
     className,
     iconClassName,
@@ -1446,7 +1446,7 @@ function Button({
             {...attr}
         >
             <div className={innerCls.value}>
-                {icon && <Icon className={iconCls.value} name={icon} />}
+                {icon && <Icon className={iconCls.value} flipY={flipY} name={icon} />}
                 {name && <div className="truncate">{name}</div>}
             </div>
         </button>

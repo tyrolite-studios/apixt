@@ -1,4 +1,4 @@
-import { isString, d, isInt, isArray, isObject } from "./helper"
+import { isString, isInt, isArray, isObject } from "./helper"
 import { CMD } from "core/tree"
 
 const isMethodWithRequestBody = (method) =>

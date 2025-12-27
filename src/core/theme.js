@@ -1,5 +1,5 @@
 import defaultTheme from "themes/default"
-import { isInt, isString, d } from "./helper"
+import { isInt, isString } from "./helper"
 
 const root = document.documentElement
 

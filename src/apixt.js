@@ -1,7 +1,6 @@
 /* webpackIgnore: true */
 import { createRoot } from "react-dom/client"
 import { ApiExtenderApp } from "./components/app"
-import { d } from "core/helper"
 
 const controller = window.controller
 if (!controller) throw Error(`No controller found in window object`)

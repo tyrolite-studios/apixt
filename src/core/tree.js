@@ -1,4 +1,4 @@
-import { d, isObject } from "./helper"
+import { isObject } from "./helper"
 
 const CMD = {
     OPEN_SECTION: 1,

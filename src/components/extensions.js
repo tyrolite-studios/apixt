@@ -1,24 +1,17 @@
 import { useContext, useMemo, useRef, useState, useEffect } from "react"
-import { ClassNames, d, cloneDeep, without, ucFirst } from "core/helper"
-import { Button, CustomCells, FormGrid, Select } from "./form.js"
+import { ClassNames, cloneDeep, without, ucFirst, isFunction } from "core/helper"
+import { ButtonGroup, Button, CustomCells, FormGrid, Number, Select } from "./form.js"
 import { FILTER } from "core/filter"
-import {
-    arrowMove,
-    NumberChip,
-    Filterbox,
-    useUpdateOnEntityIndexChanges,
-    useItemContainer,
-    useConfirmation, useErrorWindow, DualRing
-} from "./common.js"
+import { arrowMove, NumberChip, Filterbox, DualRing, useCallAfterwards, useMounted } from "./common.js"
 import { SetsIndex } from "entities/sets"
 import { useModalWindow } from "components/modal"
 import { AppContext } from "components/context"
-import { Extension, ExtensionPack } from "core/extension"
+import { Extension, EXT_TYPE, EXT_SKIP } from "core/extension"
 import { UserSetSelectorModal, UserSetManagerModal } from "entities/sets"
 import { Centered, Div, Icon } from "./layout.js"
 import { Keys } from "entities/key-bindings"
-import { isFunction } from "../core/helper.js"
-import { TreeComponentRenderer } from "../entities/folders.js"
+import { getWords, isSearchWordsMatch } from "core/filter"
+import { getNewModelId, isInRange, sortAsc } from "../core/helper.js"
 
 function useItemActionExt({ itemAction, prio = 100 } = {}) {
     return Extension({
@@ -33,34 +26,52 @@ function useItemActionExt({ itemAction, prio = 100 } = {}) {
 function useCompactModeExt({ toolbar = "buttons" } = {}) {
     return Extension({
         id: 'compact',
-        buildApi: ({ treeView }) => {
+        buildApi: ({ view }) => {
             return {
                 toolbar,
-                isActive: !treeView.nodes.length,
+                isActive: !view.totalCount,
                 buttonFilter: (button) => button.compact === true
             }
         }
     })
 }
 
+// TODO tree-handling
 function useItemFocusExt() {
     return Extension({
         id: "focus",
-        buildApi: ({ api, exts, treeView, treeIndex, container }) => {
+        buildApi: ({ api, exts, view, entityIndex, container }) => {
             exts.addButtonsAndDivGroupProps({
                 focus: true
             })
-            const nodes = treeView.nodes
+            const nodes = view.nodes
             const hasToggler = exts.has('toggler')
+            const hasInfiniteScrolling = exts.has('infinite')
+
             const moveFocus = (container, x, y, shift) => {
+                /*
+                TODO: call toggle
+
                 const { nodeType, index, closed } = nodes[container.getItemIndexForViewIndex(container.tabIndex)]
                 if (hasToggler && nodeType === "folder") {
                     if ((closed && x > 0) || (!closed && x < 0)) {
-                        treeIndex.toggleFolder(index)
+                        // treeIndex.toggleFolder(index)
                         return container.tabIndex
                     }
                 }
-                return arrowMove.prevNext(container, x, y, shift)
+
+                 */
+                const newIndex = arrowMove.prevNext(container, x, y, shift)
+
+                if (hasInfiniteScrolling && newIndex !== container.tabIndex) {
+
+
+                    const max = view.pageCount - 1
+                    if (newIndex === max || newIndex === 0) {
+                        exts.api.infinite.toggleDirection(newIndex === max)
+                    }
+                }
+                return newIndex
             }
             const focusManually = (elem) => requestAnimationFrame(() => {
                 elem.dispatchEvent(
@@ -88,10 +99,10 @@ function useItemCountExt({ name = "Items:" } = {}) {
     return Extension({
         id: 'count',
         tools: {
-            count: ({ key, container }) => (
+            count: ({ key, view }) => (
                 <div key={key} className="stack-h gap-d2x text-xs">
                     {name && <div className="opacity-50">{name}</div>}
-                    <div>{container.viewCount}/{container.count}</div>
+                    <div>{view.pageCount}/{view.viewCount}</div>
                 </div>
             )
         }
@@ -150,18 +161,74 @@ function useItemButtonsExt({ getButtons, reverse, maxButtons = 2 } = {}) {
     })
 }
 
+function toggleValue(values, value) {
+    if (values.includes(value)) {
+        return values.toSpliced(values.indexOf(value), 1)
+    }
+    return [...values, value]
+}
+
+function toggleValues(allValues, values) {
+    const deleteValues = []
+    const addValues = []
+    for (const value of values) {
+        if (allValues.includes(value)) {
+            deleteValues.push(value)
+        } else {
+            addValues.push(value)
+        }
+    }
+    return [...without(allValues, deleteValues), ...addValues]
+}
+
 function useTreeTogglerExt({ addItemAction = true, name } = {}) {
+    const [ closed, setClosed ] = useState([])
     return Extension({
         id: 'toggler',
-        prepareViewParams: (viewParams) => viewParams.alwaysExpanded = false,
-        buildApi: ({ api, exts, treeIndex, viewParams }) => {
+        types: [EXT_TYPE.TREE],
+        prepareViewParams: (viewParams) => {
+            viewParams.temp.closedLevel = null
+            viewParams.temp.closedParent = null
+            viewParams.alwaysExpanded = false
+        },
+        viewBuildProps: (node, { temp }) => {
+            let closedLevel = temp.closedLevel
+            let isClosed = false
+            if (closedLevel !== null && node.viewLevel <= closedLevel) {
+                closedLevel = null
+            }
+            if (closedLevel === null) {
+                isClosed = closed.includes(node.id)
+                if (isClosed && !node.skip) {
+                    closedLevel = node.viewLevel
+                    temp.closedParent = node
+                }
+            } else {
+                node.skip |= EXT_SKIP.HIDDEN
+            }
+            node.closed = isClosed
+            temp.closedLevel = closedLevel
+        },
+        buildApi: ({ api, exts, view }) => {
             if (addItemAction) {
                 exts.setItemAction( ({ node }) => api.toggle(node), 25)
             }
             return {
-                toggle: (node) => node.nodeType === 'leaf' ? undefined : treeIndex.toggleFolder(node.index),
-                expandAll: () => treeIndex.expandAll(viewParams.match),
-                collapseAll: () => treeIndex.collapseAll(viewParams.match),
+                toggle: (node) => {
+                    if (!node.isContainer) return
+
+                    setClosed(toggleValue(closed, node.id))
+                },
+                expandAll: () => setClosed([]),
+                collapseAll: () => {
+                    const ids = []
+                    for (const node of view.nodes) {
+                        if (!node.isContainer || node.closed) continue
+
+                        ids.push(node.id)
+                    }
+                    setClosed(toggleValues(closed, ids))
+                },
             }
         },
         tools: {
@@ -187,21 +254,75 @@ function useItemSelectionExt({
      addItemAction = true,
      selectable,
      treeSelection,
+    syncing = false,
     name = 'Selected:',
     showMarkedHidden = true,
     showMarkedOutside = true,
     ...props
 } = {}) {
 
-    const [selectionRaw, setSelectionRaw] = useState([])
+    const [ selectionRaw, setSelectionRaw ] = useState([])
     const selection = props.selection ?? selectionRaw
     const setSelection = props.setSelection ?? setSelectionRaw
     const lastSelectionRef = useRef(selection)
 
     return Extension({
         id: 'selection',
-        prepareViewParams: viewParams => viewParams.selection = selection,
-        buildApi: ({ container, exts, treeView }) => {
+        uses: ['toggler'],
+        prepareViewParams: viewParams => {
+            viewParams.selection = selection
+            viewParams.temp.markedLevel = null
+        },
+        viewBuildProps: (node, { temp }) => {
+            let { markedLevel } = temp
+            if (markedLevel !== null && node.level <= markedLevel) {
+                markedLevel = null
+            }
+            if (markedLevel) {
+                node.markedAncestor = true
+            } else {
+                node.markedAncestor = false
+                if (selection.includes(node.id)) {
+                    markedLevel = node.level
+                }
+            }
+            temp.markedLevel = markedLevel
+            if (temp.closedLevel === undefined) return
+
+            const closedLevel = temp.closedLevel
+            const closedParent = temp.closedParent
+            if (closedLevel !== null && closedParent && node !== closedParent && selection.includes(node.id)) {
+                closedParent.markedHidden = (closedParent.markedHidden ?? 0) + 1
+            } else {
+                node.markedHidden = 0
+            }
+        },
+        finalizeView(view, { allNodes, viewParams }) {
+            const { startIndex, endIndex } = viewParams
+            let markedOutside = 0
+            let markedPrev = 0
+            let markedNext = 0
+
+            for (const node of allNodes) {
+                if (!node.skip) continue
+
+                if (selection.includes(node.id)) {
+                    if (node.skip === EXT_SKIP.PAGE) {
+                        if (node.viewIndex < startIndex) {
+                            markedPrev++
+                        } else if (node.viewIndex > endIndex) {
+                            markedNext++
+                        }
+                    }  else if (node.skip !== EXT_SKIP.HIDDEN) {
+                        markedOutside++
+                    }
+                }
+            }
+            view.markedOutside = markedOutside
+            view.markedPrev = markedPrev
+            view.markedNext = markedNext
+        },
+        buildApi: ({ container, exts, view }) => {
             container.selection = selection
 
             const { item2value, value2item } = container
@@ -218,15 +339,15 @@ function useItemSelectionExt({
 
                 const minimized = []
                 let lastMarkedLevel = null
-                for (const { level, nodeType, value } of container.treeOrder) {
+                for (const { level, id } of view.allNodes) {
                     if (lastMarkedLevel !== null) {
                         if (level > lastMarkedLevel) continue
+
                         lastMarkedLevel = null
                     }
-                    const checkValue = nodeType + ' ' + value
-                    if (values.includes(checkValue)) {
+                    if (values.includes(id)) {
                         lastMarkedLevel = level
-                        minimized.push(checkValue)
+                        minimized.push(id)
                     }
                 }
                 return minimized
@@ -237,6 +358,8 @@ function useItemSelectionExt({
             }
 
             const syncSelection = () => {
+                if (!syncing) return
+
                 requestAnimationFrame(() => {
                     const newSelection = getMinSelectables(selection)
                     if (newSelection.length === selection.length) return
@@ -248,33 +371,31 @@ function useItemSelectionExt({
 
             const getAncestorIds = index => {
                 let parents = []
-                let parent = container.treeOrder[index].folder
+                let parent = view.allNodes[index].parent
                 let i = index
                 while (i >= 0) {
-                    const item = container.treeOrder[i]
+                    const item = view.allNodes[i]
                     i--
-                    // TODO use exact match here
-                    if (item.value != parent) continue
+                    if (item.id !== parent) continue
 
-                    parents.push("folder " + item.value)
-                    parent = item.folder
+                    parents.push(item.id)
+                    parent = item.parent
                 }
                 return parents
             }
 
             const getSubtreeIdsForNode = index => {
-                const { treeOrder } = container
+                const { allNodes } = view
                 let i = index
                 let subtreeNodes = []
-                let currNode = treeOrder[i]
+                let currNode = allNodes[i]
                 const level = currNode.level
                 while (true) {
-                    const id = currNode.nodeType + ' ' + currNode.value
-                    subtreeNodes.push(id)
+                    subtreeNodes.push(currNode.id)
                     i++
-                    if (i === treeOrder.length) break
+                    if (i === allNodes.length) break
 
-                    currNode = treeOrder[i]
+                    currNode = allNodes[i]
                     if (currNode.level <= level) break
                 }
                 return subtreeNodes
@@ -282,12 +403,12 @@ function useItemSelectionExt({
 
             const toggleSubtree = (index) => {
                 const elem = container.items[index]
-                const { treeOrder } = container
+                const { allNodes } = view
 
                 let i = 0
-                while (i < treeOrder.length && treeOrder[i] !== elem) i++
+                while (i < allNodes.length && allNodes[i] !== elem) i++
 
-                if (i === treeOrder.length) return
+                if (i === allNodes.length) return
 
                 const entityNodes = getMinSelectables(getSubtreeIdsForNode(i))
 
@@ -319,12 +440,11 @@ function useItemSelectionExt({
                     setSelection([value])
                 } else if (max === undefined || selection.length < max) {
                     if (treeSelection) {
-
-                        const { treeOrder } = container
+                        const { allNodes } = view
                         let x = 0
-                        while (x < treeOrder.length && treeOrder[x] !== node) x++
+                        while (x < allNodes.length && allNodes[x] !== node) x++
 
-                        if (x === treeOrder.length) return
+                        if (x === allNodes.length) return
 
                         const subtreeIds = getSubtreeIdsForNode(x)
                         const root = subtreeIds.shift()
@@ -342,7 +462,7 @@ function useItemSelectionExt({
             }
             exts.setGetItemColor(
                 ({ node }) => {
-                    const marked = selection.includes(node.nodeType + ' ' + node.value)
+                    const marked = selection.includes(node.id)
                     if (marked) return "bg-active-bg text-active-text"
 
                     const subMarked = treeSelection && node.markedAncestor
@@ -367,13 +487,33 @@ function useItemSelectionExt({
                 )
             }
             if (showMarkedOutside) {
-                const { markedOutside } = treeView
+                const { markedOutside, markedPrev, markedNext } = view
+                if (markedPrev) {
+                    exts.addGetBgBottomElem(
+                        0,
+                        ({ key }) => <div key={key} className="stack-h px-d2x gap-x-d2x">
+                            <div className="">Prev:</div>
+                            <NumberChip value={markedPrev} icon="add_circle" />
+                        </div>,
+                        50
+                    )
+                }
                 if (markedOutside) {
                     exts.addGetBgBottomElem(
-                        2,
+                        1,
                         ({ key }) => <div key={key} className="stack-h px-d2x gap-x-d2x">
                             <div className="">Hidden:</div>
                             <NumberChip value={markedOutside} icon="add_circle" />
+                        </div>,
+                        50
+                    )
+                }
+                if (markedNext) {
+                    exts.addGetBgBottomElem(
+                        2,
+                        ({ key }) => <div key={key} className="stack-h px-d2x gap-x-d2x">
+                            <div className="">Next:</div>
+                            <NumberChip value={markedNext} icon="add_circle" />
                         </div>,
                         50
                     )
@@ -409,7 +549,7 @@ function useItemSelectionExt({
             }
         },
         tools: {
-            selection: ({ api, key, treeView, exts }) => {
+            selection: ({ api, key, view, exts }) => {
                 const markedCls = new ClassNames("auto text-xs")
                 markedCls.addIf(selection.length, "rounded-full bg-active-bg text-active-text px-d2x", "px-d2x")
                 const buttons = [{icon: 'done_all', onPressed: () => api.selectAll()}]
@@ -421,13 +561,12 @@ function useItemSelectionExt({
                 }
                 buttons.push({
                     icon: 'visibility',
-                    disabled: treeView.markedOutside === 0,
+                    disabled: view.markedOutside === 0,
                     onPressed: () => {
                         const inView = []
-                        for (const node of treeView.nodes) {
-                            const id = node.nodeType + ' ' + node.value
-                            if (!node.inView || !selection.includes(id)) continue
-                            inView.push(id)
+                        for (const node of view.nodes) {
+                            if (!node.visible || !selection.includes(node.id)) continue
+                            inView.push(node.id)
                         }
                         setSelection(inView)
                     }
@@ -441,7 +580,7 @@ function useItemSelectionExt({
                     <div key={key} className="stack-h gap-x-d2x items-center">
                         <div className="stack-h gap-x-d1x text-xs">
                             {name && <div className="opacity-50">{name}</div>}
-                            {name && <NumberChip value={selection.length} maxValue={treeView.nodes.length} xclassName={markedCls.value} color={selection.length} />}
+                            {name && <NumberChip value={selection.length} maxValue={view.nodes.length} color={!!selection.length} />}
                         </div>
                         {exts.getToolbarButtonGroup({ buttons })}
                     </div>
@@ -456,7 +595,9 @@ function useItemFilterExt({
     controls = 0,
     getEmptyMsg = null,
     filterInfoTop = true,
-    filterInfoIcon = true
+    filterInfoIcon = true,
+    isFilterRelevant = () => true,
+    isFilterVisible = () => true
 } = {}) {
     const [filter, setFilter] = useState("")
     const [caseSensitive, setCaseSensitive] = useState(filterOptions.caseSensitive ?? FILTER.DEFAULTS.caseSensitive)
@@ -472,17 +613,84 @@ function useItemFilterExt({
             )
         }
     }
+    let isTreeComponent = false
     return Extension({
         id: 'filter',
+        uses: ['sets'],
         prepareViewParams: viewParams => {
             viewParams.filter = filter
-            const currFilterOptions = viewParams.filterOptions ?? {}
             viewParams.filterOptions = {
-                ...currFilterOptions,
+                ...filterOptions,
                 mode,
                 caseSensitive,
                 or
             }
+            isTreeComponent = viewParams.componentType === EXT_TYPE.TREE
+        },
+        finalizeViewParams: viewParams => {
+            const { caseSensitive, result } = viewParams.filterOptions
+            viewParams.cacheBaseBy.push(caseSensitive)
+            viewParams.temp.searchWords = filter ? getWords(filter, !caseSensitive) : []
+            viewParams.temp.matchLevel = null
+            if (result === FILTER.RESULT.WITH_ANCESTORS) {
+                viewParams.skipNodesAfterBuild = true
+            }
+            viewParams.postSorting = viewParams.filter && isTreeComponent && result === FILTER.RESULT.FLAT_DIRECT
+        },
+        viewPreProps: (node, { entityIndex }) => {
+            node.words = [entityIndex.getEntityFilterString(node.index)]
+        },
+        viewBuildProps: (node, { viewParams, temp, allNodes }) => {
+            const { result } = viewParams.filterOptions
+            node.viewLevel = node.level
+            if (!filter && !viewParams.inSet) return
+
+            if (isTreeComponent) {
+                let { matchLevel } = temp
+                if (matchLevel !== null && node.level <= matchLevel) {
+                    matchLevel = null
+                    temp.matchLevel = null
+                }
+                if (matchLevel !== null) {
+                    switch (result) {
+                        case FILTER.RESULT.FLAT_SUBTREES:
+                            node.viewLevel = 1
+                            break
+
+                        case FILTER.RESULT.SUBTREES:
+                            node.viewLevel -= (matchLevel - 1)
+                            break
+                    }
+                    return
+                }
+            }
+            const isInSet = !viewParams.inSet ? false : viewParams.inSet(node.id)
+            if (isInSet || (isFilterRelevant(node) && isSearchWordsMatch(temp.searchWords, node.words, viewParams.filterOptions) && isFilterVisible(node))) {
+                if (isTreeComponent) {
+                    if (result === FILTER.RESULT.WITH_ANCESTORS) {
+                        let index = temp.baseIndex - 1
+                        const ancestors = [ ...node.ancestors ]
+                        let nextAncestor = ancestors.pop()
+                        while (nextAncestor !== undefined && index >= 0) {
+                            const ancestorNode = allNodes[index]
+                            if (ancestorNode.id === nextAncestor) {
+                                if (ancestorNode.skip === 0) break
+
+                                ancestorNode.skip = 0
+                                nextAncestor = ancestors.pop()
+                            }
+                            index--
+                        }
+                    } else {
+                        node.viewLevel = 1
+                    }
+                    if (result !== FILTER.RESULT.FLAT_DIRECT) {
+                        temp.matchLevel = node.level
+                    }
+                }
+                return
+            }
+            node.skip |= EXT_SKIP.FILTER
         },
         buildApi: ({ container, exts }) => {
             if (!container.viewCount && filter) {
@@ -503,13 +711,13 @@ function useItemFilterExt({
             }
         },
         tools: {
-            filter: ({ key, treeIndex }) => {
+            filter: ({ key }) => {
                 return <Filterbox
                     key={key}
+                    className="text-xs"
                     filter={filter}
                     setFilter={setFilter}
                     icon={filterInfoIcon}
-                    toggleSortDir={() => treeIndex.toggleSortDir()}
                     caseSensitive={caseSensitive}
                     setCaseSensitive={controls & FILTER.CONTROL.CASE_SENSITIVE ? setCaseSensitive : undefined}
                     or={or}
@@ -522,9 +730,10 @@ function useItemFilterExt({
     })
 }
 
+// TODO list-handling
 function useItemSetsExt({
         name = 'Sets:', autoSets = [], persistId, userSets = false,
-        getEmptyMsg = null, preventNoSetActive = false, ...props }) {
+        getEmptyMsg = null, preventNoSetActive = false, ...props } = {}) {
     const aContext = useContext(AppContext)
 
     const AddToSetModal = useModalWindow()
@@ -586,8 +795,8 @@ function useItemSetsExt({
         return highest
     }, [actives, userSetsData])
 
+    const checks = []
     const getInSet = (params) => {
-        const checks = []
         for (const { id, getHasId } of items) {
             if (!actives.includes(id) || !getHasId) continue
 
@@ -605,25 +814,40 @@ function useItemSetsExt({
             )
         }
     }
+
+    let inSet = null
     return Extension({
         id: 'sets',
-        uses: ['filter', 'selection'],
-        prepareViewParams: viewParams => {
-            const inSet = getInSet({
+        uses: ['selection'],
+        finalizeViewParams(viewParams) {
+            if (!actives.length) return
+
+            inSet = getInSet({
                 selection: viewParams.selection ?? []
             })
-            const optionOverwrites = {}
-            if (inSet && result) optionOverwrites.result = result
-            const { filterOptions = {} } = viewParams
-            viewParams.inSet = inSet
-            if (inSet) {
-                viewParams.filterOptions = {
-                    ...filterOptions,
-                    ...optionOverwrites
-                }
-            }
+            viewParams.filterOptions.result = result
+            viewParams.temp.matchLevelSet = null
         },
-        buildApi: ({ api, treeIndex, container, exts, viewParams }) => {
+        viewBuildProps: (node, { temp }) => {
+            if (!actives.length) return
+
+            let { matchLevelSet } = temp
+            if (matchLevelSet !== null && node.level <= matchLevelSet) {
+                matchLevelSet = null
+                temp.matchLevelSet = null
+            }
+            if (matchLevelSet !== null) {
+                return
+            }
+            if (inSet(node.id)) {
+                if (result !== FILTER.RESULT.FLAT_DIRECT) {
+                    temp.matchLevelSet = node.level
+                }
+                return
+            }
+            node.skip |= EXT_SKIP.FILTER
+        },
+        buildApi: ({ api, entityIndex, container, exts, viewParams }) => {
             const toggle = (id) => {
                 if (actives.includes(id)) {
                     if (actives.length !== 1 || !preventNoSetActive) {
@@ -637,7 +861,7 @@ function useItemSetsExt({
 
             const { filterOptions = {}, match, skip, isFilterVisible } = viewParams
             paramsRef.current = {
-                treeIndex,
+                entityIndex,
                 filterOptions,
                 match,
                 skip,
@@ -654,7 +878,7 @@ function useItemSetsExt({
                 result,
                 userSetsAllowed: userSets,
                 createUserSet: (props) => {
-                    const id = 'testing'
+                    const id = getNewModelId()
                     const newData = cloneDeep(userSetsData)
                     newData[id] = { ...props }
                     setUserSetsData(newData)
@@ -663,7 +887,7 @@ function useItemSetsExt({
                     const setsIndex = new SetsIndex(userSetsData)
                     ManageSetsModal.open({
                         setsIndex,
-                        treeIndex,
+                        entityIndex,
                         paramsRef,
                         save: (newUserSetsData) => {
                             setUserSetsData(newUserSetsData)
@@ -733,24 +957,70 @@ function useItemSetsExt({
     })
 }
 
-function useItemSortingExt({ name = "Sort:" }) {
+// TODO: custom sorting order
+function useItemSortingExt({ name = "Sort:", options } = {}) {
     const [ sorting, setSorting ] = useState(0)
-    const [ dir, setDir ] = useState(1)
+    const [ asc, setAsc ] = useState(true)
+
+    let cachedOptions = null
+    const buildOptions = (entityIndex) => {
+        const entityOptions = entityIndex.getSortOptions()
+        const sortOptions = []
+        if (!options) {
+            return entityOptions.map((obj, index) => ({ ...obj, id: index }))
+        }
+
+        for (const [ index, option ] of options.entries()) {
+            const { id, name } = option
+            const item = entityOptions.find(option => option.id === id)
+            if (!item) throw Error(`Sorting with id "${id}" not found in entityIndex`)
+
+            sortOptions.push({ id: index, name: name ?? item.name, getSort: item.getSort })
+        }
+        return sortOptions
+    }
+
+    const getOptions = (entityIndex) => {
+        if (cachedOptions) return cachedOptions
+
+        cachedOptions = buildOptions(entityIndex)
+        return cachedOptions
+    }
 
     return Extension({
         id: 'sorting',
-        buildApi: () => {
+        prepareViewParams(viewParams) {
+            viewParams.sorting = sorting
+            viewParams.asc = asc
+        },
+        finalizeViewParams(viewParams) {
+            viewParams.cacheBaseBy.push(
+                viewParams.sorting,
+                viewParams.asc
+            )
+        },
+        getBaseSort: ({ entityIndex, viewParams }, postSort) => {
+            const showOptions = getOptions(entityIndex)
+            return showOptions[sorting].getSort(viewParams.asc, postSort)
+        },
+        buildApi: ({ entityIndex }) => {
+            const options = getOptions(entityIndex)
             return {
-                options: [
-                    {id: 0, name: 'Alpha'},
-                    {id: 1, name: 'Custom'},
-                ]
+                options,
+                sorting,
+                setSorting,
+                asc,
+                toggleDir: () => setAsc(!asc)
             }
         },
         tools: {
-            sorting: ({ key, exts }) => <div key={key} className="stack-h gap-d2x">
+            sorting: ({ key, api }) => <div key={key} className="stack-h gap-d2x items-center text-xs">
                 {name && <div className="opacity-50">{name}</div>}
-                <Select options={exts.api.sorting.options} value={sorting} set={setSorting} />
+                {
+                    api.options.length > 1 &&
+                    <Select options={api.options} value={sorting} set={setSorting} />
+                }
+                <Button icon="sort" flipY={asc} onPressed={api.toggleDir} />
             </div>
         }
     })
@@ -837,8 +1107,8 @@ function useUndoRedoExt({ historySize = 10, name } = {}) {
 }
 
 const defaultIconRender = ({ node, exts }) => {
-    const { nodeType, closed } = node
-    if (nodeType === 'leaf') {
+    const { isContainer, closed } = node
+    if (!isContainer) {
         return ''
     }
     const hasToggler = exts.has('toggler')
@@ -851,11 +1121,11 @@ const defaultIconRender = ({ node, exts }) => {
             className="pr-d2x"
             onClick={onClick}><Icon
             name={
-                nodeType === "leaf"
+                !isContainer
                     ? "arrow_right"
                     : "folder" + (closed && hasToggler ? "" : "_open")
             }
-            className={nodeType === "leaf" ? "opacity-50" : ""}
+            className={isContainer ? "opacity-50" : ""}
         /></div>
     )
 }
@@ -865,10 +1135,11 @@ function LevelSpacer({ level }) {
     return <Div width={px + "px"} />
 }
 
-function useTreeRendererExt({ icons = true, indentation = true, iconRender = defaultIconRender, pathNames = true } = {}) {
+function useTreeRendererExt({ icons = true, indentation = true, iconRender = defaultIconRender, ancestorNames = true } = {}) {
 
     return Extension({
         id: 'tree',
+        types: [EXT_TYPE.TREE],
         buildApi: ({ exts }) => {
             if (indentation) {
                 exts.addRenderStage(
@@ -896,15 +1167,15 @@ function useTreeRendererExt({ icons = true, indentation = true, iconRender = def
                     25
                 )
             }
-            if (pathNames) {
+            if (ancestorNames) {
                 exts.addRenderStage(
                     ({ elem, node, key }) => {
-                        const { viewLevel, level, pathNames } = node
-                        if (!pathNames || !(viewLevel === 1 && level > 1)) return elem
+                        const { viewLevel, level, ancestorNames } = node
+                        if (!ancestorNames || !(viewLevel === 1 && level > 1)) return elem
 
                         return (
                             <div key={key} className="stack-v auto">
-                                <div className="opacity-50 text-xs">{pathNames.join(" > ")}</div>
+                                <div className="opacity-50 text-xs">{ancestorNames.join(" > ")}</div>
                                 {elem}
                             </div>
                         )
@@ -938,11 +1209,61 @@ function HotkeyOverview({ hotkeys }) {
 function useHotkeysExt({ help = true, hotkeys = {} } = {}) {
     const aContext = useContext(AppContext)
     const HelpModal = useModalWindow()
+    const extsRef = useRef(null)
+    const hotkeyActionsRef = useRef({
+        itemActions: {},
+        toolbarActions: {}
+    })
+    const hotkeyListener = (e) => {
+        if (e.repeat) return
 
+        const actionKey = aContext.getHotkeyFromEvent(e)
+        if (!actionKey) return
+
+        const hotkey = aContext.hotKeyActions.hotKey2action[actionKey]
+        if (!hotkey) return
+
+        const { container, view, exts } = extsRef.current.plugProps
+
+        const isFocusWithinContainer = (window.document.activeElement && container.ref.current.contains(window.document.activeElement))
+
+        const isToolbarAction = !isFocusWithinContainer || (container.selection && container.selection.length)
+
+        let action
+        let params = []
+        let callback
+        if (isToolbarAction) {
+            action = extsRef.current.hotkeyToolbarActions[hotkey]
+        } else {
+            const index = exts.has('itemActions') ? container.row : container.tabIndex
+            params.push(view.nodes[index])
+            action = extsRef.current.hotkeyItemActions[hotkey]
+            callback = () => exts.api.focus.focusItemByViewIndex(index)
+        }
+        if (!action) return
+
+        const { can, exec, confirm } = action
+
+        if (can && !can(...params)) return
+
+        const doExec = () => {
+            exec(...params)
+            if (callback) requestAnimationFrame(callback)
+        }
+        if (confirm) {
+            exts.doConfirmed(isFunction(confirm) ? confirm(...params) : confirm, () => doExec())
+        } else {
+            doExec()
+        }
+    }
     return Extension({
         id: 'hotkeys',
+        events: {
+            keydown: hotkeyListener
+        },
         buildApi: ({ api, exts, container }) => {
-
+            extsRef.current = exts
+            exts.hotkeyActions = hotkeyActionsRef.current
             const overwrites = {}
             if (help) {
                 overwrites.help = {
@@ -1016,7 +1337,7 @@ function useItemExportExt({ name } = {}) {
     }
     return Extension({
         id: 'export',
-        buildApi: ({ treeView, container }) => {
+        buildApi: ({ view, container }) => {
             return {
                 doExport: async () => {
                     try {
@@ -1027,7 +1348,7 @@ function useItemExportExt({ name } = {}) {
                             (node) => !container.selection.includes(node.nodeType + ' ' + node.value) :
                             (node) => node.visible === false
 
-                        for (const node of treeView.nodes) {
+                        for (const node of view.nodes) {
                             if (skip(node)) continue
 
                             lines.push(node.name)
@@ -1077,13 +1398,14 @@ function useItemExportExt({ name } = {}) {
     })
 }
 
+// TODO list-handling
 function useModelSnapshotExt({ getSnapshot, always = false } = {}) {
     if (!getSnapshot) {
         getSnapshot = ({ treeIndex }) => {
-            return d({
+            return {
                 leaf: cloneDeep(treeIndex.leafIndex.model),
                 folder: cloneDeep(treeIndex.folderIndex.model)
-            })
+            }
         }
     }
 
@@ -1149,10 +1471,241 @@ function useUiBlockingExt({ msg = 'Executing...' } = {}) {
     })
 }
 
-function useItemManagerExt() {
+function usePaginationExt({ name = 'Page:', itemsPerPage = 100 } = {}) {
+    const [ page, setPage ] = useState(1)
+    const callAfterwards = useCallAfterwards()
+
+    const startIndex = (page - 1) * itemsPerPage
+    const endIndex = startIndex + itemsPerPage - 1
+    return Extension({
+        id: 'pagination',
+        types: [EXT_TYPE.LIST, EXT_TYPE.TABLE],
+        prepareViewParams(viewParams) {
+            viewParams.startIndex = startIndex
+            viewParams.endIndex = endIndex
+        },
+        viewPostProps: (index, node) => {
+            if (node.skip || isInRange(index, startIndex, endIndex)) return
+
+            node.skip = EXT_SKIP.PAGE
+        },
+        buildApi: ({ view, viewParams, container }) => {
+            const maxPage = Math.ceil(view.viewCount / itemsPerPage)
+
+            container.pageIndexStart = viewParams.startIndex
+            container.pageIndexEnd = viewParams.endIndex
+            container.viewToFocusIndex = (viewIndex) => {
+                const newPage = Math.floor(viewIndex / itemsPerPage) + 1
+                if (newPage !== page) {
+                    setPage(newPage)
+                }
+                return viewIndex - ((newPage - 1) * itemsPerPage)
+            }
+            const disabled = view.viewCount === 0
+            if (page > maxPage) callAfterwards(setPage, disabled ? 1 : maxPage)
+            return {
+                disabled,
+                page,
+                setPage,
+                firstPage: () => {
+                    setPage(1)
+                },
+                lastPage: () => {
+                    setPage(maxPage)
+                },
+                nextPage: () => {
+                    setPage(page === maxPage ? 1 : page + 1)
+                },
+                prevPage: () => {
+                    setPage(page === 1 ? maxPage : page - 1)
+                },
+                maxPage
+            }
+        },
+        tools: {
+            pagination: ({ key, api }) => {
+                const { disabled } = api
+                const prevButtons = [
+                    {icon: 'first_page', onPressed: () => api.firstPage(), disabled},
+                    {icon: 'keyboard_arrow_left', onPressed: () => api.prevPage(), disabled}
+                ]
+                const nextButtons = [
+                    {icon: 'keyboard_arrow_right', onPressed: () => api.nextPage(), disabled},
+                    {icon: 'last_page', onPressed: () => api.lastPage(), disabled}
+                ]
+                return <div key={key} className="stack-h gap-2 text-xs items-center">
+                    <div className="opacity-50">{name}</div>
+                    <div className="stack-h gap-2 items-center">
+                        <ButtonGroup buttons={prevButtons} />
+                        <div><Number className="text-xs" value={api.disabled ? 1 : page} min={1} max={api.disabled ? 1 : api.maxPage} set={setPage} /></div>
+                        <div>/ {api.disabled ? 1 : api.maxPage}</div>
+                        <ButtonGroup buttons={nextButtons} />
+                    </div>
+                </div>
+            }
+        }
+    })
 }
 
-function usePaginationExt() {
+function useInfiniteScrollingExt({ startItems = 25, addItems = 10, fixHeight = false, loadItemsWhileDragging = true, name = 'Loading...', switchDirection = true } = {}) {
+    const [ loaded, setLoaded ] = useState(startItems)
+    const [ upwards, setUpwards ] = useState(false)
+    const sentinelRef = useRef(null)
+    const containerRef = useRef(null)
+    const countRef = useRef(null)
+    const mouseDownRef = useRef(false)
+    const postponedRef = useRef(null)
+
+    const getScrollElem = () => {
+        let elem = sentinelRef.current
+        while (elem && !elem.classList.contains('overflow-y-auto')) {
+            elem = elem.parentNode
+        }
+        return elem
+    }
+
+
+    useEffect(() => {
+        if (loadItemsWhileDragging) return
+
+        const downListener = e => {
+            mouseDownRef.current = true
+        }
+        const upListener = e => {
+            mouseDownRef.current = false
+            if (postponedRef.current) {
+                postponedRef.current()
+                postponedRef.current = null
+            }
+        }
+        document.addEventListener('mousedown', downListener)
+        document.addEventListener('mouseup', upListener)
+        return () => {
+            document.removeEventListener('mousedown', downListener)
+            document.removeEventListener('mouseup', upListener)
+        }
+    }, [])
+
+    useEffect(() => {
+        const elem = getScrollElem()
+        if (!elem) return
+
+        const viewportHeight = elem.clientHeight
+        const loadMore = () => {
+            setLoaded(loaded + addItems)
+            if (upwards) {
+                const oldTabIndex = containerRef.current.tabIndex
+                // TODO only if itemFocus extension?
+                containerRef.current.setTabIndex(Math.max(0, oldTabIndex + addItems))
+                if (containerRef.current.keyNavRef.current) return
+
+                const distanceFromBottom =
+                    elem.scrollHeight - elem.scrollTop - elem.clientHeight
+
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        elem.scrollTop =
+                            elem.scrollHeight - elem.clientHeight - distanceFromBottom
+                    })
+                })
+            }
+        }
+
+        const observer = new IntersectionObserver(
+            entries => {
+                if (!entries.length || !entries[0].isIntersecting) return
+
+                if (!mouseDownRef.current || loadItemsWhileDragging) {
+                    loadMore()
+                } else {
+                    postponedRef.current = loadMore
+                }
+            },
+            {
+                root: elem,
+                rootMargin: `${viewportHeight * 2}px`
+            }
+        )
+        observer.observe(sentinelRef.current)
+        return () => observer.disconnect()
+    }, [ loaded, upwards, countRef.current ])
+
+    return Extension({
+        id: 'infinite',
+        prepareViewParams(viewParams) {
+            if (!upwards) return
+
+            viewParams.requireTotalInPostProps = true
+        },
+        viewPostProps: (index, node, max) => {
+            if (node.skip || isInRange(index, upwards ? Math.max(0, max - 1 - loaded) : 0, upwards ? max - 1 : loaded - 1)) return
+
+            node.skip = EXT_SKIP.PAGE
+        },
+        buildApi: ({ exts, view, container }) => {
+            if (exts.has('pagination')) throw Error('Infinite scrolling extension cannot be used with the pagination extension!')
+
+            const toggleDirection = (value) => {
+                if (!switchDirection || value === upwards) return false
+
+                const newUpwards = !upwards
+                setUpwards(newUpwards)
+                setLoaded(startItems)
+
+                const elem = getScrollElem()
+                if (!elem) return true
+
+                if (newUpwards) {
+                    elem.scrollTop = elem.scrollHeight
+                } else {
+                    elem.scrollTop = 0
+                }
+                return true
+            }
+
+            containerRef.current = container
+            if (countRef.current === null) {
+                countRef.current = view.viewVisibleCount
+            } else if (loaded !== startItems && countRef.current !== view.viewVisibleCount) {
+                if (!toggleDirection(false)) {
+                    setLoaded(startItems)
+                }
+            }
+            countRef.current = view.viewVisibleCount
+            if (loaded < view.viewVisibleCount) {
+                if (upwards) {
+                    exts.addGetBgTopElem(
+                        1,
+                        ({ }) => <Div ref={sentinelRef} key="topSentinel" className="stack-h px-d2x gap-x-d2x">
+                            <div className="">{name}</div>
+                        </Div>,
+                        50
+                    )
+
+                } else {
+                    exts.addGetBgBottomElem(
+                        1,
+                        ({ }) => <Div ref={sentinelRef} key="bottomSentinel" className="stack-h px-d2x gap-x-d2x">
+                            <div className="">{name}</div>
+                        </Div>,
+                        50
+                    )
+                }
+            }
+            return {
+                toggleDirection
+            }
+        },
+    })
+}
+
+function useVirtualizationExt({ }) {
+    return Extension({
+        id: 'virtualization',
+    })
+}
+
+function useItemManagerExt() {
 }
 
 function useItemDragExt() {
@@ -1161,157 +1714,11 @@ function useItemDragExt() {
 function useReorderExt() {
 }
 
-function useUnrenderedTreeComponent({ treeIndex, match, skip, extensions = [], header = '', footer = '' }) {
-
-    const aContext = useContext(AppContext)
-    const ConfirmModal = useConfirmation()
-
-    const ErrorWindow = useErrorWindow()
-    const areaRef = useRef(null)
-    useUpdateOnEntityIndexChanges(treeIndex)
-    const hotkeyActionsRef = useRef({
-        itemActions: {},
-        toolbarActions: {}
-    })
-
-    const exts = new ExtensionPack(...extensions)
-    exts.hotkeyActions = hotkeyActionsRef.current
-    const extIds = useMemo(() => {
-        return exts.getSortedIds()
-    }, [])
-
-    let viewParams = {
-        alwaysExpanded: true,
-        match,
-        skip
-    }
-    exts.prepareViewParams(extIds, viewParams)
-    const treeView = treeIndex.getNodes(viewParams)
-    const { treeOrder, nodes } = treeView
-    const extsRef = useRef(null)
-
-    const container = useItemContainer({
-        view: true,
-        treeOrder,
-        items: nodes,
-        item2value: x => `${x.nodeType} ${x.value}`,
-        value2item: (x) => {
-            const [ type, value ] = x.split(" ", 2)
-            const indexName = type === "folder" ? "folderIndex" : "leafIndex"
-
-            return treeIndex[indexName].getEntityByPropValue('value', value)
-        }
-    })
-    extsRef.current = exts
-    const plugProps = {
-        treeIndex,
-        treeView,
-        viewParams,
-        exts,
-        container
-    }
-
-    if (exts.has('hotkeys')) {
-        // TODO move this to the hotkeys extension
-        const hotkeyListener = (e) => {
-            if (e.repeat) return
-
-            const actionKey = aContext.getHotkeyFromEvent(e)
-            if (!actionKey) return
-
-            const hotkey = aContext.hotKeyActions.hotKey2action[actionKey]
-            if (!hotkey) return
-
-            const { container, treeView, exts } = extsRef.current.plugProps
-
-            const isFocusWithinContainer = (window.document.activeElement && container.ref.current.contains(window.document.activeElement))
-
-            const isToolbarAction = !isFocusWithinContainer || (container.selection && container.selection.length)
-
-            let action
-            let params = []
-            let callback
-            if (isToolbarAction) {
-                action = extsRef.current.hotkeyToolbarActions[hotkey]
-            } else {
-                const index = exts.has('itemActions') ? container.row : container.tabIndex
-                params.push(treeView.nodes[index])
-                action = extsRef.current.hotkeyItemActions[hotkey]
-                callback = () => exts.api.focus.focusItemByViewIndex(index)
-            }
-            if (!action) return
-            const { can, exec, confirm } = action
-
-            if (can && !can(...params)) return
-
-            const doExec = () => {
-                exec(...params)
-                if (callback) requestAnimationFrame(callback)
-            }
-            if (confirm) {
-                exts.doConfirmed(isFunction(confirm) ? confirm(...params) : confirm, () => doExec())
-            } else {
-                doExec()
-            }
-        }
-        useEffect(
-            () => {
-                areaRef.current.addEventListener('keydown', hotkeyListener)
-            },
-            []
-        )
-    }
-
-    exts.plugProps = plugProps
-    exts.addModal(ConfirmModal.Modals)
-    exts.addModal(ErrorWindow.Modal)
-    exts.doConfirmed = (msg, confirmed) => ConfirmModal.open({ msg, confirmed })
-    exts.init(extIds)
-
-    exts.errorHandler = async () => {
-        ErrorWindow.open({message: `The execution failed!`})
-    }
-
-    const clickAction = exts.itemAction
-    if (clickAction) {
-        container.addItemBuilder((index, item) => {
-            item.attr.addListener("onClick", () => {
-                const node = container.items[index]
-                const id = node.nodeType + ' ' + node.value
-                clickAction({ id, index, node, ...plugProps })
-            })
-            item.attr.addListener('onKeyDown', e => {
-                if (e.key === " ") {
-                    const node = container.items[index]
-                    const id = node.nodeType + ' ' + node.value
-                    clickAction({ id, index, node, ...plugProps })
-                    e.preventDefault()
-                }
-            })
-        })
-    }
-
-    return {
-        ...plugProps,
-        header,
-        footer,
-        areaRef
-    }
-}
-
-function useTreeComponent({ treeIndex, match, skip, extensions, header, footer, ...props }) {
-    const tree = useUnrenderedTreeComponent({ treeIndex, match, skip, extensions, header, footer })
-    return <TreeComponentRenderer tree={tree} { ...props } />
-}
-
 export {
-    useUnrenderedTreeComponent,
-    useTreeComponent,
-
     useTreeRendererExt,
     useCompactModeExt,
-    useItemFocusExt,
     useButtonsExt,
+    useItemFocusExt,
     useItemActionExt,
     useItemButtonsExt,
     useTreeTogglerExt,
@@ -1322,12 +1729,13 @@ export {
     useItemCountExt,
     useItemExportExt,
     useUndoRedoExt,
-    usePaginationExt,
     useItemDragExt,
     useReorderExt,
     useItemManagerExt,
     useCustomizationExt,
     useHotkeysExt,
     useModelSnapshotExt,
-    useUiBlockingExt
+    useUiBlockingExt,
+    usePaginationExt,
+    useInfiniteScrollingExt
 }

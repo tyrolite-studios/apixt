@@ -1,5 +1,3 @@
-import { d } from "core/helper"
-
 const implement = (name) => {
     throw Error(`Plugin must implement getter ${name}`)
 }

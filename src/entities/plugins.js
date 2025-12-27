@@ -2,7 +2,6 @@ import { PluginRegistry } from "core/plugin"
 import { Checkbox } from "components/form"
 import { EntityStack } from "components/common"
 import { Stack } from "components/layout"
-import { d } from "core/helper"
 import { SimpleMappingIndex } from "core/entity"
 
 // TODO why not normal mappingIndex?

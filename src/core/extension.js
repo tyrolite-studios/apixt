@@ -1,16 +1,42 @@
 import { Fragment } from "react"
-import { d } from "core/helper"
 import { ButtonGroup, getActionResolvedButtons } from "../components/form.js"
 
+const EXT_TYPE = {
+    LIST: 1,
+    TREE: 2,
+    TABLE: 3
+}
+
+const EXT_NAME = {
+    [EXT_TYPE.LIST]: "list",
+    [EXT_TYPE.TREE]: "tree",
+    [EXT_TYPE.TABLE]: "table"
+}
+
+const EXT_SKIP = {
+    IGNORE: 1,
+    FILTER: 2,
+    HIDDEN: 4,
+    PAGE: 8
+}
+
 const Extension = ({
-    id, tools = {}, prepareViewParams, buildApi, uses = [], modals = []
+    id, tools = {}, types, events, getBaseSort, prepareViewParams, finalizeView, finalizeViewParams, viewPreProps, viewBuildProps, viewPostProps, buildApi, uses = [], modals = []
 }) => {
     if (!id) throw Error(`Extension must have an id`)
 
     return {
         id,
+        types,
+        events,
         tools,
         prepareViewParams,
+        finalizeViewParams,
+        finalizeView,
+        getBaseSort,
+        viewPreProps,
+        viewBuildProps,
+        viewPostProps,
         buildApi,
         modals,
         uses
@@ -59,321 +85,368 @@ function insertSortedByPrio(arr, element) {
     arr.splice(left, 0, element)
 }
 
-class ExtensionPack {
-    constructor (...exts) {
-        const apis = {}
-        const tools = {}
-        const modals = []
-        const inits = {}
-        const prepViewParams = {}
-        const deps = new Map()
-        const toolToApi = {}
-        const ids = []
+const ExtensionPack = (type, ...exts) => {
+    const apis = {}
+    const tools = {}
+    const modals = []
+    const inits = {}
+    const prepViewParams = {}
+    const finViewParams = {}
+    const finView = {}
+    const depsMap = new Map()
+    const toolToApi = {}
+    const extIds = []
+    const events = []
+    const viewPostProps = []
+    const viewPreProps = []
+    const viewBuildProps = []
+    let ref = {
+        plugProps: {},
+        hotkeyActions: undefined,
+        itemAction: undefined,
+        emptyMsg: undefined,
+        getItemColor: undefined,
+        errorHandler: undefined,
+        baseSort: undefined,
+        doConfirmed: () => {}
+    }
+    const buttonsAndDivGroupProps = {}
+    const bgBottomElems = [[], [], []]
+    const bgTopElems = [[], [], []]
+    const renderStages = []
 
-        for (const ext of exts) {
-            const api = {}
-            apis[ext.id] = api
-            ids.push(ext.id)
-            modals.push(...ext.modals)
-            for (const [id, getter] of Object.entries(ext.tools)) {
-                tools[id] = getter
-                toolToApi[id] = api
+    for (const ext of exts) {
+        const api = {}
+        if (ext.types && !ext.types.includes(type))
+            throw Error(`Extension ${ext.id} cannot be used with component of type ${EXT_NAME[type]}`)
+
+        apis[ext.id] = api
+        extIds.push(ext.id)
+        modals.push(...ext.modals)
+        if (ext.events) {
+            for (const [event, handler] of Object.entries(ext.events)) {
+                events.push([event, handler])
             }
-            inits[ext.id] = ext.buildApi ?? noop
-            deps.set(ext.id, ext.uses)
-            prepViewParams[ext.id] = ext.prepareViewParams ?? noop
         }
-        this._ids = ids
-        this._apis = apis
-        this._tools = tools
-        this._modals = modals
-        this._inits = inits
-        this._deps = deps
-        this._plugProps = {}
-        this._toolToApi = toolToApi
-
-        // this._viewParams = viewParams
-        this._prepViewParams = prepViewParams
-        this._getEmptyMsg = undefined
-        this._itemAction = undefined
-        this._hotkeyActions = undefined
-        this._getItemColor = undefined
-        this._buttonsAndDivGroupProps = {}
-        this._bgBottomElems = [[], [], []]
-        this._bgTopElems = [[], [], []]
-        this._renderStages = []
-        this._doConfirmed = () => {}
+        for (const [id, getter] of Object.entries(ext.tools)) {
+            tools[id] = getter
+            toolToApi[id] = api
+        }
+        inits[ext.id] = ext.buildApi ?? noop
+        depsMap.set(ext.id, ext.uses)
+        prepViewParams[ext.id] = ext.prepareViewParams ?? noop
+        finViewParams[ext.id] = ext.finalizeViewParams ?? noop
+        finView[ext.id] = ext.finalizeView ?? noop
+        if (ext.viewPreProps) {
+            viewPreProps.push(ext.viewPreProps)
+        }
+        if (ext.viewBuildProps) {
+            viewBuildProps.push(ext.viewBuildProps)
+        }
+        if (ext.viewPostProps) {
+            viewPostProps.push(ext.viewPostProps)
+        }
+        if (ext.getBaseSort) ref.getBaseSort = ext.getBaseSort
     }
 
-    addButtonsAndDivGroupProps(props) {
-        Object.assign(this._buttonsAndDivGroupProps, props)
-    }
+    const has = id => extIds.includes(id)
 
-    get buttonsAndDivGroupProps () {
-        return this._buttonsAndDivGroupProps
-    }
+    const api = {
+        buttonsAndDivGroupProps,
+        addButtonsAndDivGroupProps(props) {
+            Object.assign(buttonsAndDivGroupProps, props)
+        },
+        api: apis,
+        events,
+        get plugProps() {
+            return ref.plugProps
+        },
+        set plugProps(value) {
+            ref.plugProps = value
+        },
+        get hotkeyActions() {
+            return ref.hotkeyActions
+        },
+        set hotkeyActions(value) {
+            ref.hotkeyActions = value
+        },
+        viewPreProps,
+        viewBuildProps,
+        viewPostProps,
+        getSortedIds() {
+            const ids = Object.keys(inits)
+            const visited = new Set()
+            const temp = new Set()
+            const result = []
 
-    getSortedIds() {
-        const ids = Object.keys(this._apis)
+            const visit = (id) => {
+                if (visited.has(id)) return
+                if (temp.has(id)) throw Error(`Circular dependency detected on extension "${id}"`)
 
-        const visited = new Set()
-        const temp = new Set()
-        const result = []
+                temp.add(id)
+                const deps = depsMap[id] || []
+                for (const dep of deps) {
+                    if (!ids.includes(dep)) continue
 
-        const visit = (id) => {
-            if (visited.has(id)) return
-            if (temp.has(id)) throw Error(`Circular dependency detected on extension "${id}"`)
-
-            temp.add(id)
-            const deps = this._deps[id] || []
-            for (const dep of deps) {
-                if (!ids.includes(dep)) continue
-
-                visit(dep)
+                    visit(dep)
+                }
+                temp.delete(id)
+                visited.add(id)
+                result.push(id)
             }
-            temp.delete(id)
-            visited.add(id)
-            result.unshift(id)
-        }
-        for (const id of ids) {
-            if (!visited.has(id)) visit(id)
-        }
-        return result
-    }
-
-    has(id) {
-        return this._ids.includes(id)
-    }
-
-    get api() {
-        return this._apis
-    }
-
-    setGetEmptyMsg(value, prio) {
-        if (!this._emptyMsg || prio > this._emptyMsg[1]) {
-            this._emptyMsg = [value, prio]
-        }
-    }
-
-    get getEmptyMsg() {
-        return this._emptyMsg ? this._emptyMsg[0] : undefined
-    }
-
-    init(ids) {
-        for (const id of ids) {
-            const init = this._inits[id]
-            const api = this._apis[id]
-            Object.assign(api, init({ api, ...this._plugProps }))
-        }
-    }
-
-    prepareViewParams(ids, viewParams) {
-        for (const id of ids) {
-            this._prepViewParams[id](viewParams)
-        }
-    }
-
-    get modals() {
-        if (!this._modals.length) return
-
-        if (this._modals.length === 1) return this._modals[0]
-
-        return (
-            <>
-                {this._modals.map(((x, i) => <Fragment key={i}>{x}</Fragment>))}
-            </>
-        )
-    }
-
-    get hotkeyActions() {
-        return this._hotkeyActions
-    }
-
-    set hotkeyActions(value) {
-        this._hotkeyActions = value
-    }
-
-    get hotkeyItemActions() {
-        return this._hotkeyActions.itemActions
-    }
-
-    get hotkeyToolbarActions() {
-        return this._hotkeyActions.toolbarActions
-    }
-
-    setHotkeyItemAction(hotkey, action) {
-        this.hotkeyItemActions[hotkey] = action
-    }
-
-    setHotkeyItemActions(hotkey2action) {
-        for (const [hotkey, action] of Object.entries(hotkey2action)) {
-            this.hotkeyItemActions[hotkey] = action
-        }
-    }
-
-    setHotkeyToolbarAction(hotkey, action) {
-        this.hotkeyToolbarActions[hotkey] = action
-    }
-
-    setHotkeyToolbarActions(hotkey2action) {
-        for (const [hotkey, action] of Object.entries(hotkey2action)) {
-            this.hotkeyToolbarActions[hotkey] = action
-        }
-    }
-
-    getToolbarButtonGroup({ key, buttons = [], ...props }) {
-        const resolvedButtons = getActionResolvedButtons(
-            buttons,
-            {
-                hotkeySetter: (...params) => this.setHotkeyToolbarAction(...params),
-                doConfirmed: this.doConfirmed
+            for (const id of ids) {
+                if (!visited.has(id)) visit(id)
             }
-        )
-        return <ButtonGroup key={key} {...props} buttons={resolvedButtons} />
-    }
+            return result
+        },
+        has,
+        setGetEmptyMsg(value, prio) {
+            if (!ref.emptyMsg || prio > ref.emptyMsg[1]) {
+                ref.emptyMsg = [value, prio]
+            }
+        },
+        get getEmptyMsg() {
+            return ref.emptyMsg ? ref.emptyMsg[0] : undefined
+        },
 
-    set doConfirmed (value) {
-        this._doConfirmed = value
-    }
+        init(ids) {
+            for (const id of ids) {
+                const init = inits[id]
+                const api = apis[id]
+                Object.assign(api, init({ api, ...ref.plugProps }))
+            }
+        },
 
-    get doConfirmed() {
-        return this._doConfirmed
-    }
+        prepareViewParams(ids, viewParams) {
+            for (const id of ids) {
+                prepViewParams[id](viewParams)
+            }
+        },
+        finalizeViewParams(ids, viewParams) {
+            for (const id of ids) {
+                finViewParams[id](viewParams)
+            }
+        },
 
-    setItemAction(action, prio) {
-        if (this._itemAction && this._itemAction[1] > prio) return
+        finalizeView(ids, view, deps) {
+            for (const id of ids) {
+                finView[id](view, deps)
+            }
+        },
 
-        this._itemAction = [action, prio]
-    }
+        get modals() {
+            if (!modals.length) return
 
-    get itemAction() {
-        return this._itemAction ? this._itemAction[0] : undefined
-    }
+            if (modals.length === 1) return modals[0]
 
-    setGetItemColor(colorCallback, prio) {
-        if (this._getItemColor && this._getItemColor[1] > prio) return
+            return (
+                <>
+                    {modals.map(((x, i) => <Fragment key={i}>{x}</Fragment>))}
+                </>
+            )
+        },
 
-        this._getItemColor = [colorCallback, prio]
-    }
+        addModal(modal) {
+            modals.push(modal)
+        },
 
-    get getItemColor() {
-        return this._getItemColor ? this._getItemColor[0] : undefined
-    }
+        get hotkeyItemActions() {
+            return ref.hotkeyActions && ref.hotkeyActions.itemActions
+        },
 
-    set plugProps(plugProps) {
-        this._plugProps = plugProps
-    }
+        get hotkeyToolbarActions() {
+            return ref.hotkeyActions && ref.hotkeyActions.toolbarActions
+        },
 
-    get plugProps() {
-        return this._plugProps
-    }
+        setHotkeyItemAction(hotkey, action) {
+            api.hotkeyItemActions[hotkey] = action
+        },
 
-    getToolElem(id, props = {}) {
-        const getElem = this._tools[id]
-        if (!getElem) return
+        setHotkeyItemActions(hotkey2action) {
+            for (const [hotkey, action] of Object.entries(hotkey2action)) {
+                api.hotkeyItemActions[hotkey] = action
+            }
+        },
 
-        const api = this._toolToApi[id]
-        return getElem({ ...this._plugProps, ...props, api })
-    }
+        setHotkeyToolbarAction(hotkey, action) {
+            api.hotkeyToolbarActions[hotkey] = action
+        },
 
-    addRenderStage(getElem, prio) {
-        insertSortedByPrio(this._renderStages, [getElem, prio])
-    }
+        setHotkeyToolbarActions(hotkey2action) {
+            for (const [ hotkey, action ] of Object.entries(hotkey2action)) {
+                api.hotkeyToolbarActions[hotkey] = action
+            }
+        },
 
-    addGetBgTopElem(pos, getElem, prio) {
-        insertSortedByPrio(this._bgTopElems[pos], [getElem, prio])
-    }
+        getToolbarButtonGroup({ key, buttons = [], ...props }) {
+            const resolvedButtons = getActionResolvedButtons(
+                buttons,
+                {
+                    hotkeySetter: !has('hotkeys') ? undefined : (...params) => api.setHotkeyToolbarAction(...params),
+                    doConfirmed: ref.doConfirmed
+                }
+            )
+            return <ButtonGroup key={key} {...props} buttons={resolvedButtons} />
+        },
 
-    addGetBgBottomElem(pos, getElem, prio) {
-        insertSortedByPrio(this._bgBottomElems[pos], [getElem, prio])
-    }
+        get doConfirmed() {
+            return ref.doConfirmed
+        },
 
-    addModal(modal) {
-        this._modals.push(modal)
-    }
+        set doConfirmed(value) {
+            ref.doConfirmed = value
+        },
 
-    get bgTopElems() {
-        return getBgElems(this._bgTopElems)
-    }
+        setItemAction(action, prio) {
+            if (ref.itemAction && ref.itemAction[1] > prio) return
 
-    get bgBottomElems() {
-        return getBgElems(this._bgBottomElems)
-    }
+            ref.itemAction = [ action, prio ]
+        },
 
-    get errorHandler() {
-        return this._errorHandler
-    }
+        get itemAction() {
+            return ref.itemAction ? ref.itemAction[0] : undefined
+        },
 
-    set errorHandler(handler) {
-        this._errorHandler = handler
-    }
+        setGetItemColor(colorCallback, prio) {
+            if (ref.getItemColor && ref.getItemColor[1] > prio) return
 
-    process({ ...cmd }, op = 'exec') {
-        let callback
-        const hasBlocking = this.has('blocking') && cmd.block !== false
-        callback = async () => {
-            let restore
-            try {
-                if (hasBlocking) {
-                    this.api.blocking.startBlocking(
-                        !cmd.abort ? undefined : () => {
-                            cmd.isAborted = true
-                            cmd.abort()
+            ref.getItemColor = [colorCallback, prio]
+        },
+
+        getBaseSort(deps) {
+            return ref.getBaseSort ? ref.getBaseSort(deps) : undefined
+        },
+
+        getPostSort(deps) {
+            return ref.getBaseSort ? ref.getBaseSort(deps, true) : undefined
+        },
+
+        get getItemColor() {
+            return ref.getItemColor ? ref.getItemColor[0] : undefined
+        },
+
+        getToolElem(id, props = {}) {
+            const getElem = tools[id]
+            if (!getElem) return
+
+            const api = toolToApi[id]
+            return getElem({ ...ref.plugProps, ...props, api })
+        },
+
+        addRenderStage(getElem, prio) {
+            insertSortedByPrio(renderStages, [ getElem, prio ])
+        },
+
+        addGetBgTopElem(pos, getElem, prio) {
+            insertSortedByPrio(bgTopElems[pos], [ getElem, prio ])
+        },
+
+        addGetBgBottomElem(pos, getElem, prio) {
+            insertSortedByPrio(bgBottomElems[pos], [getElem, prio])
+        },
+
+        get bgTopElems() {
+            return getBgElems(bgTopElems)
+        },
+
+        get bgBottomElems() {
+            return getBgElems(bgBottomElems)
+        },
+
+        get errorHandler() {
+            return ref.errorHandler
+        },
+
+        set errorHandler(handler) {
+            ref.errorHandler = handler
+        },
+
+        process({ ...cmd }, op = 'exec') {
+            let callback
+            const hasBlocking = has('blocking') && cmd.block !== false
+            callback = async () => {
+                let restore
+                try {
+                    if (hasBlocking) {
+                        api.api.blocking.startBlocking(
+                            !cmd.abort ? undefined : () => {
+                                cmd.isAborted = true
+                                cmd.abort()
+                            }
+                        )
+                    }
+                    if (has('snapshot')) {
+                        restore = await api.api.snapshot.getRestoreForCmd(cmd)
+                    }
+                    await cmd[op]()
+                    if (cmd.isAborted) throw new DOMException("Operation aborted", "AbortError")
+
+                    if (hasBlocking) {
+                        this.api.blocking.stopBlocking()
+                    }
+                    if (has('undo')) {
+                        if (false && op === 'exec' && restore && cmd.undo === true) {
+                            const redo = await apis.snapshot.getRestore()
+                            cmd.undo = async () => restore()
+                            cmd.redo = async () => redo()
                         }
+                        if (apis.undo.canProcess(cmd)) {
+                            apis.undo.updateHistory(cmd, op)
+                        }
+                    }
+                } catch (e) {
+                    if (restore) {
+                        await restore()
+                    }
+                    if (hasBlocking) {
+                        apis.blocking.stopBlocking()
+                    }
+                    if (e.name === 'AbortError') return
+
+                    console.error(e)
+                    const handler = cmd.handleError ? cmd.handleError : ref.errorHandler
+                    handler(cmd, e)
+                }
+            }
+            if (callback) setTimeout(callback)
+        },
+
+        getContentElem(render, node) {
+            let index = 0
+            if (type === EXT_TYPE.TABLE) {
+
+                const elems = []
+                for (const [ col, cellElem ] of render(node).entries()) {
+                    elems.push(
+                        <div key={index + '_' + col}>
+                            {cellElem}
+                        </div>
                     )
                 }
-                if (this.has('snapshot')) {
-                    restore = await this.api.snapshot.getRestoreForCmd(cmd)
-                }
-                await cmd[op]()
-                if (cmd.isAborted) throw new DOMException("Operation aborted", "AbortError")
-
-                if (hasBlocking) {
-                    this.api.blocking.stopBlocking()
-                }
-                if (this.has('undo')) {
-                    if (false && op === 'exec' && restore && cmd.undo === true) {
-                        const redo = await this.api.snapshot.getRestore()
-                        cmd.undo = async () => restore()
-                        cmd.redo = async () => redo()
-                    }
-                    if (this.api.undo.canProcess(cmd)) {
-                        this.api.undo.updateHistory(cmd, op)
-                    }
-                }
-            } catch (e) {
-                if (restore) {
-                    await restore()
-                }
-                if (hasBlocking) {
-                    this.api.blocking.stopBlocking()
-                }
-                if (e.name === 'AbortError') return d('EXIT...')
-
-                console.error(e)
-                const handler = cmd.handleError ? cmd.handleError : this.errorHandler
-                handler(cmd, e)
+                return <div key={'r' + index} className="contents">
+                    {elems}
+                </div>
             }
-        }
-        if (callback) setTimeout(callback)
-    }
 
-    getContentElem(render, node) {
-        let index = 0
-        let elem = <div key={'r' + index} className="auto text-xs">
-            {render(node)}
-        </div>
+            let elem = <div key={'r' + index} className="auto text-xs">
+                {render(node)}
+            </div>
 
-        while (index < this._renderStages.length) {
-            const [getElem] = this._renderStages[index]
-            elem = getElem({ key: 'r' + index, elem, node, ...this._plugProps })
-            index++
+            while (index < renderStages.length) {
+                const [getElem] = renderStages[index]
+                elem = getElem({ key: 'r' + index, elem, node, ...ref.plugProps })
+                index++
+            }
+            return elem
         }
-        return elem
     }
+    return api
 }
 
 export {
     ExtensionPack,
-    Extension
+    Extension,
+    EXT_TYPE,
+    EXT_NAME,
+    EXT_SKIP
 }

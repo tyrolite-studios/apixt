@@ -2,7 +2,6 @@ import { useMemo, useState, useContext } from "react"
 import { useModalWindow } from "components/modal"
 import { AppContext } from "components/context"
 import {
-    d,
     ClassNames,
     isObject,
     isArray,

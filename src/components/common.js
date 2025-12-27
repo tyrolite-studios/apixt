@@ -14,8 +14,7 @@ import {
     getParsedJson,
     isObject,
     isArray,
-    getSimpleType,
-    d
+    getSimpleType
 } from "core/helper"
 import {
     Button,
@@ -33,7 +32,7 @@ import { Centered, Div, Stack, Icon, OkCancelLayout } from "./layout"
 import { AppContext } from "./context"
 import { getExtractPathForString } from "entities/assignments"
 import { PreBlockContent } from "./content"
-import { Attributes, isBool, isFunction, getChildrenWithClass } from "../core/helper"
+import { Attributes, isBool, isFunction, getChildrenWithClass, AxisHandler, OVERFLOW } from "../core/helper"
 
 function useComponentUpdate() {
     const mounted = useMounted()
@@ -523,9 +522,11 @@ function useItemContainer({
         }
         viewCount = viewIndices.length
     }
+    const navi = FocusNavigation()
     return {
         ref,
         attr,
+        navi,
         items,
         treeOrder,
         getItemIndexForViewIndex: view && items ? x => viewIndices[x] : x => x,
@@ -585,6 +586,49 @@ function usePickerOnItemContainer({ container, pick }) {
         })
     })
 }
+
+
+const FocusNavigation = () => {
+
+    const axisHandler = [null, null]
+
+    function getHandler(index) {
+        let handler = axisHandler[index]
+        if (index === 1) {
+            if (handler === null) handler = axisHandler[0]
+        }
+        if (!handler) throw Error(`No axis handler registered yet`)
+
+        return handler
+    }
+
+    return {
+        addAxisHandler: (index, handler) => {
+            axisHandler[index] = handler
+        },
+        trigger: (event, data) => {
+            switch (event) {
+                case 'CELL_NEXT':
+                    getHandler(0).moveBy(1)
+                    break
+
+                case 'CELL_PREV':
+                    getHandler(0).moveBy(-1)
+                    break
+
+                case 'ROW_NEXT':
+                    getHandler(1).moveBy(1)
+                    break
+
+                case 'ROW_PREV':
+                    getHandler(1).moveBy(-1)
+                    break
+
+            }
+        }
+    }
+}
+
 
 const FocusRowContext = createContext(null)
 
@@ -716,10 +760,12 @@ function useFocusOnItemContainer({
     rowIndex,
     markedTabIndex = 0,
     cursor = true,
-    moveFocus
+    moveFocus,
+    count
 }) {
     const aContext = useContext(AppContext)
     let frContext = useContext(FocusRowContext)
+    const keyNavRef = useRef(false)
 
     if (rowIndex === undefined) frContext = undefined
     if (frContext) frContext.setMarkedTabIndex(markedTabIndex)
@@ -757,7 +803,26 @@ function useFocusOnItemContainer({
         levelRef.current = aContext.getModalLevel()
     }
 
-    const { ref, viewCount } = container
+    const { ref, viewCount, navi } = container
+
+    navi.addAxisHandler(
+        0,
+        AxisHandler(
+            () => {
+                return d({
+                    overflow: OVERFLOW.CLAMP,
+                    focusIndex: tabIndex,
+                    setFocusIndex: setTabIndex,
+                    viewCount: count === undefined ? viewCount : count,
+                    pageIndexStart: container.pageIndexStart,
+                    pageIndexEnd: container.pageIndexEnd,
+                    viewToFocusIndex: container.viewToFocusIndex
+                })
+            }
+        )
+    )
+
+
     const refocus = () => {
         requestAnimationFrame(() => {
             if (!container.isMounted()) {
@@ -859,8 +924,19 @@ function useFocusOnItemContainer({
             if (x === 0 && y === 0) return
 
             e.preventDefault()
-            const newTabIndex = moveFocus(container, x, y, e.shiftKey)
-            if (newTabIndex !== tabIndex) setTabIndex(newTabIndex)
+            if (x !== 0) {
+                navi.trigger('CELL_' + (x > 0 ? 'NEXT' : 'PREV'))
+            } else if (y !== 0) {
+                navi.trigger('ROW_' + (y > 0 ? 'NEXT' : 'PREV'))
+            }
+
+
+            // const newTabIndex = moveFocus(container, x, y, e.shiftKey)
+            keyNavRef.current = true
+            // if (newTabIndex !== tabIndex) setTabIndex(newTabIndex)
+        },
+        onKeyUp: (e) => {
+            keyNavRef.current = false
         }
     }, 'focus')
     const isTabRow = !frContext || frContext.row === rowIndex
@@ -902,6 +978,7 @@ function useFocusOnItemContainer({
     container.focused = focused
     container.refocus = refocus
     container.tabIndex = tabIndex
+    container.keyNavRef = keyNavRef
     container.setTabIndex = setTabIndex
 }
 
@@ -1897,7 +1974,7 @@ const modeOptions = [
     {id: 'exact', name: "Exact"}
 ]
 
-function Filterbox({ filter, icon, setFilter, toggleSortDir, caseSensitive, setCaseSensitive, or, setOr, mode, setMode }) {
+function Filterbox({ filter, icon, setFilter, caseSensitive, setCaseSensitive, or, setOr, mode, setMode }) {
     const buttons = [
         {
             icon: "close",
@@ -1919,12 +1996,6 @@ function Filterbox({ filter, icon, setFilter, toggleSortDir, caseSensitive, setC
             activated: or,
             value: true,
             onPressed: () => setOr(!or)
-        })
-    }
-    if (toggleSortDir) {
-        buttons.push({
-            icon: "sort",
-            onPressed: () => toggleSortDir()
         })
     }
     return (

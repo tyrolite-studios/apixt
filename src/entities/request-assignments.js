@@ -17,7 +17,6 @@ import {
     AssignmentStack
 } from "entities/assignments"
 import { AppContext } from "components/context"
-import { d } from "core/helper"
 
 const REQUEST_DEFAULTS = {
     OPTION: {

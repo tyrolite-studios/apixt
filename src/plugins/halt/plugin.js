@@ -1,5 +1,4 @@
 import { AbstractPlugin, PluginRegistry } from "core/plugin"
-import { d } from "core/helper"
 
 class Plugin extends AbstractPlugin {
     get id() {

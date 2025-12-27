@@ -7,7 +7,7 @@ import React, {
     useLayoutEffect,
     useMemo
 } from "react"
-import { ClassNames, d } from "core/helper"
+import { ClassNames } from "core/helper"
 import { ButtonGroup, Form } from "./form"
 import { AppContext } from "./context"
 import { useGetAttrWithDimProps, useGetTabIndex } from "./common"
@@ -76,8 +76,10 @@ const Div = React.forwardRef(({ className, children, ...props }, ref) => {
     )
 })
 
-function Icon({ name, className, ...props }) {
+function Icon({ name, className, flipX = false, flipY = false, ...props }) {
     const cls = new ClassNames("material-icons leading-none", className)
+    cls.addIf(flipX, 'scale-x-[-1]')
+    cls.addIf(flipY, 'scale-y-[-1]')
     return (
         <span className={cls.value} {...props}>
             {name}

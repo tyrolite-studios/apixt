@@ -1,4 +1,4 @@
-import { d, sortAsc } from "./helper"
+import { sortAsc } from "./helper"
 import { MappingIndex } from "./entity.js"
 import { FILTER, getWords, isSearchWordsMatch } from "./filter.js"
 

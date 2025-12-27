@@ -1,3 +1,4 @@
+import "core/global"
 import { BrowserStorage, TempStorage } from "core/storage"
 
 const apps = {}

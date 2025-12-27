@@ -1,14 +1,15 @@
 import { useState } from "react"
-import { d, getNewModelId } from "core/helper"
-import { MappingIndex } from "core/entity"
+import { getNewModelId } from "core/helper"
+import { MappingIndex, FolderTreeIndex } from "core/entity"
 import { ButtonGroup, FormGrid, InputCells } from "components/form"
 import { OkCancelLayout } from "components/layout"
 import { FILTER } from "core/filter"
 import { Select, CheckboxCells, CustomCells, SelectCells } from "components/form"
 import { useUpdateOnEntityIndexChanges } from "components/common"
 import { Centered } from "components/layout"
-import { TreeComponentRenderer } from "./folders.js"
-import { useItemFilterExt, useItemSelectionExt, useUnrenderedTreeComponent } from "components/extensions"
+import { useStackComponent } from "./stack"
+import { useItemFilterExt, useItemSelectionExt, useTreeRendererExt, usePaginationExt } from "components/extensions"
+import { useTreeComponent } from "./tree.js"
 
 class SetsIndex extends MappingIndex {
     constructor(model) {
@@ -45,24 +46,36 @@ const resultOptions = [
     {id: FILTER.RESULT.WITH_ANCESTORS, name: 'Subtree (with ancestors)'},
 ]
 
-function SetItemsSelector({ treeIndex, value, set, ...props }) {
-
-    const tree = useUnrenderedTreeComponent({
-        treeIndex,
+function SetItemsSelector({ entityIndex, value, set, ...props }) {
+    if (entityIndex instanceof FolderTreeIndex) {
+        return useTreeComponent({
+            entityIndex,
+            header: "filter",
+            footer: "selection pagination",
+            height: "300px",
+            extensions: [
+                useTreeRendererExt(),
+                useItemSelectionExt({ selection: value, setSelection: set }),
+                useItemFilterExt()
+            ]
+        })
+    }
+    return useStackComponent({
+        entityIndex,
+        header: "filter",
+        footer: "selection pagination",
+        height: "300px",
         extensions: [
             useItemSelectionExt({ selection: value, setSelection: set }),
+            usePaginationExt(),
             useItemFilterExt()
         ]
     })
-    return <TreeComponentRenderer
-        tree={tree}
-        header="filter"
-        footer="marking"
-        { ...props }
-    />
 }
 
-function UserSetForm({ treeIndex, model, setsIndex, paramsRef }) {
+
+function UserSetForm({ entityIndex, model, setsIndex, paramsRef }) {
+    const isTree = entityIndex instanceof FolderTreeIndex
     const getSetter = (prop) => {
         return (value) => setsIndex.setEntityPropValue(model.index, prop, value)
     }
@@ -70,11 +83,11 @@ function UserSetForm({ treeIndex, model, setsIndex, paramsRef }) {
         <FormGrid>
             <InputCells name="Name" value={model.name} set={getSetter('name')} />
             <CheckboxCells name="Exclusive" value={model.exclusive === true} set={getSetter('exclusive')} />
-            <SelectCells name="Show as" value={model.result ?? FILTER.RESULT.FLAT_DIRECT} set={getSetter('result')} options={resultOptions} />
+            {isTree && <SelectCells name="Show as" value={model.result ?? FILTER.RESULT.FLAT_DIRECT} set={getSetter('result')} options={resultOptions} />}
             <CustomCells name="Elements">
                 <SetItemsSelector
                     {...paramsRef.current}
-                    treeIndex={treeIndex}
+                    entityIndex={entityIndex}
                     value={model.ids}
                     set={getSetter('ids')}
                 />
@@ -83,7 +96,7 @@ function UserSetForm({ treeIndex, model, setsIndex, paramsRef }) {
     )
 }
 
-function UserSetManagerModal({ close, save, treeIndex, paramsRef, setsIndex }) {
+function UserSetManagerModal({ close, save, entityIndex, paramsRef, setsIndex }) {
 
     useUpdateOnEntityIndexChanges(setsIndex)
 
@@ -95,6 +108,7 @@ function UserSetManagerModal({ close, save, treeIndex, paramsRef, setsIndex }) {
         setsIndex.setEntityObject({
             value,
             name: 'User Set ' + (options.length + 1),
+            result: FILTER.RESULT.FLAT_DIRECT,
             exclusive: true,
             ids: []
         })
@@ -127,7 +141,7 @@ function UserSetManagerModal({ close, save, treeIndex, paramsRef, setsIndex }) {
                 <div className="p-2 auto">
 
                     {options.length ?
-                        <UserSetForm treeIndex={treeIndex} model={currModel} setsIndex={setsIndex} paramsRef={paramsRef} /> :
+                        <UserSetForm entityIndex={entityIndex} model={currModel} setsIndex={setsIndex} paramsRef={paramsRef} /> :
                         <Centered className="text-xs">No set available!</Centered>
                     }
                 </div>

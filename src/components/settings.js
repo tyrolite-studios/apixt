@@ -17,7 +17,7 @@ import {
 import { useConfirmation } from "components/common"
 import { AppContext } from "components/context"
 import { Tabs, Tab, Stack, OkCancelLayout, Centered } from "components/layout"
-import { d, cloneDeep } from "core/helper"
+import { cloneDeep } from "core/helper"
 import themeManager from "core/theme"
 import { SimpleMappingIndex } from "core/entity"
 import { ConstantStack, ConstantIndex } from "entities/constants"

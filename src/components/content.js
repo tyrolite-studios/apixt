@@ -1,7 +1,6 @@
 import { Button, ButtonGroup } from "./form"
 import { useContext, useRef, useEffect, useState, Fragment } from "react"
 import { ClassNames, isObject, isArray } from "core/helper"
-import { d } from "core/helper"
 import { AppContext } from "./context"
 import { Centered, Div } from "./layout"
 import { DualRing } from "./common"

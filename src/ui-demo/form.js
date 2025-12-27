@@ -25,7 +25,6 @@ import {
 } from "../components/form"
 import { Icon, Tab, Tabs } from "../components/layout"
 import { useModalWindow } from "../components/modal"
-import { d } from "../core/helper"
 import { useState } from "react"
 
 function GetTextarea({ value = "Test text", ...props }) {

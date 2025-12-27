@@ -6,7 +6,10 @@ import { AppCtx } from "components/context"
 import { createRoot } from "react-dom/client"
 import { FormContent } from "./ui-demo/form"
 import { TreeContent } from "./ui-demo/tree"
-import { useRegisterAppListeners } from "./components/common.js"
+import { TableContent } from "./ui-demo/table.js"
+import { StackLayoutsContent } from "./ui-demo/stack-layouts.js"
+import { StackContent } from "./ui-demo/stack.js"
+import { useRegisterAppListeners } from "./components/common"
 
 function MainInner() {
     const [main, setMain] = useState(1)
@@ -30,12 +33,24 @@ function MainInner() {
     Form
     </button>
     <button className={buttonCls(1)} onClick={() => setMain(1)}>
+        Stack
+    </button>
+    <button className={buttonCls(2)} onClick={() => setMain(2)}>
         Tree
+    </button>
+    <button className={buttonCls(3)} onClick={() => setMain(3)}>
+        Table
+    </button>
+    <button className={buttonCls(4)} onClick={() => setMain(4)}>
+        Stack-Layouts
     </button>
 </div>
     <div className="auto overflow-auto bg-app-bg text-app-text">
         {main === 0 && <FormContent />}
-        {main === 1 && <TreeContent />}
+        {main === 1 && <StackContent />}
+        {main === 2 && <TreeContent />}
+        {main === 3 && <TableContent />}
+        {main === 4 && <StackLayoutsContent />}
     </div>
 </div>)
 

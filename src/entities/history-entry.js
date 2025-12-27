@@ -1,6 +1,6 @@
 import { EntityIndex } from "core/entity"
 import { EntityPicker } from "components/common"
-import { d, md5, sortDesc, formatDate } from "core/helper"
+import { md5, sortDesc, formatDate } from "core/helper"
 
 class HistoryEntryIndex extends EntityIndex {
     constructor(model, maxItems) {

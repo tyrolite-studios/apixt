@@ -5,7 +5,6 @@ import { OkCancelLayout } from "components/layout"
 import { FormGrid, InputCells } from "components/form"
 import { useModalWindow } from "components/modal"
 import { getPathParams, getResolvedPath } from "core/http"
-import { d } from "core/helper"
 
 class RouteIndex extends EntityIndex {
     constructor(routes) {

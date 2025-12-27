@@ -10,7 +10,7 @@ import {
     getPathInfo
 } from "core/http"
 import { useComponentUpdate, useLoadingSpinner } from "./common"
-import { d, getParsedJson, apply, isObject, isString } from "core/helper"
+import { getParsedJson, apply, isObject, isString } from "core/helper"
 import { PluginRegistry } from "core/plugin"
 import {
     defaultApiSettings,

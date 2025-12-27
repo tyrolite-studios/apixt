@@ -1,7 +1,7 @@
 import { Fragment, useState, useRef } from "react"
 import { EntityStack } from "components/common"
 import { Div, Stack, OkCancelLayout, Icon } from "components/layout"
-import { d, isString } from "core/helper"
+import { isString } from "core/helper"
 import { useModalWindow } from "components/modal"
 import { ClassNames } from "core/helper"
 

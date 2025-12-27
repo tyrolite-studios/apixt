@@ -1,5 +1,4 @@
 import { AbstractPlugin, PluginRegistry } from "core/plugin"
-import { d } from "core/helper"
 import JSON5 from "json5"
 
 class Plugin extends AbstractPlugin {

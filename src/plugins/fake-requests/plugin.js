@@ -1,6 +1,5 @@
 import { AbstractPlugin, PluginRegistry } from "core/plugin"
 import { CMD } from "core/tree"
-import { d } from "core/helper"
 
 const responseStream = [
     { cmd: CMD.OPEN_SECTION, name: "Application" },
