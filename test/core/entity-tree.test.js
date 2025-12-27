@@ -7,7 +7,6 @@ import {
     getAddPathNamesHandler,
     TreeIndex, FolderIndex, ROOT_FOLDER_ID, FILTER
 } from "../../src/core/entity-tree.js"
-import { d } from "../../src/core/helper.js"
 import { MappingIndex } from "../../src/core/entity.js"
 
 test("getAddPathNamesHandler()", () => {
