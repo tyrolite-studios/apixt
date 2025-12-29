@@ -32,7 +32,16 @@ import { Centered, Div, Stack, Icon, OkCancelLayout } from "./layout"
 import { AppContext } from "./context"
 import { getExtractPathForString } from "entities/assignments"
 import { PreBlockContent } from "./content"
-import { Attributes, isBool, isFunction, getChildrenWithClass, AxisHandler, OVERFLOW } from "../core/helper"
+import {
+    Attributes,
+    isBool,
+    isFunction,
+    getChildrenWithClass,
+    AxisHandler,
+    OVERFLOW,
+    isString,
+    isInt
+} from "../core/helper"
 
 function useComponentUpdate() {
     const mounted = useMounted()
@@ -494,6 +503,7 @@ function useItemContainer({
     items,
     treeOrder,
     count,
+    parent,
     view = false,
     item2value = (x) => x,
     value2item = (x) => x
@@ -501,6 +511,7 @@ function useItemContainer({
     const mounted = useMounted()
     const ref = useRef(null)
     const attr = Attributes({ ref })
+    const naviRef = useRef(null)
 
     if (items) count = items.length
 
@@ -522,11 +533,14 @@ function useItemContainer({
         }
         viewCount = viewIndices.length
     }
-    const navi = FocusNavigation()
+    naviRef.current =
+        parent ? parent.naviRef.current : KeyNavigation()
+
     return {
         ref,
         attr,
-        navi,
+        parent,
+        naviRef,
         items,
         treeOrder,
         getItemIndexForViewIndex: view && items ? x => viewIndices[x] : x => x,
@@ -538,30 +552,6 @@ function useItemContainer({
         isMounted: () => ref.current && mounted.current,
         addItemBuilder,
         getItem
-    }
-}
-
-const arrowMove = {
-    prevNext: (container, x, y, shift) => {
-        const next = x > 0 || y > 0
-        const prev = x < 0 || y < 0
-
-        const lastIndex = container.viewCount - 1
-        if (prev) {
-            if (container.tabIndex === 0) {
-                return lastIndex
-            }
-            return shift ? 0 : clamp(0, container.tabIndex - 1)
-        }
-        if (next) {
-            if (container.tabIndex === lastIndex) {
-                return 0
-            }
-            return shift
-                ? lastIndex
-                : Math.min(lastIndex, container.tabIndex + 1)
-        }
-        return container.tabIndex
     }
 }
 
@@ -588,9 +578,43 @@ function usePickerOnItemContainer({ container, pick }) {
 }
 
 
-const FocusNavigation = () => {
+const FOCUS_EVENTS = {
+    X_PREV: 1,
+    X_NEXT: 2,
+    X_FIRST: 3,
+    X_LAST: 4,
+    Y_PREV: 5,
+    Y_NEXT: 6,
+    Y_FIRST: 7,
+    Y_LAST: 8,
+    Y_NEXT_BLOCK: 9,
+    Y_PREV_BLOCK: 10,
+    Y_NEXT_PAGE: 11,
+    Y_PREV_PAGE: 12
+}
+
+const defaultKeyToEvent = {
+    'Home': FOCUS_EVENTS.Y_FIRST,
+    'End': FOCUS_EVENTS.Y_LAST,
+    'ArrowUp': FOCUS_EVENTS.Y_PREV,
+    'ArrowDown': FOCUS_EVENTS.Y_NEXT,
+    'ArrowLeft': FOCUS_EVENTS.X_PREV,
+    'ArrowRight': FOCUS_EVENTS.X_NEXT,
+    'PageDown': FOCUS_EVENTS.Y_NEXT_PAGE,
+    'PageUp': FOCUS_EVENTS.Y_PREV_PAGE,
+    'ArrowUp Shift': FOCUS_EVENTS.Y_PREV_BLOCK,
+    'ArrowDown Shift': FOCUS_EVENTS.Y_NEXT_BLOCK,
+}
+
+const KeyNavigation = () => {
+
+    const keyToEvent = {}
+    for (const [ key, event] of Object.entries(defaultKeyToEvent)) {
+        keyToEvent[key] = [event, 50]
+    }
 
     const axisHandler = [null, null]
+    let isKeyPressed = false
 
     function getHandler(index) {
         let handler = axisHandler[index]
@@ -602,29 +626,90 @@ const FocusNavigation = () => {
         return handler
     }
 
+    const trigger = event => {
+        switch (event) {
+            case FOCUS_EVENTS.X_FIRST:
+                getHandler(0).setValue(0)
+                break
+
+            case FOCUS_EVENTS.X_LAST:
+                const xHandler = getHandler(0)
+                xHandler.setValue(xHandler.getLastIndex())
+                break
+
+            case FOCUS_EVENTS.X_NEXT:
+                getHandler(0).moveBy(1)
+                break
+
+            case FOCUS_EVENTS.X_PREV:
+                getHandler(0).moveBy(-1)
+                break
+
+            case FOCUS_EVENTS.Y_NEXT:
+                getHandler(1).moveBy(1)
+                break
+
+            case FOCUS_EVENTS.Y_NEXT_BLOCK:
+                getHandler(1).moveBy(10)
+                break
+
+            case FOCUS_EVENTS.Y_PREV:
+                getHandler(1).moveBy(-1)
+                break
+
+            case FOCUS_EVENTS.Y_PREV_BLOCK:
+                getHandler(1).moveBy(-10)
+                break
+
+            case FOCUS_EVENTS.Y_FIRST:
+                getHandler(1).setValue(0)
+                break
+
+            case FOCUS_EVENTS.Y_LAST:
+                const yHandler = getHandler(1)
+                yHandler.setValue(yHandler.getLastIndex())
+                break
+        }
+    }
     return {
         addAxisHandler: (index, handler) => {
             axisHandler[index] = handler
         },
-        trigger: (event, data) => {
-            switch (event) {
-                case 'CELL_NEXT':
-                    getHandler(0).moveBy(1)
-                    break
+        trigger,
+        getFocusIndex: (index) => {
+            return getHandler(index).getFocusIndex()
+        },
+        setFocusIndex: (index, value) => {
+            return getHandler(index).setFocusIndex(value)
+        },
+        isKeyPressed: () => isKeyPressed,
+        setKeyEvents: (keyToHandler, prio) => {
+            for (const [ key, handler ] of Object.entries(keyToHandler)) {
+                const event = keyToEvent[key]
+                if (!event) throw Error(`Unknown key event "${key}" given in setKeyEvents()`)
 
-                case 'CELL_PREV':
-                    getHandler(0).moveBy(-1)
-                    break
+                if (!event || prio < event[1]) continue
 
-                case 'ROW_NEXT':
-                    getHandler(1).moveBy(1)
-                    break
-
-                case 'ROW_PREV':
-                    getHandler(1).moveBy(-1)
-                    break
-
+                keyToEvent[key] = [handler, prio]
             }
+        },
+        handleKeyDown: (e) => {
+            const event = keyToEvent[e.key + (e.shiftKey ? ' Shift' : '')]
+            if (!event) return false
+
+            let [ eventId ] = event
+            if (isFunction(eventId)) {
+                const index = getHandler(1).getFocusIndex()
+                eventId = eventId(index)
+            }
+            if (isInt(eventId)) {
+                trigger(eventId)
+            }
+            isKeyPressed = true
+            return true
+        },
+        handleKeyUp: (e) => {
+            isKeyPressed = false
         }
     }
 }
@@ -635,7 +720,7 @@ const FocusRowContext = createContext(null)
 function FocusRowCtx({ children }) {
     const [row, setRowRaw] = useState(0)
     const setRow = (value) => setRowRaw(value)
-    const [lastTabIndex, setLastTabIndex] = useState(0)
+    const [ lastTabIndex, setLastTabIndex ] = useState(0)
     const rowTabIndexSetter = useRef(null)
     const containerRef = useRef(null)
     const markedTabRef = useRef(0)
@@ -648,6 +733,7 @@ function FocusRowCtx({ children }) {
             }
         })
     }
+
     const api = {
         row,
         lastTabIndex,
@@ -675,7 +761,26 @@ function FocusRowCtx({ children }) {
         },
         refocus,
         setRow,
-        setContainer: (container) => (containerRef.current = container)
+        initContainer: (container, count) => {
+            container.naviRef.current.addAxisHandler(1, AxisHandler(
+                () => {
+                return {
+                    focusIndex: row,
+                    setFocusIndex: (newRow) => {
+                        setRow(newRow)
+                        refocus()
+                    },
+                    pageIndexStart: container.pageIndexStart,
+                    pageIndexEnd: container.pageIndexEnd,
+                    viewToFocusIndex: container.viewToFocusIndex,
+                    viewCount: count,
+                    overflow: container.overflow
+                }
+            }))
+        },
+        setContainer: (container) => {
+            containerRef.current = container
+        }
     }
 
     return (
@@ -685,7 +790,7 @@ function FocusRowCtx({ children }) {
     )
 }
 
-function useFocusGroupsOnItemContainer({ container }) {
+function useFocusGroupsOnItemContainer({ container, count }) {
     const aContext = useContext(AppContext)
     const frContext = useContext(FocusRowContext)
 
@@ -753,6 +858,7 @@ function useFocusGroupsOnItemContainer({ container }) {
     }, [])
     container.refocus = frContext.refocus
     container.row = frContext.row
+    frContext.initContainer(container, count)
 }
 
 function useFocusOnItemContainer({
@@ -760,31 +866,15 @@ function useFocusOnItemContainer({
     rowIndex,
     markedTabIndex = 0,
     cursor = true,
-    moveFocus,
     count
 }) {
     const aContext = useContext(AppContext)
     let frContext = useContext(FocusRowContext)
-    const keyNavRef = useRef(false)
 
     if (rowIndex === undefined) frContext = undefined
     if (frContext) frContext.setMarkedTabIndex(markedTabIndex)
 
     const callAfterwards = useCallAfterwards()
-
-    if (moveFocus === undefined) {
-        moveFocus = frContext
-            ? (container, x, y, shift) => {
-                  if (y === 0) return arrowMove.prevNext(container, x, y, shift)
-                  if (y > 0) {
-                      frContext.nextRow()
-                  } else {
-                      frContext.prevRow()
-                  }
-                  return frContext.lastTabIndex
-              }
-            : arrowMove.prevNext
-    }
 
     const [focused, setFocused] = useState(false)
     const [catchFocus, setCatchFocus] = useState(true)
@@ -802,26 +892,24 @@ function useFocusOnItemContainer({
     if (levelRef.current === null) {
         levelRef.current = aContext.getModalLevel()
     }
+    const { ref, viewCount, naviRef } = container
 
-    const { ref, viewCount, navi } = container
-
-    navi.addAxisHandler(
-        0,
-        AxisHandler(
-            () => {
-                return d({
-                    overflow: OVERFLOW.CLAMP,
+    if (!container.parent || (container.parent && focused)) {
+        naviRef.current.addAxisHandler(
+            0,
+            AxisHandler(() => {
+                return {
+                    overflow: container.overflow,
                     focusIndex: tabIndex,
                     setFocusIndex: setTabIndex,
                     viewCount: count === undefined ? viewCount : count,
                     pageIndexStart: container.pageIndexStart,
                     pageIndexEnd: container.pageIndexEnd,
                     viewToFocusIndex: container.viewToFocusIndex
-                })
+                }
             }
-        )
-    )
-
+        ))
+    }
 
     const refocus = () => {
         requestAnimationFrame(() => {
@@ -915,28 +1003,12 @@ function useFocusOnItemContainer({
             })
         },
         onKeyDown: (e) => {
-            let x = 0
-            let y = 0
-            if (e.key === "ArrowUp") y--
-            if (e.key === "ArrowDown") y++
-            if (e.key === "ArrowLeft") x--
-            if (e.key === "ArrowRight") x++
-            if (x === 0 && y === 0) return
+            if (container.parent || !naviRef.current.handleKeyDown(e)) return
 
             e.preventDefault()
-            if (x !== 0) {
-                navi.trigger('CELL_' + (x > 0 ? 'NEXT' : 'PREV'))
-            } else if (y !== 0) {
-                navi.trigger('ROW_' + (y > 0 ? 'NEXT' : 'PREV'))
-            }
-
-
-            // const newTabIndex = moveFocus(container, x, y, e.shiftKey)
-            keyNavRef.current = true
-            // if (newTabIndex !== tabIndex) setTabIndex(newTabIndex)
         },
         onKeyUp: (e) => {
-            keyNavRef.current = false
+            naviRef.current.handleKeyUp(e)
         }
     }, 'focus')
     const isTabRow = !frContext || frContext.row === rowIndex
@@ -978,7 +1050,6 @@ function useFocusOnItemContainer({
     container.focused = focused
     container.refocus = refocus
     container.tabIndex = tabIndex
-    container.keyNavRef = keyNavRef
     container.setTabIndex = setTabIndex
 }
 
@@ -2076,8 +2147,8 @@ export {
     BodyTextarea,
     JsonPathInput,
     Filterbox,
-    arrowMove,
     FocusRowContext,
     FocusRowCtx,
-    NumberChip
+    NumberChip,
+    FOCUS_EVENTS
 }

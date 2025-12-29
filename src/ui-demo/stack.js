@@ -125,7 +125,7 @@ function MyList({ entityIndex }) {
 
                 ]
             }),
-            /*
+
             useItemButtonsExt({
                 getButtons: ({ entityIndex }) => [
                     {
@@ -146,15 +146,10 @@ function MyList({ entityIndex }) {
                     }
                 ]
             }),
-
-             */
-            usePaginationExt(),
-            /*
+            // usePaginationExt(),
             useInfiniteScrollingExt({
                 switchDirection: true
             })
-
-             */
         ]
     })
 }

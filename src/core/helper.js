@@ -551,7 +551,7 @@ const OVERFLOW = {
 const AxisHandler = (getProps) => {
 
     const setValue = (viewIndex) => {
-        const { focusIndex, setFocusIndex, pageIndexStart, pageIndexEnd, viewCount, viewToFocusIndex = x => x, overflow = OVERFLOW.CLAMP } = getProps()
+        const { focusIndex, setFocusIndex, viewCount, viewToFocusIndex = x => x, overflow = OVERFLOW.WRAP } = getProps()
 
         // overflow-handling
         if (viewIndex < 0) {
@@ -594,7 +594,19 @@ const AxisHandler = (getProps) => {
     }
     return {
         setValue,
-        moveBy
+        moveBy,
+        getLastIndex: () => {
+            const { viewCount } = getProps()
+            return viewCount - 1
+        },
+        getFocusIndex: () => {
+            const { focusIndex } = getProps()
+            return focusIndex
+        },
+        setFocusIndex: (focusIndex) => {
+            const { setFocusIndex } = getProps()
+            setFocusIndex(focusIndex)
+        }
     }
 }
 

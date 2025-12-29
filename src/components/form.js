@@ -1536,6 +1536,7 @@ function ButtonsAndDivGroup({
         action,
         maxButtons = 2,
         autoFocus,
+        parent,
         ...props
     }) {
     const aContext = useContext(AppContext)
@@ -1545,7 +1546,8 @@ function ButtonsAndDivGroup({
     const moreCol = getCols(moreCols)
 
     const container = useItemContainer({
-        count: btnCount + (focus ? 1 : 0 )
+        count: btnCount + (focus ? 1 : 0 ),
+        parent
     })
     useFocusOnItemContainer({
         container,
@@ -1626,6 +1628,9 @@ function ButtonsAndDivGroup({
             e.preventDefault()
             return
         }
+        if (!container.naviRef.current.handleKeyDown(e)) return
+
+        e.preventDefault()
         onKeyDown(e)
     } : onKeyDown
 

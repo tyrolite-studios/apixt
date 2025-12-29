@@ -70,7 +70,11 @@ function ExtStackInner({
     if (itemActions) {
         useFocusGroupsOnItemContainer({ container, count: view.viewCount })
     } else if (exts.has('focus')) {
-        useFocusOnItemContainer({ container, moveFocus: exts.api.focus.moveFocus, count: view.viewCount })
+        useFocusOnItemContainer({
+            container,
+            // moveFocus: exts.api.focus.moveFocus,
+            count: view.viewCount
+        })
     }
 
     // cls.addIf(full, "full")
@@ -142,6 +146,7 @@ function ExtStackInner({
                 key={filter + index}
                 buttons={getItemActions(index)}
                 moreCols={colsItems}
+                parent={container}
                 action={
                     !clickAction ? undefined : () => {
                         const id = node.nodeType + ' ' + node.value

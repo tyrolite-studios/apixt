@@ -1,8 +1,8 @@
 import { useContext, useMemo, useRef, useState, useEffect } from "react"
-import { ClassNames, cloneDeep, without, ucFirst, isFunction } from "core/helper"
+import { OVERFLOW, clamp, getNewModelId, isInRange, ClassNames, cloneDeep, without, ucFirst, isFunction } from "core/helper"
 import { ButtonGroup, Button, CustomCells, FormGrid, Number, Select } from "./form.js"
 import { FILTER } from "core/filter"
-import { arrowMove, NumberChip, Filterbox, DualRing, useCallAfterwards, useMounted } from "./common.js"
+import { NumberChip, Filterbox, DualRing, useCallAfterwards, FOCUS_EVENTS } from "./common.js"
 import { SetsIndex } from "entities/sets"
 import { useModalWindow } from "components/modal"
 import { AppContext } from "components/context"
@@ -11,7 +11,6 @@ import { UserSetSelectorModal, UserSetManagerModal } from "entities/sets"
 import { Centered, Div, Icon } from "./layout.js"
 import { Keys } from "entities/key-bindings"
 import { getWords, isSearchWordsMatch } from "core/filter"
-import { getNewModelId, isInRange, sortAsc } from "../core/helper.js"
 
 function useItemActionExt({ itemAction, prio = 100 } = {}) {
     return Extension({
@@ -37,42 +36,14 @@ function useCompactModeExt({ toolbar = "buttons" } = {}) {
 }
 
 // TODO tree-handling
-function useItemFocusExt() {
+function useItemFocusExt({ overflow = OVERFLOW.WRAP } = {}) {
     return Extension({
         id: "focus",
-        buildApi: ({ api, exts, view, entityIndex, container }) => {
+        buildApi: ({ api, exts, container }) => {
+            container.overflow = overflow
             exts.addButtonsAndDivGroupProps({
                 focus: true
             })
-            const nodes = view.nodes
-            const hasToggler = exts.has('toggler')
-            const hasInfiniteScrolling = exts.has('infinite')
-
-            const moveFocus = (container, x, y, shift) => {
-                /*
-                TODO: call toggle
-
-                const { nodeType, index, closed } = nodes[container.getItemIndexForViewIndex(container.tabIndex)]
-                if (hasToggler && nodeType === "folder") {
-                    if ((closed && x > 0) || (!closed && x < 0)) {
-                        // treeIndex.toggleFolder(index)
-                        return container.tabIndex
-                    }
-                }
-
-                 */
-                const newIndex = arrowMove.prevNext(container, x, y, shift)
-
-                if (hasInfiniteScrolling && newIndex !== container.tabIndex) {
-
-
-                    const max = view.pageCount - 1
-                    if (newIndex === max || newIndex === 0) {
-                        exts.api.infinite.toggleDirection(newIndex === max)
-                    }
-                }
-                return newIndex
-            }
             const focusManually = (elem) => requestAnimationFrame(() => {
                 elem.dispatchEvent(
                     new MouseEvent('mousedown', { bubbles: true, cancelable: true })
@@ -88,8 +59,7 @@ function useItemFocusExt() {
                 focusItemByItemIndex: (index) => {
                     const viewIndex = container.getViewIndexForItemIndex(index)
                     if (viewIndex >= 0) api.focusItemByViewIndex(viewIndex)
-                },
-                moveFocus
+                }
             }
         }
     })
@@ -102,7 +72,7 @@ function useItemCountExt({ name = "Items:" } = {}) {
             count: ({ key, view }) => (
                 <div key={key} className="stack-h gap-d2x text-xs">
                     {name && <div className="opacity-50">{name}</div>}
-                    <div>{view.pageCount}/{view.viewCount}</div>
+                    <div>{view.pageCount}/{view.viewCount}/{view.viewVisibleCount}</div>
                 </div>
             )
         }
@@ -209,16 +179,40 @@ function useTreeTogglerExt({ addItemAction = true, name } = {}) {
             node.closed = isClosed
             temp.closedLevel = closedLevel
         },
-        buildApi: ({ api, exts, view }) => {
+        buildApi: ({ api, exts, view, container }) => {
             if (addItemAction) {
                 exts.setItemAction( ({ node }) => api.toggle(node), 25)
             }
-            return {
-                toggle: (node) => {
-                    if (!node.isContainer) return
+            const toggle = (node) => {
+                if (!node.isContainer) return
 
-                    setClosed(toggleValue(closed, node.id))
-                },
+                setClosed(toggleValue(closed, node.id))
+            }
+            if (!exts.has('itemActions')) {
+                container.naviRef.current.setKeyEvents(
+                    {
+                        'ArrowLeft': (focusIndex) => {
+                            const node = container.items[focusIndex]
+                            if (node.isContainer && !node.closed) {
+                                toggle(node)
+                                return
+                            }
+                            return FOCUS_EVENTS.X_PREV
+                        },
+                        'ArrowRight': (focusIndex) => {
+                            const node = container.items[focusIndex]
+                            if (node.isContainer && node.closed) {
+                                toggle(node)
+                                return
+                            }
+                            return FOCUS_EVENTS.X_NEXT
+                        }
+                    },
+                    55
+                )
+            }
+            return {
+                toggle,
                 expandAll: () => setClosed([]),
                 collapseAll: () => {
                     const ids = []
@@ -1235,6 +1229,7 @@ function useHotkeysExt({ help = true, hotkeys = {} } = {}) {
         if (isToolbarAction) {
             action = extsRef.current.hotkeyToolbarActions[hotkey]
         } else {
+            // TODO: tabIndex hier checken, wird falsch sein, wenn pageOffset
             const index = exts.has('itemActions') ? container.row : container.tabIndex
             params.push(view.nodes[index])
             action = extsRef.current.hotkeyItemActions[hotkey]
@@ -1547,7 +1542,9 @@ function usePaginationExt({ name = 'Page:', itemsPerPage = 100 } = {}) {
     })
 }
 
-function useInfiniteScrollingExt({ startItems = 25, addItems = 10, fixHeight = false, loadItemsWhileDragging = true, name = 'Loading...', switchDirection = true } = {}) {
+function useInfiniteScrollingExt({
+     startItems = 25, addItems = 10, fixHeight = false, loadItemsWhileDragging = false, name = 'Loading...', switchDirection = true } = {}
+) {
     const [ loaded, setLoaded ] = useState(startItems)
     const [ upwards, setUpwards ] = useState(false)
     const sentinelRef = useRef(null)
@@ -1563,7 +1560,6 @@ function useInfiniteScrollingExt({ startItems = 25, addItems = 10, fixHeight = f
         }
         return elem
     }
-
 
     useEffect(() => {
         if (loadItemsWhileDragging) return
@@ -1594,10 +1590,11 @@ function useInfiniteScrollingExt({ startItems = 25, addItems = 10, fixHeight = f
         const loadMore = () => {
             setLoaded(loaded + addItems)
             if (upwards) {
-                const oldTabIndex = containerRef.current.tabIndex
+                const navi = containerRef.current.naviRef.current
+                const oldTabIndex = navi.getFocusIndex(1)
                 // TODO only if itemFocus extension?
-                containerRef.current.setTabIndex(Math.max(0, oldTabIndex + addItems))
-                if (containerRef.current.keyNavRef.current) return
+                navi.setFocusIndex(1, Math.max(0, oldTabIndex + addItems))
+                if (navi.isKeyPressed()) return
 
                 const distanceFromBottom =
                     elem.scrollHeight - elem.scrollTop - elem.clientHeight
@@ -1610,13 +1607,12 @@ function useInfiniteScrollingExt({ startItems = 25, addItems = 10, fixHeight = f
                 })
             }
         }
-
         const observer = new IntersectionObserver(
             entries => {
                 if (!entries.length || !entries[0].isIntersecting) return
 
                 if (!mouseDownRef.current || loadItemsWhileDragging) {
-                    loadMore()
+                   loadMore()
                 } else {
                     postponedRef.current = loadMore
                 }
@@ -1628,7 +1624,7 @@ function useInfiniteScrollingExt({ startItems = 25, addItems = 10, fixHeight = f
         )
         observer.observe(sentinelRef.current)
         return () => observer.disconnect()
-    }, [ loaded, upwards, countRef.current ])
+    }, [ loaded, upwards, countRef.current, sentinelRef.current ])
 
     return Extension({
         id: 'infinite',
@@ -1638,12 +1634,15 @@ function useInfiniteScrollingExt({ startItems = 25, addItems = 10, fixHeight = f
             viewParams.requireTotalInPostProps = true
         },
         viewPostProps: (index, node, max) => {
-            if (node.skip || isInRange(index, upwards ? Math.max(0, max - 1 - loaded) : 0, upwards ? max - 1 : loaded - 1)) return
+            if (node.skip || isInRange(index, upwards ? Math.max(0, max - loaded) : 0, upwards ? max - 1 : loaded - 1)) return
 
             node.skip = EXT_SKIP.PAGE
         },
         buildApi: ({ exts, view, container }) => {
             if (exts.has('pagination')) throw Error('Infinite scrolling extension cannot be used with the pagination extension!')
+
+            container.pageIndexStart = upwards ? view.viewCount - loaded : 0
+            container.pageIndexEnd = upwards ? view.viewCount - 1 : loaded - 1
 
             const toggleDirection = (value) => {
                 if (!switchDirection || value === upwards) return false
@@ -1663,6 +1662,36 @@ function useInfiniteScrollingExt({ startItems = 25, addItems = 10, fixHeight = f
                 return true
             }
 
+            container.viewToFocusIndex = (viewIndex) => {
+                let newLoaded = loaded
+
+                if (upwards) {
+                    while (view.viewCount - newLoaded > viewIndex) newLoaded += addItems
+                } else {
+                    while (newLoaded < viewIndex) newLoaded += addItems
+                }
+                newLoaded = clamp(0, newLoaded, view.viewCount)
+
+                if (newLoaded === loaded) return (
+                    upwards ?
+                        viewIndex - (view.viewCount - newLoaded) :
+                        viewIndex
+                )
+
+                if (switchDirection) {
+                    if (upwards && newLoaded > (view.viewCount - startItems)) {
+                        toggleDirection(false)
+                        return viewIndex
+                    } else if (!upwards && newLoaded > (view.viewCount - startItems)) {
+                        toggleDirection(true)
+                        return viewIndex - (view.viewCount - startItems)
+                    }
+                }
+                setLoaded(newLoaded)
+
+                return upwards ? viewIndex - (view.viewCount - newLoaded) - 1 : viewIndex
+            }
+
             containerRef.current = container
             if (countRef.current === null) {
                 countRef.current = view.viewVisibleCount
@@ -1672,6 +1701,7 @@ function useInfiniteScrollingExt({ startItems = 25, addItems = 10, fixHeight = f
                 }
             }
             countRef.current = view.viewVisibleCount
+
             if (loaded < view.viewVisibleCount) {
                 if (upwards) {
                     exts.addGetBgTopElem(

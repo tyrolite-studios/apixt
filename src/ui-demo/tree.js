@@ -25,7 +25,7 @@ import {
     useUndoRedoExt,
     useHotkeysExt,
     useModelSnapshotExt,
-    usePaginationExt
+    usePaginationExt, useInfiniteScrollingExt
 } from "../components/extensions.js"
 import { useTreeComponent } from "../entities/tree.js"
 
@@ -237,13 +237,20 @@ function TestComponent() {
                     '4': {name: "Deepest folder", parent: "3"},
                 }
             )
+            const files = {
+                file: {name: "Another file", count: 0},
+                file2: {folder: '1', name: "Dummy", count: 0},
+                file3: {folder: '2', name: "Test file", count: 0},
+                file4: {folder: '2', name: "Other file", count: 0}
+            }
+            for (let i = 0; i < 200; i++) {
+                const folderId = i % 8
+                const folder = folderId < 5 && folderId > 0 ? `${folderId}` : undefined
+                files['gfile' + i] = {name: 'Generated ' + i, count: 0, folder}
+            }
+
             const fileIndex = new MappingIndex(
-                {
-                    file: {name: "Another file", count: 0},
-                    file2: {folder: '1', name: "Dummy", count: 0},
-                    file3: {folder: '2', name: "Test file", count: 0},
-                    file4: {folder: '2', name: "Other file", count: 0}
-                }, [
+                files, [
                     'folder', 'name', 'count'
                 ]
             )
@@ -267,11 +274,13 @@ function MyTreeComponent({ entityIndex }) {
     return useTreeComponent({
         entityIndex,
         header: "buttons toggler filter sorting sets",
-        footer: "selection undo",
+        footer: "count selection undo",
+        height: '400px',
         render: (node) => {
             return <div>{node.entity.name} {!node.isContainer && <span>[{node.entity.count}]</span>}</div>
         },
         extensions: [
+            useItemCountExt(),
             useItemFocusExt(),
             useTreeRendererExt(),
             useTreeTogglerExt(),
@@ -291,6 +300,7 @@ function MyTreeComponent({ entityIndex }) {
                     FILTER.SETS.MARKED
                 ]
             }),
+            /*
             useItemButtonsExt({
                 getButtons: ({ entityIndex }) => [
                     {
@@ -312,6 +322,9 @@ function MyTreeComponent({ entityIndex }) {
                     }
                 ]
             }),
+
+             */
+            useInfiniteScrollingExt(),
             useUndoRedoExt(),
             useButtonsExt({
                 getButtons: ({ view, exts, entityIndex, container }) => [
