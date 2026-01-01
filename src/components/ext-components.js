@@ -65,6 +65,7 @@ function useUnrenderedExtComponent(componentType, {  entityIndex, viewPreProps =
 
     const ErrorWindow = useErrorWindow()
     const areaRef = useRef(null)
+    const containerRef = useRef(null)
     useUpdateOnEntityIndexChanges(entityIndex)
 
     const exts = ExtensionPack(componentType, ...extensions)
@@ -118,7 +119,6 @@ function useUnrenderedExtComponent(componentType, {  entityIndex, viewPreProps =
     }, viewParams.cacheBaseBy)
     deps.allNodes = allNodes
 
-    let pageCount = 0
     const nodes = []
     let viewIndex = 0
     let viewCount = 0
@@ -148,6 +148,7 @@ function useUnrenderedExtComponent(componentType, {  entityIndex, viewPreProps =
             if (node.skip & abortedSkips) return
 
             hidden++
+            return
         }
         viewCount++
         nodes.push(node)
@@ -156,6 +157,8 @@ function useUnrenderedExtComponent(componentType, {  entityIndex, viewPreProps =
 
     const setNodeVisibility = (node, max) => {
         node.viewIndex = viewIndex
+
+        /*
         for (const handler of exts.viewPostProps) {
             handler(viewIndex, node, max)
         }
@@ -163,6 +166,7 @@ function useUnrenderedExtComponent(componentType, {  entityIndex, viewPreProps =
         if (node.visible) {
             pageCount++
         }
+         */
         viewIndex++
     }
 
@@ -179,33 +183,37 @@ function useUnrenderedExtComponent(componentType, {  entityIndex, viewPreProps =
             addOrSkipViewNode(node)
         }
     }
-    const viewVisibleCount = nodes.length - hidden
     if (!postProcessDirectly) {
         if (viewParams.postSorting) {
             nodes.sort(exts.getPostSort(deps))
         }
         for (const node of nodes) {
-            setNodeVisibility(node, viewVisibleCount)
+            setNodeVisibility(node, nodes.length)
         }
     }
     const view = {
         totalCount: allNodes.length,
-        viewVisibleCount,
         viewCount,
-        pageCount,
+        viewCountWithHidden: viewCount + hidden,
+        pageStart: 0,
+        pageEnd: viewCount - 1,
         nodes,
         allNodes
     }
     exts.finalizeView(extIds, view, deps)
+    view.pageCount = view.pageEnd - view.pageStart + 1
 
     const extsRef = useRef(null)
 
     const container = useItemContainer({
         view: true,
         items: nodes,
+        viewStart: view.pageStart,
+        viewEnd: view.pageEnd,
         item2value: x => entityIndex.getEntityValue(x.index),
         value2item: (value) => entityIndex.getEntityByPropValue('value', value)
     })
+    containerRef.current = container
     extsRef.current = exts
     temp = undefined
     const plugProps = {
@@ -214,6 +222,7 @@ function useUnrenderedExtComponent(componentType, {  entityIndex, viewPreProps =
         viewParams,
         exts,
         container,
+        containerRef,
         areaRef
     }
     if (exts.events.length) {

@@ -12,7 +12,7 @@ import {
     useItemFilterExt,
     useItemFocusExt, useItemSelectionExt, useItemSetsExt, useItemSortingExt, useModelSnapshotExt, usePaginationExt,
     useTreeRendererExt,
-    useTreeTogglerExt, useUiBlockingExt, useUndoRedoExt
+    useTreeTogglerExt, useUiBlockingExt, useUndoRedoExt, useVirtualizationExt
 } from "../components/extensions.js"
 import { FILTER } from "../core/filter.js"
 
@@ -125,7 +125,6 @@ function MyList({ entityIndex }) {
 
                 ]
             }),
-
             useItemButtonsExt({
                 getButtons: ({ entityIndex }) => [
                     {
@@ -146,10 +145,10 @@ function MyList({ entityIndex }) {
                     }
                 ]
             }),
+
             // usePaginationExt(),
-            useInfiniteScrollingExt({
-                switchDirection: true
-            })
+            // useInfiniteScrollingExt({ switchDirection: true }),
+            useVirtualizationExt()
         ]
     })
 }
@@ -164,6 +163,7 @@ function StackContent() {
                     code: '<ListComponent />',
                     elem: <ListComponent />,
                 },
+                /*
                 {
                     name: 'Empty no height',
                     code: 'useStackComponent({\n' +

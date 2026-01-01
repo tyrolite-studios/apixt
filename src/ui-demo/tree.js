@@ -274,7 +274,7 @@ function MyTreeComponent({ entityIndex }) {
     return useTreeComponent({
         entityIndex,
         header: "buttons toggler filter sorting sets",
-        footer: "count selection undo",
+        footer: "count selection undo pagination",
         height: '400px',
         render: (node) => {
             return <div>{node.entity.name} {!node.isContainer && <span>[{node.entity.count}]</span>}</div>
@@ -300,7 +300,7 @@ function MyTreeComponent({ entityIndex }) {
                     FILTER.SETS.MARKED
                 ]
             }),
-            /*
+
             useItemButtonsExt({
                 getButtons: ({ entityIndex }) => [
                     {
@@ -323,7 +323,6 @@ function MyTreeComponent({ entityIndex }) {
                 ]
             }),
 
-             */
             useInfiniteScrollingExt(),
             useUndoRedoExt(),
             useButtonsExt({

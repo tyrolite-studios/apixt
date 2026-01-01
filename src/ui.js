@@ -12,7 +12,7 @@ import { StackContent } from "./ui-demo/stack.js"
 import { useRegisterAppListeners } from "./components/common"
 
 function MainInner() {
-    const [main, setMain] = useState(2)
+    const [main, setMain] = useState(1)
 
     const buttonCls = index => {
         const cls = ["px-3 py-1 border border-button-border"]

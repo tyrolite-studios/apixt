@@ -72,7 +72,7 @@ function useItemCountExt({ name = "Items:" } = {}) {
             count: ({ key, view }) => (
                 <div key={key} className="stack-h gap-d2x text-xs">
                     {name && <div className="opacity-50">{name}</div>}
-                    <div>{view.pageCount}/{view.viewCount}/{view.viewVisibleCount}</div>
+                    <div>{view.pageCount}/{view.viewCount}/{view.viewCountWithHidden}</div>
                 </div>
             )
         }
@@ -555,9 +555,16 @@ function useItemSelectionExt({
                 }
                 buttons.push({
                     icon: 'visibility',
-                    disabled: view.markedOutside === 0,
+                    disabled: !(view.markedOutside || view.markedPrev || view.markedNext),
                     onPressed: () => {
                         const inView = []
+
+                        if (treeSelection) {
+                            for (const node of view.nodes) {
+                                if (!selection.includes(node.id)) continue
+                                inView.push(node.id)
+                            }
+                        }
                         for (const node of view.nodes) {
                             if (!node.visible || !selection.includes(node.id)) continue
                             inView.push(node.id)
@@ -574,7 +581,7 @@ function useItemSelectionExt({
                     <div key={key} className="stack-h gap-x-d2x items-center">
                         <div className="stack-h gap-x-d1x text-xs">
                             {name && <div className="opacity-50">{name}</div>}
-                            {name && <NumberChip value={selection.length} maxValue={view.nodes.length} color={!!selection.length} />}
+                            {name && <NumberChip value={selection.length} maxValue={view.viewCountWithHidden} color={!!selection.length} />}
                         </div>
                         {exts.getToolbarButtonGroup({ buttons })}
                     </div>
@@ -1474,21 +1481,12 @@ function usePaginationExt({ name = 'Page:', itemsPerPage = 100 } = {}) {
     const endIndex = startIndex + itemsPerPage - 1
     return Extension({
         id: 'pagination',
-        types: [EXT_TYPE.LIST, EXT_TYPE.TABLE],
-        prepareViewParams(viewParams) {
-            viewParams.startIndex = startIndex
-            viewParams.endIndex = endIndex
+        finalizeView: (view) => {
+            view.pageStart = startIndex
+            view.pageEnd = Math.min(endIndex, view.pageEnd)
         },
-        viewPostProps: (index, node) => {
-            if (node.skip || isInRange(index, startIndex, endIndex)) return
-
-            node.skip = EXT_SKIP.PAGE
-        },
-        buildApi: ({ view, viewParams, container }) => {
+        buildApi: ({ view, container }) => {
             const maxPage = Math.ceil(view.viewCount / itemsPerPage)
-
-            container.pageIndexStart = viewParams.startIndex
-            container.pageIndexEnd = viewParams.endIndex
             container.viewToFocusIndex = (viewIndex) => {
                 const newPage = Math.floor(viewIndex / itemsPerPage) + 1
                 if (newPage !== page) {
@@ -1633,16 +1631,12 @@ function useInfiniteScrollingExt({
 
             viewParams.requireTotalInPostProps = true
         },
-        viewPostProps: (index, node, max) => {
-            if (node.skip || isInRange(index, upwards ? Math.max(0, max - loaded) : 0, upwards ? max - 1 : loaded - 1)) return
-
-            node.skip = EXT_SKIP.PAGE
+        finalizeView(view) {
+            view.pageStart = upwards ? Math.max(0, view.viewCount - loaded) : 0
+            view.pageEnd = upwards ? view.viewCount - 1 : loaded - 1
         },
         buildApi: ({ exts, view, container }) => {
             if (exts.has('pagination')) throw Error('Infinite scrolling extension cannot be used with the pagination extension!')
-
-            container.pageIndexStart = upwards ? view.viewCount - loaded : 0
-            container.pageIndexEnd = upwards ? view.viewCount - 1 : loaded - 1
 
             const toggleDirection = (value) => {
                 if (!switchDirection || value === upwards) return false
@@ -1694,15 +1688,15 @@ function useInfiniteScrollingExt({
 
             containerRef.current = container
             if (countRef.current === null) {
-                countRef.current = view.viewVisibleCount
-            } else if (loaded !== startItems && countRef.current !== view.viewVisibleCount) {
+                countRef.current = view.viewCount
+            } else if (loaded !== startItems && countRef.current !== view.viewCount) {
                 if (!toggleDirection(false)) {
                     setLoaded(startItems)
                 }
             }
-            countRef.current = view.viewVisibleCount
+            countRef.current = view.viewCount
 
-            if (loaded < view.viewVisibleCount) {
+            if (loaded < view.viewCount) {
                 if (upwards) {
                     exts.addGetBgTopElem(
                         1,
@@ -1729,10 +1723,150 @@ function useInfiniteScrollingExt({
     })
 }
 
-function useVirtualizationExt({ }) {
+function useVirtualizationExt({ name = 'Loading...', estimatedItemHeight = 45, overscan = 5 } = {}) {
+    const [viewportHeight, setViewportHeight] = useState(0)
+    const [itemHeight, setItemHeight] = useState(estimatedItemHeight)
+    const [scrollTop, setScrollTop] = useState(0)
+    const scrollRef = useRef(null)
+    const pageRef = useRef(null)
+    const sentinelRef = useRef(false)
+
+    const getScrollElem = (elem) => {
+        while (elem && !elem.classList.contains('overflow-y-auto')) {
+            elem = elem.parentNode
+        }
+        return elem
+    }
+    const onScroll = () => {
+        setScrollTop(scrollRef.current.scrollTop)
+    }
+    useEffect(() => {
+        scrollRef.current = getScrollElem(sentinelRef.current)
+        const elem = scrollRef.current
+        elem.addEventListener('scroll', onScroll)
+
+        const firstElem = elem.querySelector('.item')
+        if (firstElem) setItemHeight(firstElem.clientHeight)
+
+        setViewportHeight(elem.clientHeight)
+        setScrollTop(elem.scrollTop)
+    }, [])
+
+    const recalc = (max) => {
+        const scrollTop = scrollRef.current ? scrollRef.current.scrollTop : 0
+        const viewPortItems = Math.ceil(viewportHeight / itemHeight)
+        const viewPortStart = Math.floor(scrollTop / itemHeight)
+        const start = Math.max(0, viewPortStart - overscan)
+        const end = Math.min(viewPortStart + viewPortItems + overscan, max - 1)
+
+        return {
+            startIndex: start,
+            endIndex: end,
+            pageItems: viewPortItems,
+            maxIndex: max - 1
+        }
+    }
     return Extension({
         id: 'virtualization',
+        prepareViewParams(viewParams) {
+            viewParams.requireTotalInPostProps = true
+            pageRef.current = null
+        },
+        finalizeView(view) {
+            const page = recalc(view.viewCount)
+            pageRef.current = page
+            view.pageStart = page.startIndex
+            view.pageEnd = page.endIndex
+        },
+        buildApi: ({ exts, view, container, containerRef }) => {
+            container.viewToFocusIndex = (viewIndex, currFocusIndex, direct) => {
+                let { pageItems, startIndex, endIndex, maxIndex } = pageRef.current
+
+                const scrollTop = scrollRef.current.scrollTop
+                const scrollTopMax = scrollRef.current.scrollHeight - scrollRef.current.clientHeight
+
+                let topOverscan = overscan
+                let bottomOverscan = overscan
+                if (startIndex === 0) {
+                    if (endIndex === maxIndex) return viewIndex
+                    topOverscan = Math.min(overscan, endIndex - startIndex - overscan - pageItems)
+                } else if (endIndex === maxIndex) {
+                    bottomOverscan = Math.min(overscan, endIndex - startIndex - overscan - pageItems)
+                }
+                const relIndex = viewIndex - startIndex
+
+                if (scrollTop < scrollTopMax && viewIndex === maxIndex) {
+                    scrollRef.current.scrollTop = scrollTopMax
+                    const newStart = Math.max(0, Math.floor(scrollTopMax / itemHeight) - overscan)
+                    pageRef.current = recalc(view.viewCount)
+                    requestAnimationFrame(() => {
+                        requestAnimationFrame(() => containerRef.current.naviRef.current.setFocusIndex(1, viewIndex - newStart))
+                    })
+                    return false
+                } else if (scrollTop > 0 && viewIndex === 0 && currFocusIndex !== 1) {
+                    scrollRef.current.scrollTop = 0
+                    pageRef.current = recalc(view.viewCount)
+                    requestAnimationFrame(() => {
+                        requestAnimationFrame(() => containerRef.current.naviRef.current.setFocusIndex(1, 0))
+                    })
+                    return false
+                }
+
+                const nonOverscan = endIndex - startIndex - topOverscan - bottomOverscan
+                const scrollAreaSize = Math.floor(nonOverscan / 3)
+                const scrollTopIndex = topOverscan + scrollAreaSize - 1
+                const scrollBottomIndex = topOverscan + nonOverscan - scrollAreaSize
+
+
+                if (relIndex >= scrollBottomIndex && scrollTop < scrollTopMax) {
+                    const newScrollTop = Math.min(scrollTopMax, scrollTop + itemHeight)
+                    if (scrollTop !== newScrollTop) {
+                        scrollRef.current.scrollTop = newScrollTop
+                        const newStart = Math.max(0, Math.floor(newScrollTop / itemHeight) - overscan)
+                        pageRef.current = recalc(view.viewCount)
+                        requestAnimationFrame(() => {
+                            requestAnimationFrame(() => containerRef.current.refocus())
+                        })
+                        return viewIndex - newStart
+                    } else {
+                        return viewIndex - startIndex
+                    }
+                } else if (relIndex <= scrollTopIndex && scrollTop > 0) {
+                    const newScrollTop = Math.max(0, scrollTop - itemHeight)
+                    if (scrollTop !== newScrollTop) {
+                        scrollRef.current.scrollTop = newScrollTop
+                        const newStart = Math.max(0, Math.floor(newScrollTop / itemHeight) - overscan)
+                        pageRef.current = recalc(view.viewCount)
+                        requestAnimationFrame(() => {
+                            requestAnimationFrame(() => containerRef.current.refocus())
+                        })
+                        return viewIndex - newStart
+                    }
+                    return viewIndex - startIndex
+                }
+                if (viewIndex >= startIndex && viewIndex <= endIndex) {
+                    return viewIndex - startIndex
+                }
+                return false
+            }
+            exts.virtualSize = view.viewCount * itemHeight - 1
+
+            const { startIndex } = pageRef.current
+            const offsetTop = startIndex * itemHeight
+            container.attr.setStyle('transform', `translateY(${offsetTop}px)`)
+
+            if (sentinelRef.current === false) {
+                exts.addGetBgBottomElem(
+                    1,
+                    ({ }) => <Div ref={sentinelRef} key="sentinel" className="hidden"></Div>,
+                    50
+                )
+            }
+        }
     })
+}
+
+function useResponsiveExt() {
 }
 
 function useItemManagerExt() {
@@ -1767,5 +1901,6 @@ export {
     useModelSnapshotExt,
     useUiBlockingExt,
     usePaginationExt,
-    useInfiniteScrollingExt
+    useInfiniteScrollingExt,
+    useVirtualizationExt
 }

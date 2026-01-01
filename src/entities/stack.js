@@ -35,7 +35,7 @@ function ExtStackInner({
         styled = true,
         getEmptyMsg
     }) {
-    const { nodes } = view
+    const { nodes, pageStart = 0, pageEnd } = view
     const { filter = '' } = viewParams
 
     const itemsCls = new ClassNames('stack-v auto')
@@ -102,8 +102,9 @@ function ExtStackInner({
     let isInteractive = null
     const getItemColor = exts.getItemColor
 
-    for (const [ index, node ] of nodes.entries()) {
-        if (!node.visible) continue
+    let index = pageStart
+    while (index <= pageEnd) {
+        const node = nodes[index]
 
         const item = container.getItem(index)
         const itemCls = new ClassNames('item-node', itemClassName)
@@ -168,6 +169,7 @@ function ExtStackInner({
             </Div>
         )
         elems.push(elem)
+        index++
     }
 //    elems.push(<div className="auto stack-v"></div>)
     // const bgCls = new ClassNames("w-full stack-v")
@@ -266,9 +268,33 @@ function ExtStackRenderer({ list, colsBar, className, ...props }) {
     const attr = useGetNewAttrWithDimProps(props)
     attr.tabIndex = -1
 
-    const stackCls = ClassNames("overflow-y-auto")
+    const stackCls = ClassNames("overflow-y-auto relative")
     stackCls.addIf(true, "border border-input-border bg-input-bg text-input-text")
-    const paddingCls = ClassNames("stack-v auto min-h-full")
+
+    const getMainContent = () => {
+        const absolute = exts.virtualSize !== undefined
+
+        paddingCls.addIf(absolute, 'absolute top-0 left-0 bottom-0')
+        paddingCls.addIf(!absolute, 'min-h-full')
+
+        const elem = (
+            <div className={paddingCls.value}>
+                <ExtStack
+                    full
+                    container={container}
+                    view={view}
+                    entityIndex={entityIndex}
+                    viewParams={viewParams}
+                    exts={exts}
+                    getEmptyMsg={exts.getEmptyMsg}
+                    { ...props }
+                />
+            </div>
+        )
+        return absolute ? <div className="relative w-full" style={{ height: exts.virtualSize + 'px' }}>{elem}</div> : elem
+    }
+
+    const paddingCls = ClassNames("stack-v auto relative")
     paddingCls.addIf(true, "px-d2x py-d2y")
 
     return (
@@ -281,19 +307,7 @@ function ExtStackRenderer({ list, colsBar, className, ...props }) {
 
                 {!isCompact &&
                     <Div className={stackCls.value} {...attr.props}>
-                        <div className={paddingCls.value}>
-                            <ExtStack
-                                full
-                                container={container}
-                                view={view}
-                                entityIndex={entityIndex}
-                                viewParams={viewParams}
-                                exts={exts}
-                                getEmptyMsg={exts.getEmptyMsg}
-                                { ...props }
-                            />
-
-                        </div>
+                        {getMainContent()}
                     </Div>
                 }
 

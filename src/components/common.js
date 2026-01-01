@@ -10,7 +10,6 @@ import { useModalWindow } from "./modal"
 import {
     ClassNames,
     isValidJson,
-    clamp,
     getParsedJson,
     isObject,
     isArray,
@@ -38,8 +37,6 @@ import {
     isFunction,
     getChildrenWithClass,
     AxisHandler,
-    OVERFLOW,
-    isString,
     isInt
 } from "../core/helper"
 
@@ -501,10 +498,10 @@ function useCallAfterwards() {
 
 function useItemContainer({
     items,
-    treeOrder,
     count,
     parent,
-    view = false,
+    viewStart = 0,
+    viewEnd = (items ? items.length : count) - 1,
     item2value = (x) => x,
     value2item = (x) => x
 }) {
@@ -525,14 +522,7 @@ function useItemContainer({
         }
         return item
     }
-    let viewCount = count
-    const viewIndices = []
-    if (view && items) {
-        for (const [index, item] of items.entries()) {
-            if (item.visible) viewIndices.push(index)
-        }
-        viewCount = viewIndices.length
-    }
+    const viewCount = viewEnd - viewStart + 1
     naviRef.current =
         parent ? parent.naviRef.current : KeyNavigation()
 
@@ -542,10 +532,11 @@ function useItemContainer({
         parent,
         naviRef,
         items,
-        treeOrder,
-        getItemIndexForViewIndex: view && items ? x => viewIndices[x] : x => x,
-        getViewIndexForItemIndex: view && items ? x => viewIndices.indexOf(x) : x => x,
+        getItemIndexForViewIndex: x => x + viewStart,
+        getViewIndexForItemIndex: x => x - viewStart,
         count,
+        viewStart,
+        viewEnd,
         viewCount,
         item2value,
         value2item,
@@ -770,8 +761,8 @@ function FocusRowCtx({ children }) {
                         setRow(newRow)
                         refocus()
                     },
-                    pageIndexStart: container.pageIndexStart,
-                    pageIndexEnd: container.pageIndexEnd,
+                    pageIndexStart: container.viewStart,
+                    pageIndexEnd: container.viewEnd,
                     viewToFocusIndex: container.viewToFocusIndex,
                     viewCount: count,
                     overflow: container.overflow
@@ -893,7 +884,6 @@ function useFocusOnItemContainer({
         levelRef.current = aContext.getModalLevel()
     }
     const { ref, viewCount, naviRef } = container
-
     if (!container.parent || (container.parent && focused)) {
         naviRef.current.addAxisHandler(
             0,
@@ -903,8 +893,8 @@ function useFocusOnItemContainer({
                     focusIndex: tabIndex,
                     setFocusIndex: setTabIndex,
                     viewCount: count === undefined ? viewCount : count,
-                    pageIndexStart: container.pageIndexStart,
-                    pageIndexEnd: container.pageIndexEnd,
+                    pageIndexStart: container.viewStart,
+                    pageIndexEnd: container.viewEnd,
                     viewToFocusIndex: container.viewToFocusIndex
                 }
             }

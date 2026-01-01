@@ -583,9 +583,13 @@ const AxisHandler = (getProps) => {
                     break
             }
         }
-        if (viewIndex === focusIndex) return
+        // TODO: always refocus flag
+        // if (viewIndex === focusIndex) return
 
-        setFocusIndex(viewToFocusIndex(viewIndex))
+        const newIndex = viewToFocusIndex(viewIndex, focusIndex)
+        if (newIndex === false) return
+
+        setFocusIndex(newIndex)
     }
     const moveBy = (moveOffset) => {
         const { focusIndex, pageIndexStart = 0 } = getProps()

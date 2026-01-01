@@ -361,6 +361,14 @@ const ExtensionPack = (type, ...exts) => {
             ref.errorHandler = handler
         },
 
+        get virtualSize() {
+            return ref.virtualSize
+        },
+
+        set virtualSize(virtualSize) {
+            return ref.virtualSize = virtualSize
+        },
+
         process({ ...cmd }, op = 'exec') {
             let callback
             const hasBlocking = has('blocking') && cmd.block !== false
