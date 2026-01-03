@@ -21,15 +21,17 @@ const EXT_SKIP = {
 }
 
 const Extension = ({
-    id, tools = {}, types, events, getBaseSort, prepareViewParams, finalizeView, finalizeViewParams, viewPreProps, viewBuildProps, viewPostProps, buildApi, uses = [], modals = []
+    id, tools = {}, disabled, types, events, props, getBaseSort, prepareViewParams, finalizeView, finalizeViewParams, viewPreProps, viewBuildProps, viewPostProps, buildApi, uses = [], modals = []
 }) => {
     if (!id) throw Error(`Extension must have an id`)
 
     return {
         id,
+        disabled,
         types,
         events,
         tools,
+        props,
         prepareViewParams,
         finalizeViewParams,
         finalizeView,
@@ -116,6 +118,8 @@ const ExtensionPack = (type, ...exts) => {
     const renderStages = []
 
     for (const ext of exts) {
+        if (ext.disabled) continue
+
         const api = {}
         if (ext.types && !ext.types.includes(type))
             throw Error(`Extension ${ext.id} cannot be used with component of type ${EXT_NAME[type]}`)

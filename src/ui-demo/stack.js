@@ -6,13 +6,24 @@ import { MappingIndex } from "../core/entity.js"
 import { useTreeComponent } from "../entities/tree.js"
 import {
     useButtonsExt,
-    useHotkeysExt, useInfiniteScrollingExt,
+    useHotkeysExt,
+    useInfiniteScrollingExt,
     useItemButtonsExt,
-    useItemCountExt, useItemExportExt,
+    useItemCountExt,
+    useItemExportExt,
     useItemFilterExt,
-    useItemFocusExt, useItemSelectionExt, useItemSetsExt, useItemSortingExt, useModelSnapshotExt, usePaginationExt,
+    useItemFocusExt,
+    useItemSelectionExt,
+    useItemSetsExt,
+    useItemSortingExt,
+    useModelSnapshotExt,
+    usePaginationExt,
+    useResponsiveExt,
     useTreeRendererExt,
-    useTreeTogglerExt, useUiBlockingExt, useUndoRedoExt, useVirtualizationExt
+    useTreeTogglerExt,
+    useUiBlockingExt,
+    useUndoRedoExt,
+    useVirtualizationExt
 } from "../components/extensions.js"
 import { FILTER } from "../core/filter.js"
 
@@ -60,6 +71,20 @@ function ListComponent() {
 }
 
 function MyList({ entityIndex }) {
+    const responsiveExt = useResponsiveExt({
+        defaults: {
+            header: 'buttons sorting'
+        },
+        op: "<=",
+        breakpoints: {
+            800: {
+                header: 'buttons filter sorting'
+            },
+            1200: {
+                header: 'buttons filter sets sorting'
+            }
+        }
+    })
     return useStackComponent({
         entityIndex,
         render: ({ viewIndex, entity }) => <div className="stack-h gap-2">
@@ -67,11 +92,13 @@ function MyList({ entityIndex }) {
             <div>{entity.name} [{entity.count}]</div>
         </div>,
         spacing: 1,
-        header: 'buttons filter sets sorting',
+        header: responsiveExt.props.header,
         footer: 'count pagination selection',
         height: "350px",
         extensions: [
-            useItemCountExt(),
+            useItemCountExt({
+                disabled: responsiveExt.props.filterDisabled,
+            }),
             useItemFocusExt(),
             useItemSelectionExt(),
             useHotkeysExt(),
@@ -97,7 +124,7 @@ function MyList({ entityIndex }) {
                         icon: 'delete',
                         action: {
                             hotkey: 'delete',
-                            confirm: `Do you really want to delete these ${container.selection.length} entries?`,
+                            // confirm: `Do you really want to delete these ${container.selection.length} entries?`,
                             exec: () => {
                                 const deletes = []
                                 for (const id of container.selection) {
@@ -125,6 +152,7 @@ function MyList({ entityIndex }) {
 
                 ]
             }),
+
             useItemButtonsExt({
                 getButtons: ({ entityIndex }) => [
                     {
@@ -145,10 +173,10 @@ function MyList({ entityIndex }) {
                     }
                 ]
             }),
-
             // usePaginationExt(),
             // useInfiniteScrollingExt({ switchDirection: true }),
-            useVirtualizationExt()
+            useVirtualizationExt(),
+            responsiveExt
         ]
     })
 }

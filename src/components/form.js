@@ -1623,14 +1623,10 @@ function ButtonsAndDivGroup({
     }
     const { onKeyDown, ...divAttr } = container.attr.props
     const keyDown = action ? (e) => {
-        if (e.key === " ") {
-            action()
+        if (container.naviRef.current.handleKeyDown(e)) {
             e.preventDefault()
             return
         }
-        if (!container.naviRef.current.handleKeyDown(e)) return
-
-        e.preventDefault()
         onKeyDown(e)
     } : onKeyDown
 

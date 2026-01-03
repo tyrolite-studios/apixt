@@ -581,7 +581,8 @@ const FOCUS_EVENTS = {
     Y_NEXT_BLOCK: 9,
     Y_PREV_BLOCK: 10,
     Y_NEXT_PAGE: 11,
-    Y_PREV_PAGE: 12
+    Y_PREV_PAGE: 12,
+    ITEM_ACTION: 13
 }
 
 const defaultKeyToEvent = {
@@ -595,6 +596,7 @@ const defaultKeyToEvent = {
     'PageUp': FOCUS_EVENTS.Y_PREV_PAGE,
     'ArrowUp Shift': FOCUS_EVENTS.Y_PREV_BLOCK,
     'ArrowDown Shift': FOCUS_EVENTS.Y_NEXT_BLOCK,
+    ' ': true
 }
 
 const KeyNavigation = () => {
@@ -616,7 +618,6 @@ const KeyNavigation = () => {
 
         return handler
     }
-
     const trigger = event => {
         switch (event) {
             case FOCUS_EVENTS.X_FIRST:
@@ -662,7 +663,7 @@ const KeyNavigation = () => {
                 break
         }
     }
-    return {
+    const api = {
         addAxisHandler: (index, handler) => {
             axisHandler[index] = handler
         },
@@ -686,15 +687,17 @@ const KeyNavigation = () => {
         },
         handleKeyDown: (e) => {
             const event = keyToEvent[e.key + (e.shiftKey ? ' Shift' : '')]
-            if (!event) return false
+            if (event !== true) {
+                if (!event) return false
 
-            let [ eventId ] = event
-            if (isFunction(eventId)) {
-                const index = getHandler(1).getFocusIndex()
-                eventId = eventId(index)
-            }
-            if (isInt(eventId)) {
-                trigger(eventId)
+                let [ eventId ] = event
+                if (isFunction(eventId)) {
+                    const index = getHandler(1).getFocusIndex()
+                    eventId = eventId(index)
+                }
+                if (isInt(eventId)) {
+                    trigger(eventId)
+                }
             }
             isKeyPressed = true
             return true
@@ -703,6 +706,7 @@ const KeyNavigation = () => {
             isKeyPressed = false
         }
     }
+    return api
 }
 
 

@@ -1,5 +1,5 @@
 import { useContext, useMemo, useRef, useState, useEffect } from "react"
-import { OVERFLOW, clamp, getNewModelId, isInRange, ClassNames, cloneDeep, without, ucFirst, isFunction } from "core/helper"
+import { OVERFLOW, clamp, getNewModelId, ClassNames, cloneDeep, without, ucFirst, isFunction } from "core/helper"
 import { ButtonGroup, Button, CustomCells, FormGrid, Number, Select } from "./form.js"
 import { FILTER } from "core/filter"
 import { NumberChip, Filterbox, DualRing, useCallAfterwards, FOCUS_EVENTS } from "./common.js"
@@ -65,9 +65,10 @@ function useItemFocusExt({ overflow = OVERFLOW.WRAP } = {}) {
     })
 }
 
-function useItemCountExt({ name = "Items:" } = {}) {
+function useItemCountExt({ disabled, name = "Items:" } = {}) {
     return Extension({
         id: 'count',
+        disabled,
         tools: {
             count: ({ key, view }) => (
                 <div key={key} className="stack-h gap-d2x text-xs">
@@ -252,6 +253,7 @@ function useItemSelectionExt({
     name = 'Selected:',
     showMarkedHidden = true,
     showMarkedOutside = true,
+    disabled,
     ...props
 } = {}) {
 
@@ -263,6 +265,7 @@ function useItemSelectionExt({
     return Extension({
         id: 'selection',
         uses: ['toggler'],
+        disabled,
         prepareViewParams: viewParams => {
             viewParams.selection = selection
             viewParams.temp.markedLevel = null
@@ -592,6 +595,7 @@ function useItemSelectionExt({
 }
 
 function useItemFilterExt({
+    disabled,
     filterOptions = {},
     controls = 0,
     getEmptyMsg = null,
@@ -618,6 +622,7 @@ function useItemFilterExt({
     return Extension({
         id: 'filter',
         uses: ['sets'],
+        disabled,
         prepareViewParams: viewParams => {
             viewParams.filter = filter
             viewParams.filterOptions = {
@@ -1473,7 +1478,7 @@ function useUiBlockingExt({ msg = 'Executing...' } = {}) {
     })
 }
 
-function usePaginationExt({ name = 'Page:', itemsPerPage = 100 } = {}) {
+function usePaginationExt({ disabled, name = 'Page:', itemsPerPage = 100 } = {}) {
     const [ page, setPage ] = useState(1)
     const callAfterwards = useCallAfterwards()
 
@@ -1481,6 +1486,7 @@ function usePaginationExt({ name = 'Page:', itemsPerPage = 100 } = {}) {
     const endIndex = startIndex + itemsPerPage - 1
     return Extension({
         id: 'pagination',
+        disabled,
         finalizeView: (view) => {
             view.pageStart = startIndex
             view.pageEnd = Math.min(endIndex, view.pageEnd)
@@ -1866,16 +1872,109 @@ function useVirtualizationExt({ name = 'Loading...', estimatedItemHeight = 45, o
     })
 }
 
-function useResponsiveExt() {
+const allowedBreakpointOps = ['<', '<=', '>', '>=']
+
+function useResponsiveExt({ watchWindow, op = '<=', dim = 'width', breakpoints = [], defaults = {}} = {}) {
+    const sortedBreakpoints = useMemo(() => {
+        if (!allowedBreakpointOps.includes(op)) throw Error(`Invalid op "${op}" given. Allowed ops: "${allowedBreakpointOps.join(", ")}"`)
+
+        const points = Object.entries(breakpoints).map(item => [parseInt(item[0], 10), item[1]])
+        if (!points.length) return [[null, {}]]
+
+        points.sort((a, b) => a[0] - b[0])
+
+        const result = []
+        const offset = ['<', '>='].includes(op) ? -1 : 0
+        if (op.indexOf('<') !== -1) {
+            for (const [value, overwrites] of points) {
+                result.push([value + offset, overwrites])
+            }
+            result.push([null, {}])
+        } else {
+            if (!points.length) {
+                result.push([null, {}])
+            } else {
+                let nextOverwrite = {}
+                for (const [value, overwrites] of points) {
+                    result.push([value + offset, nextOverwrite])
+                    nextOverwrite = overwrites
+                }
+                result.push([null, nextOverwrite])
+            }
+        }
+        return result
+    }, [])
+    const [ props, setProps ] = useState(defaults)
+    const sizeRef =  useRef(window['inner' + ucFirst(dim)])
+    const activeRef = useState(-1)
+    const observableRef = useRef(null)
+
+    const checkActiveChange = () => {
+        const currSize = sizeRef.current
+        let newActive = 0
+        let overwrites
+        for (const [size, sizeOverwrites] of sortedBreakpoints) {
+            if (size === null || currSize <= size) {
+                overwrites = sizeOverwrites
+                break
+            }
+            newActive++
+        }
+        if (newActive === activeRef.current) return
+
+        activeRef.current = newActive
+        setProps({
+            ...defaults,
+            ...overwrites
+        })
+    }
+    const getObservable = () => {
+        return observableRef.current.current.parentNode
+    }
+    useEffect(() => {
+        if (watchWindow) {
+            const onResize = () => {
+                sizeRef.current = window['inner' + ucFirst(dim)]
+                checkActiveChange()
+            }
+            window.addEventListener('resize', onResize)
+            checkActiveChange()
+            return () => {
+                window.removeEventListener('resize', onResize)
+            }
+        }
+        const observable = getObservable()
+        if (!observable) return
+
+        const observer = new ResizeObserver(() => {
+            sizeRef.current = observable['client' + ucFirst(dim)]
+            checkActiveChange()
+        })
+        observer.observe(observable)
+        return () => observer.disconnect()
+    }, [])
+
+    return Extension({
+        id: 'responsive',
+        buildApi: ({ areaRef }) => {
+            observableRef.current = areaRef
+        },
+        props
+    })
+}
+
+function useHeaderToolbarExt({ tools = [] } = {}) {
+
+}
+
+function useFooterToolbarExt({ tools = [] } = {}) {
+
 }
 
 function useItemManagerExt() {
 }
 
 function useItemDragExt() {
-}
-
-function useReorderExt() {
 }
 
 export {
@@ -1894,7 +1993,6 @@ export {
     useItemExportExt,
     useUndoRedoExt,
     useItemDragExt,
-    useReorderExt,
     useItemManagerExt,
     useCustomizationExt,
     useHotkeysExt,
@@ -1902,5 +2000,8 @@ export {
     useUiBlockingExt,
     usePaginationExt,
     useInfiniteScrollingExt,
-    useVirtualizationExt
+    useVirtualizationExt,
+    useResponsiveExt,
+    useHeaderToolbarExt,
+    useFooterToolbarExt
 }

@@ -242,19 +242,19 @@ function useUnrenderedExtComponent(componentType, {  entityIndex, viewPreProps =
     }
     const clickAction = exts.itemAction
     if (clickAction) {
+        container.naviRef.current.setKeyEvents({
+            ' ': (focusIndex) => {
+                const index = container.viewStart + focusIndex
+                const node = container.items[container.viewStart + index]
+                const id = node.value
+                clickAction({ id, index, node, ...plugProps })
+            }
+        }, 60)
         container.addItemBuilder((index, item) => {
             item.attr.addListener("onClick", () => {
                 const node = container.items[index]
                 const id = node.value
                 clickAction({ id, index, node, ...plugProps })
-            })
-            item.attr.addListener('onKeyDown', e => {
-                if (e.key === " ") {
-                    const node = container.items[index]
-                    const id = node.value
-                    clickAction({ id, index, node, ...plugProps })
-                    e.preventDefault()
-                }
             })
         })
     }
